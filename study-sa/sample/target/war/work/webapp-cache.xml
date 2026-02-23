@@ -1,0 +1,818 @@
+<webapp-structure>
+  <registeredFiles>
+    <entry>
+      <string>currentBuild</string>
+      <path-set>
+        <pathsSet class="linked-hash-set">
+          <string>WEB-INF/struts-config.xml</string>
+          <string>WEB-INF/view/common/layout.jsp</string>
+          <string>WEB-INF/view/common/menu.jsp</string>
+          <string>WEB-INF/view/common/header.jsp</string>
+          <string>WEB-INF/view/common/footer.jsp</string>
+          <string>WEB-INF/view/common/common.jsp</string>
+          <string>WEB-INF/view/index.jsp</string>
+          <string>WEB-INF/web.xml</string>
+          <string>WEB-INF/validator-rules.xml</string>
+          <string>WEB-INF/classes/env.txt</string>
+          <string>WEB-INF/classes/s2container.dicon</string>
+          <string>WEB-INF/classes/app.dicon</string>
+          <string>WEB-INF/classes/convention.dicon</string>
+          <string>WEB-INF/classes/customizer.dicon</string>
+          <string>WEB-INF/classes/s2jdbc.dicon</string>
+          <string>WEB-INF/classes/application_ja.properties</string>
+          <string>WEB-INF/classes/creator.dicon</string>
+          <string>WEB-INF/classes/jdbc.dicon</string>
+          <string>WEB-INF/classes/env_ut.txt</string>
+          <string>WEB-INF/classes/com/example/action/IndexAction.class</string>
+          <string>WEB-INF/classes/log4j.properties</string>
+          <string>WEB-INF/classes/application.properties</string>
+          <string>WEB-INF/lib/jstl-1.1.2.jar</string>
+          <string>WEB-INF/lib/standard-1.1.2.jar</string>
+          <string>WEB-INF/lib/commons-collections-3.1.jar</string>
+          <string>WEB-INF/lib/commons-el-1.0.jar</string>
+          <string>WEB-INF/lib/commons-fileupload-1.2.jar</string>
+          <string>WEB-INF/lib/commons-io-1.3.2.jar</string>
+          <string>WEB-INF/lib/commons-logging-1.1.jar</string>
+          <string>WEB-INF/lib/commons-validator-1.2.0.jar</string>
+          <string>WEB-INF/lib/commons-beanutils-1.7.0.jar</string>
+          <string>WEB-INF/lib/commons-digester-1.6.jar</string>
+          <string>WEB-INF/lib/oro-2.0.8.jar</string>
+          <string>WEB-INF/lib/log4j-1.2.13.jar</string>
+          <string>WEB-INF/lib/sa-struts-1.0.4-sp9.jar</string>
+          <string>WEB-INF/lib/struts-1.2.9.jar</string>
+          <string>WEB-INF/lib/antlr-2.7.2.jar</string>
+          <string>WEB-INF/lib/s2-tiger-2.4.44.jar</string>
+          <string>WEB-INF/lib/s2-extension-2.4.44.jar</string>
+          <string>WEB-INF/lib/s2-framework-2.4.44.jar</string>
+          <string>WEB-INF/lib/aopalliance-1.0.jar</string>
+          <string>WEB-INF/lib/javassist-3.4.ga.jar</string>
+          <string>WEB-INF/lib/ognl-2.6.9-patch-20090427.jar</string>
+          <string>WEB-INF/lib/poi-3.0-FINAL.jar</string>
+          <string>WEB-INF/lib/geronimo-annotation_1.0_spec-1.0.jar</string>
+          <string>WEB-INF/lib/geronimo-ejb_3.0_spec-1.0.jar</string>
+          <string>WEB-INF/lib/geronimo-interceptor_3.0_spec-1.0.jar</string>
+          <string>WEB-INF/lib/geronimo-jpa_3.0_spec-1.0.jar</string>
+          <string>WEB-INF/lib/geronimo-jta_1.1_spec-1.0.jar</string>
+        </pathsSet>
+      </path-set>
+    </entry>
+  </registeredFiles>
+  <dependenciesInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>jstl</groupId>
+        <artifactId>jstl</artifactId>
+        <version>1.1.2</version>
+        <type>jar</type>
+        <scope>compile</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>125</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source>
+            <modelId>com.example:sample:1.0</modelId>
+            <location>/Users/satoshiarai/ghq/github.com/qsat/sandbox/study-sa/sample/pom.xml</location>
+          </source>
+        </location>
+        <groupIdLocation>
+          <lineNumber>126</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>127</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>128</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../location/source"/>
+        </versionLocation>
+        <managementKey>jstl:jstl:jar</managementKey>
+      </dependency>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>taglibs</groupId>
+        <artifactId>standard</artifactId>
+        <version>1.1.2</version>
+        <type>jar</type>
+        <scope>compile</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>130</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>131</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>132</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>133</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <managementKey>taglibs:standard:jar</managementKey>
+      </dependency>
+      <targetFileName>standard-1.1.2.jar</targetFileName>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>commons-collections</groupId>
+        <artifactId>commons-collections</artifactId>
+        <version>3.1</version>
+        <type>jar</type>
+        <scope>compile</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>135</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>136</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>137</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>138</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <managementKey>commons-collections:commons-collections:jar</managementKey>
+      </dependency>
+      <targetFileName>commons-collections-3.1.jar</targetFileName>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>commons-el</groupId>
+        <artifactId>commons-el</artifactId>
+        <version>1.0</version>
+        <type>jar</type>
+        <scope>compile</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>140</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>141</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>142</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>143</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <managementKey>commons-el:commons-el:jar</managementKey>
+      </dependency>
+      <targetFileName>commons-el-1.0.jar</targetFileName>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>commons-fileupload</groupId>
+        <artifactId>commons-fileupload</artifactId>
+        <version>1.2</version>
+        <type>jar</type>
+        <scope>compile</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>145</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>146</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>147</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>148</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <managementKey>commons-fileupload:commons-fileupload:jar</managementKey>
+      </dependency>
+      <targetFileName>commons-fileupload-1.2.jar</targetFileName>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>commons-io</groupId>
+        <artifactId>commons-io</artifactId>
+        <version>1.3.2</version>
+        <type>jar</type>
+        <scope>compile</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>150</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>151</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>152</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>153</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <managementKey>commons-io:commons-io:jar</managementKey>
+      </dependency>
+      <targetFileName>commons-io-1.3.2.jar</targetFileName>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>commons-logging</groupId>
+        <artifactId>commons-logging</artifactId>
+        <version>1.1</version>
+        <type>jar</type>
+        <scope>compile</scope>
+        <exclusions>
+          <org.apache.maven.model.Exclusion>
+            <artifactId>avalon-framework</artifactId>
+            <groupId>avalon-framework</groupId>
+            <location>
+              <lineNumber>160</lineNumber>
+              <columnNumber>20</columnNumber>
+              <source reference="../../../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+            </location>
+            <artifactIdLocation>
+              <lineNumber>162</lineNumber>
+              <columnNumber>23</columnNumber>
+              <source reference="../../../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+            </artifactIdLocation>
+            <groupIdLocation>
+              <lineNumber>161</lineNumber>
+              <columnNumber>20</columnNumber>
+              <source reference="../../../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+            </groupIdLocation>
+          </org.apache.maven.model.Exclusion>
+          <org.apache.maven.model.Exclusion>
+            <artifactId>logkit</artifactId>
+            <groupId>logkit</groupId>
+            <location>
+              <lineNumber>164</lineNumber>
+              <columnNumber>20</columnNumber>
+              <source reference="../../../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+            </location>
+            <artifactIdLocation>
+              <lineNumber>166</lineNumber>
+              <columnNumber>23</columnNumber>
+              <source reference="../../../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+            </artifactIdLocation>
+            <groupIdLocation>
+              <lineNumber>165</lineNumber>
+              <columnNumber>20</columnNumber>
+              <source reference="../../../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+            </groupIdLocation>
+          </org.apache.maven.model.Exclusion>
+          <org.apache.maven.model.Exclusion>
+            <artifactId>servlet-api</artifactId>
+            <groupId>javax.servlet</groupId>
+            <location>
+              <lineNumber>168</lineNumber>
+              <columnNumber>20</columnNumber>
+              <source reference="../../../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+            </location>
+            <artifactIdLocation>
+              <lineNumber>170</lineNumber>
+              <columnNumber>23</columnNumber>
+              <source reference="../../../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+            </artifactIdLocation>
+            <groupIdLocation>
+              <lineNumber>169</lineNumber>
+              <columnNumber>20</columnNumber>
+              <source reference="../../../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+            </groupIdLocation>
+          </org.apache.maven.model.Exclusion>
+        </exclusions>
+        <location>
+          <lineNumber>155</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>156</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>157</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>158</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <managementKey>commons-logging:commons-logging:jar</managementKey>
+      </dependency>
+      <targetFileName>commons-logging-1.1.jar</targetFileName>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>commons-validator</groupId>
+        <artifactId>commons-validator</artifactId>
+        <version>1.2.0</version>
+        <type>jar</type>
+        <scope>compile</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>174</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>175</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>176</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>177</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <managementKey>commons-validator:commons-validator:jar</managementKey>
+      </dependency>
+      <targetFileName>commons-validator-1.2.0.jar</targetFileName>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>log4j</groupId>
+        <artifactId>log4j</artifactId>
+        <version>1.2.13</version>
+        <type>jar</type>
+        <scope>compile</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>179</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>180</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>181</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>182</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <managementKey>log4j:log4j:jar</managementKey>
+      </dependency>
+      <targetFileName>log4j-1.2.13.jar</targetFileName>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>org.seasar.sastruts</groupId>
+        <artifactId>sa-struts</artifactId>
+        <version>1.0.4-sp9</version>
+        <type>jar</type>
+        <scope>compile</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>185</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>186</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>187</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>188</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <managementKey>org.seasar.sastruts:sa-struts:jar</managementKey>
+      </dependency>
+      <targetFileName>sa-struts-1.0.4-sp9.jar</targetFileName>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>org.apache.geronimo.specs</groupId>
+        <artifactId>geronimo-annotation_1.0_spec</artifactId>
+        <version>1.0</version>
+        <type>jar</type>
+        <scope>compile</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>191</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>192</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>193</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>194</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <managementKey>org.apache.geronimo.specs:geronimo-annotation_1.0_spec:jar</managementKey>
+      </dependency>
+      <targetFileName>geronimo-annotation_1.0_spec-1.0.jar</targetFileName>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>org.apache.geronimo.specs</groupId>
+        <artifactId>geronimo-ejb_3.0_spec</artifactId>
+        <version>1.0</version>
+        <type>jar</type>
+        <scope>compile</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>196</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>197</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>198</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>199</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <managementKey>org.apache.geronimo.specs:geronimo-ejb_3.0_spec:jar</managementKey>
+      </dependency>
+      <targetFileName>geronimo-ejb_3.0_spec-1.0.jar</targetFileName>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>org.apache.geronimo.specs</groupId>
+        <artifactId>geronimo-interceptor_3.0_spec</artifactId>
+        <version>1.0</version>
+        <type>jar</type>
+        <scope>compile</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>201</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>202</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>203</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>204</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <managementKey>org.apache.geronimo.specs:geronimo-interceptor_3.0_spec:jar</managementKey>
+      </dependency>
+      <targetFileName>geronimo-interceptor_3.0_spec-1.0.jar</targetFileName>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>org.apache.geronimo.specs</groupId>
+        <artifactId>geronimo-jpa_3.0_spec</artifactId>
+        <version>1.0</version>
+        <type>jar</type>
+        <scope>compile</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>206</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>207</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>208</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>209</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <managementKey>org.apache.geronimo.specs:geronimo-jpa_3.0_spec:jar</managementKey>
+      </dependency>
+      <targetFileName>geronimo-jpa_3.0_spec-1.0.jar</targetFileName>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>org.apache.geronimo.specs</groupId>
+        <artifactId>geronimo-jta_1.1_spec</artifactId>
+        <version>1.0</version>
+        <type>jar</type>
+        <scope>compile</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>211</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>212</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>213</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>214</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <managementKey>org.apache.geronimo.specs:geronimo-jta_1.1_spec:jar</managementKey>
+      </dependency>
+      <targetFileName>geronimo-jta_1.1_spec-1.0.jar</targetFileName>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>org.apache.geronimo.specs</groupId>
+        <artifactId>geronimo-jsp_2.0_spec</artifactId>
+        <version>1.0</version>
+        <type>jar</type>
+        <scope>provided</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>218</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>219</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>220</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>221</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <scopeLocation>
+          <lineNumber>222</lineNumber>
+          <columnNumber>14</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </scopeLocation>
+        <managementKey>org.apache.geronimo.specs:geronimo-jsp_2.0_spec:jar</managementKey>
+      </dependency>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>org.apache.geronimo.specs</groupId>
+        <artifactId>geronimo-servlet_2.4_spec</artifactId>
+        <version>1.0</version>
+        <type>jar</type>
+        <scope>provided</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>224</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>225</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>226</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>227</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <scopeLocation>
+          <lineNumber>228</lineNumber>
+          <columnNumber>14</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </scopeLocation>
+        <managementKey>org.apache.geronimo.specs:geronimo-servlet_2.4_spec:jar</managementKey>
+      </dependency>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>junit</groupId>
+        <artifactId>junit</artifactId>
+        <version>3.8.2</version>
+        <type>jar</type>
+        <scope>test</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>231</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>232</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>233</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>234</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <scopeLocation>
+          <lineNumber>235</lineNumber>
+          <columnNumber>14</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </scopeLocation>
+        <managementKey>junit:junit:jar</managementKey>
+      </dependency>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>org.easymock</groupId>
+        <artifactId>easymock</artifactId>
+        <version>2.2</version>
+        <type>jar</type>
+        <scope>test</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>237</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>238</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>239</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>240</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <scopeLocation>
+          <lineNumber>241</lineNumber>
+          <columnNumber>14</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </scopeLocation>
+        <managementKey>org.easymock:easymock:jar</managementKey>
+      </dependency>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>xalan</groupId>
+        <artifactId>xalan</artifactId>
+        <version>2.5.1</version>
+        <type>jar</type>
+        <scope>provided</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>243</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>244</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>245</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>246</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <scopeLocation>
+          <lineNumber>247</lineNumber>
+          <columnNumber>14</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </scopeLocation>
+        <managementKey>xalan:xalan:jar</managementKey>
+      </dependency>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+    <org.apache.maven.plugin.war.util.DependencyInfo>
+      <dependency>
+        <groupId>xml-apis</groupId>
+        <artifactId>xml-apis</artifactId>
+        <version>2.0.2</version>
+        <type>jar</type>
+        <scope>provided</scope>
+        <exclusions/>
+        <location>
+          <lineNumber>249</lineNumber>
+          <columnNumber>17</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </location>
+        <groupIdLocation>
+          <lineNumber>250</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </groupIdLocation>
+        <artifactIdLocation>
+          <lineNumber>251</lineNumber>
+          <columnNumber>19</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </artifactIdLocation>
+        <versionLocation>
+          <lineNumber>252</lineNumber>
+          <columnNumber>16</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </versionLocation>
+        <scopeLocation>
+          <lineNumber>253</lineNumber>
+          <columnNumber>14</columnNumber>
+          <source reference="../../../../org.apache.maven.plugin.war.util.DependencyInfo/dependency/location/source"/>
+        </scopeLocation>
+        <managementKey>xml-apis:xml-apis:jar</managementKey>
+      </dependency>
+    </org.apache.maven.plugin.war.util.DependencyInfo>
+  </dependenciesInfo>
+</webapp-structure>
