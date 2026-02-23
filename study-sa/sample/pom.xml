@@ -122,6 +122,12 @@
     </repository>
   </repositories>
   <dependencies>
+    <!-- H2 Database (Oracle Mode) -->
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <version>1.4.200</version>
+    </dependency>
     <dependency>
       <groupId>jstl</groupId>
       <artifactId>jstl</artifactId>
