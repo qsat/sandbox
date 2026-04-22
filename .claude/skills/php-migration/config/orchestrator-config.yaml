@@ -18,14 +18,15 @@ retry:
   max_count: 2         # REVIEW_REQUIRED の最大差し戻し回数
 
 paths:
-  source_root: ""                          # /php-migrate 実行時に上書き
-  artifacts_dir: php-migration/artifacts/
-  context_pack_dir: php-migration/context-pack/
-  mapping_rules_dir: php-migration/mapping-rules/
-  flags_dir: php-migration/flags/
-  dod_results_dir: php-migration/dod-results/
-  snapshots_dir: php-migration/snapshots/
-  human_queue_dir: php-migration/human-queue/
+  source_root: ""              # /php-migrate 実行時に上書き（移植元PHPのルート）
+  # 以下はすべてプロジェクトルート相対パス（.claude/skills/ の外に出力）
+  artifacts_dir: artifacts/
+  context_pack_dir: context-pack/
+  mapping_rules_dir: mapping-rules/
+  flags_dir: flags/
+  dod_results_dir: dod-results/
+  snapshots_dir: snapshots/
+  human_queue_dir: human-queue/
   output_dir: spring-boot-app/
-  tasks_path: php-migration/tasks.yaml
-  report_path: php-migration/final_report.yaml
+  tasks_path: tasks.yaml
+  report_path: final_report.yaml

@@ -101,20 +101,29 @@ mode: screen
 
 ## ディレクトリ構造
 
+スキル定義（`.claude/skills/php-migration/`）とランタイム出力はプロジェクトルートで分離します。
+
 ```
-php-migration/
-├── SKILL.md
-├── agents/          エージェント詳細プロンプト（16ファイル）
-├── schemas/         スキーマ・仕様リファレンス
-├── config/
-│   └── orchestrator-config.yaml
-├── mapping-rules/   変換辞書（Phase B で自動生成）
-├── artifacts/       Phase A/B 成果物（実行時生成）
-├── context-pack/    コンテキストパック（実行時生成）
-├── flags/           エージェント間フラグ（実行時生成）
-├── dod-results/     検証結果（実行時生成）
-├── snapshots/       ゴールデン HTML（事前配置）
-└── human-queue/     エスカレーション（実行時生成）
+{プロジェクトルート}/
+├── .claude/skills/php-migration/  ← スキル定義（このディレクトリ）
+│   ├── SKILL.md
+│   ├── agents/
+│   ├── schemas/
+│   └── config/orchestrator-config.yaml
+│
+├── {zf1-source}/          ← 移植元 PHP（source_root に指定）
+├── spring-boot-app/       ← 移植先 Spring Boot（output_dir）
+│
+├── mapping-rules/         ← 変換辞書（Phase B で生成・git管理推奨）
+├── snapshots/             ← ゴールデン HTML（git管理推奨）
+│
+├── artifacts/             ← Phase A/B 成果物（gitignore推奨）
+├── context-pack/          ← コンテキストパック（gitignore推奨）
+├── flags/                 ← エージェント間フラグ（gitignore推奨）
+├── dod-results/           ← 検証結果（gitignore推奨）
+├── human-queue/           ← エスカレーション（gitignore推奨）
+├── tasks.yaml             ← Orchestrator 状態（gitignore推奨）
+└── final_report.yaml      ← 移植レポート（gitignore推奨）
 ```
 
 ## 開始手順
