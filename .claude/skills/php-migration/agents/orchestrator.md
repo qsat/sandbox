@@ -26,7 +26,28 @@ input:
 
 ## 起動シーケンス
 
-### Step 0: 初期化
+### Step 0: 設定の読み込みと変数の確定
+
+`config_path`（`orchestrator-config.yaml`）を読み込み、以下の変数を確定します。
+以降のすべてのステップでこれらの値を使用します。
+
+```
+output_dir     = config.paths.output_dir        # 例: spring-boot-app/
+artifacts_dir  = config.paths.artifacts_dir     # 例: artifacts/
+context_pack_dir = config.paths.context_pack_dir
+mapping_rules_dir = config.paths.mapping_rules_dir
+flags_dir      = config.paths.flags_dir
+dod_results_dir = config.paths.dod_results_dir
+snapshots_dir  = config.paths.snapshots_dir
+human_queue_dir = config.paths.human_queue_dir
+tasks_path     = config.paths.tasks_path
+report_path    = config.paths.report_path
+```
+
+各エージェントを起動する際は、上記の変数を `output_dir` として渡します。
+エージェントプロンプト内の `{{output_dir}}` はこの値に置換されます。
+
+### Step 1: 初期化
 
 `tasks.yaml` が存在しない場合、以下を実行して初期タスクキューを生成します。
 
