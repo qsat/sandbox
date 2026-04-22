@@ -13,7 +13,7 @@ orchestratorから以下のパスを受け取ります。
 ```
 input:
   source_root: string    # ZF1アプリケーションのルートディレクトリ
-  output_path: string    # 出力先 例: artifacts/routing-inventory.yaml
+  output_path: string    # 出力先 例: artifacts/phase-a/routing-inventory.yaml
 ```
 
 解析対象ファイル（source_root以下）:

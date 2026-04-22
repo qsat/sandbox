@@ -11,7 +11,7 @@
 ```
 input:
   source_root: string    # ZF1アプリケーションのルートディレクトリ
-  output_path: string    # 出力先 例: artifacts/template-inventory.yaml
+  output_path: string    # 出力先 例: artifacts/phase-a/template-inventory.yaml
 ```
 
 解析対象ディレクトリ（source_root以下）:

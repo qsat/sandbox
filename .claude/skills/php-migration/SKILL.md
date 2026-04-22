@@ -48,17 +48,17 @@ mode: screen
 
 | エージェント | ファイル | 出力 |
 |------------|---------|------|
-| route-analyzer | agents/route-analyzer.md | artifacts/routing-inventory.yaml |
-| template-analyzer | agents/template-analyzer.md | artifacts/template-inventory.yaml |
-| api-catalog-builder | agents/api-catalog-builder.md | artifacts/api-catalog.yaml |
-| session-scanner | agents/session-scanner.md | artifacts/session-inventory.yaml |
+| route-analyzer | agents/route-analyzer.md | artifacts/phase-a/routing-inventory.yaml |
+| template-analyzer | agents/template-analyzer.md | artifacts/phase-a/template-inventory.yaml |
+| api-catalog-builder | agents/api-catalog-builder.md | artifacts/phase-a/api-catalog.yaml |
+| session-scanner | agents/session-scanner.md | artifacts/phase-a/session-inventory.yaml |
 
 ### Phase B：設計（順次実行）
 
 | エージェント | ファイル | 出力 |
 |------------|---------|------|
 | mapping-rule-author | agents/mapping-rule-author.md | mapping-rules/*.yaml |
-| domain-modeler | agents/domain-modeler.md | artifacts/domain-model.yaml |
+| domain-modeler | agents/domain-modeler.md | artifacts/phase-b/domain-model.yaml |
 | context-packer | agents/context-packer.md | context-pack/{screen_id}.yaml |
 
 ### Phase C：移植（画面単位・並列実行）
@@ -119,6 +119,8 @@ mode: screen
 ├── snapshots/             ← ゴールデン HTML（git管理推奨）
 │
 ├── artifacts/             ← Phase A/B 成果物（gitignore推奨）
+│   ├── phase-a/           ← route/template/api/session inventory
+│   └── phase-b/           ← domain-model
 ├── context-pack/          ← コンテキストパック（gitignore推奨）
 ├── flags/                 ← エージェント間フラグ（gitignore推奨）
 ├── dod-results/           ← 検証結果（gitignore推奨）

@@ -63,7 +63,7 @@ tasks:
     status: pending
     retry_count: 0
     input_path: "{{source_root}}"
-    output_path: artifacts/routing-inventory.yaml
+    output_path: artifacts/phase-a/routing-inventory.yaml
 
   - task_id: phase-a-template-analyzer
     phase: A
@@ -73,7 +73,7 @@ tasks:
     status: pending
     retry_count: 0
     input_path: "{{source_root}}"
-    output_path: artifacts/template-inventory.yaml
+    output_path: artifacts/phase-a/template-inventory.yaml
 
   - task_id: phase-a-api-catalog-builder
     phase: A
@@ -83,7 +83,7 @@ tasks:
     status: pending
     retry_count: 0
     input_path: "{{source_root}}"
-    output_path: artifacts/api-catalog.yaml
+    output_path: artifacts/phase-a/api-catalog.yaml
 
   - task_id: phase-a-session-scanner
     phase: A
@@ -93,7 +93,7 @@ tasks:
     status: pending
     retry_count: 0
     input_path: "{{source_root}}"
-    output_path: artifacts/session-inventory.yaml
+    output_path: artifacts/phase-a/session-inventory.yaml
 
   # Phase B: Phase A 全完了後に追加（フェーズゲートA→B 参照）
   # Phase C/D: Phase B 全完了後に追加（フェーズゲートB→C/D 参照）

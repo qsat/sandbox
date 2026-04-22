@@ -37,6 +37,8 @@ php-migration/
 │       ├── phase-c-*.md         （4ファイル）
 │       └── phase-d-*.md         （4ファイル）
 ├── artifacts/                   ← Phase A/B 成果物（実行時生成）
+│   ├── phase-a/                 ← routing/template/api-catalog/session inventory
+│   └── phase-b/                 ← domain-model
 ├── context-pack/                ← 画面単位コンテキストパック（実行時生成）
 ├── flags/                       ← エージェント間フラグ（実行時生成）
 │   └── processed/               ← 処理済みフラグアーカイブ

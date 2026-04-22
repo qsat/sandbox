@@ -11,7 +11,7 @@
 ```
 input:
   source_root: string    # ZF1アプリケーションのルートディレクトリ
-  output_path: string    # 出力先 例: artifacts/session-inventory.yaml
+  output_path: string    # 出力先 例: artifacts/phase-a/session-inventory.yaml
 ```
 
 解析対象: `source_root` 以下の全 `.php` ファイル
