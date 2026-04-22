@@ -1,0 +1,31 @@
+# Orchestrator 設定
+# orchestrator-design.md の設定値定義を参照
+
+parallel:
+  phase_a_max: 4       # Phase A 分析エージェントの最大並列数
+  phase_c_max: 5       # Phase C 移植エージェントの最大並列数（画面単位）
+  phase_d_max: 5       # Phase D 検証エージェントの最大並列数（画面単位）
+
+timeouts:
+  phase_a_agent_sec: 300
+  phase_b_agent_sec: 600
+  phase_c_agent_sec: 900
+  phase_d_agent_sec: 600
+  needs_rule_timeout_sec: 3600   # NEEDS_RULE → ESCALATE 昇格までの待機時間
+  orchestrator_timeout_hours: 24
+
+retry:
+  max_count: 2         # REVIEW_REQUIRED の最大差し戻し回数
+
+paths:
+  source_root: ""                          # /php-migrate 実行時に上書き
+  artifacts_dir: php-migration/artifacts/
+  context_pack_dir: php-migration/context-pack/
+  mapping_rules_dir: php-migration/mapping-rules/
+  flags_dir: php-migration/flags/
+  dod_results_dir: php-migration/dod-results/
+  snapshots_dir: php-migration/snapshots/
+  human_queue_dir: php-migration/human-queue/
+  output_dir: src/
+  tasks_path: php-migration/tasks.yaml
+  report_path: php-migration/final_report.yaml

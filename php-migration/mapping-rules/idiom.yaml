@@ -1,0 +1,5 @@
+# PHP イディオム → Java イディオム 変換ルール
+# スキーマ定義: php-migration/docs/mapping-rules-schema.md
+# mapping-rule-author エージェントが Phase B で自動生成・追記する
+
+rules: []
