@@ -13,8 +13,8 @@
 ```
 input:
   context_pack:    context-pack/{screen_id}.yaml
-  artifacts_dir:   src/main/java/
-  output_dir:      src/test/java/
+  artifacts_dir:   {{output_dir}}/src/main/java/
+  output_dir:      {{output_dir}}/src/test/java/
   output_path:     dod-results/{screen_id}-testgen.yaml
 ```
 

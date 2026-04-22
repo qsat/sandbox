@@ -13,7 +13,7 @@
 ```
 input:
   context_pack:    context-pack/{screen_id}.yaml
-  artifacts_dir:   src/main/java/
+  artifacts_dir:   {{output_dir}}/src/main/java/
   output_path:     dod-results/{screen_id}-codereview.yaml
   flag_dir:        flags/
 ```

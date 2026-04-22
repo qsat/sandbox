@@ -11,7 +11,7 @@
 ```
 input:
   context_pack:  context-pack/{screen_id}.yaml
-  output_dir:    src/main/java/
+  output_dir:    {{output_dir}}/src/main/java/
   flag_dir:      flags/
 ```
 
@@ -183,9 +183,9 @@ timestamp: ISO8601
 ## Output
 
 ```
-src/main/java/{{package_path}}/{{ApiClientClass}}.java
-src/main/java/{{package_path}}/dto/{{ResponseDto}}.java  # レスポンスDTO分
-src/main/java/{{package_path}}/dto/{{RequestDto}}.java   # POSTリクエストDTO分（あれば）
+{{output_dir}}/src/main/java/{{package_path}}/{{ApiClientClass}}.java
+{{output_dir}}/src/main/java/{{package_path}}/dto/{{ResponseDto}}.java  # レスポンスDTO分
+{{output_dir}}/src/main/java/{{package_path}}/dto/{{RequestDto}}.java   # POSTリクエストDTO分（あれば）
 ```
 
 ---

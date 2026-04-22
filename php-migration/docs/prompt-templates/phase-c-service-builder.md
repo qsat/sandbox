@@ -11,7 +11,7 @@
 ```
 input:
   context_pack:  context-pack/{screen_id}.yaml
-  output_dir:    src/main/java/
+  output_dir:    {{output_dir}}/src/main/java/
   flag_dir:      flags/
 ```
 
@@ -153,8 +153,8 @@ timestamp: ISO8601
 ## Output
 
 ```
-src/main/java/{{package_path}}/{{ServiceClassName}}.java
-src/main/java/{{package_path}}/domain/{{DomainClass}}.java  # domain_objectsの分
+{{output_dir}}/src/main/java/{{package_path}}/{{ServiceClassName}}.java
+{{output_dir}}/src/main/java/{{package_path}}/domain/{{DomainClass}}.java  # domain_objectsの分
 ```
 
 ---

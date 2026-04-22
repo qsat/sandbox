@@ -18,7 +18,7 @@ input:
   artifacts_dir:    artifacts/
   context_pack_dir: context-pack/
   flags_dir:        flags/
-  output_dir:       src/
+  output_dir:       "{{config.paths.output_dir}}"   # orchestrator-config.yaml の output_dir を使用
   report_path:      final_report.yaml
 ```
 

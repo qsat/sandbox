@@ -26,6 +26,6 @@ paths:
   dod_results_dir: php-migration/dod-results/
   snapshots_dir: php-migration/snapshots/
   human_queue_dir: php-migration/human-queue/
-  output_dir: src/
+  output_dir: spring-boot-app/
   tasks_path: php-migration/tasks.yaml
   report_path: php-migration/final_report.yaml

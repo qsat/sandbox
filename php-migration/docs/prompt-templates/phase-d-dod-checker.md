@@ -34,10 +34,10 @@ input:
 
 ```yaml
 # 確認対象
-target.controller.class_name → src/main/java/{package}/{class_name}.java
-target.service[*].class_name → src/main/java/{package}/{class_name}.java
-target.templates[*].path    → src/main/resources/{path}
-target.api_clients[*]       → src/main/java/{package}/{class_name}.java
+target.controller.class_name → {{output_dir}}/src/main/java/{package}/{class_name}.java
+target.service[*].class_name → {{output_dir}}/src/main/java/{package}/{class_name}.java
+target.templates[*].path    → {{output_dir}}/src/main/resources/{path}
+target.api_clients[*]       → {{output_dir}}/src/main/java/{package}/{class_name}.java
 ```
 
 存在しないファイルは `MISSING_ARTIFACT` として記録します（即時FAILとする）。
@@ -107,7 +107,7 @@ target.api_clients[*]       → src/main/java/{package}/{class_name}.java
 
 ### Step 6: test_scenarios チェック（存在確認のみ）
 
-`dod.test_scenarios` の各 `id` に対応するテストメソッドが `src/test/` 内に存在するかを確認します。
+`dod.test_scenarios` の各 `id` に対応するテストメソッドが `{{output_dir}}/src/test/` 内に存在するかを確認します。
 
 実際のテスト実行はこのエージェントのスコープ外とします（実行環境が必要なため）。
 

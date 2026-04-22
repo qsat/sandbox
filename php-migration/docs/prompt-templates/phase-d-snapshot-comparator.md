@@ -13,7 +13,7 @@
 ```
 input:
   context_pack:    context-pack/{screen_id}.yaml
-  artifacts_dir:   src/main/resources/templates/
+  artifacts_dir:   {{output_dir}}/src/main/resources/templates/
   snapshot_dir:    snapshots/
   output_path:     dod-results/{screen_id}-snapshot.yaml
   flag_dir:        flags/

@@ -13,7 +13,7 @@
 ```
 input:
   context_pack:  context-pack/{screen_id}.yaml
-  output_dir:    src/main/java/
+  output_dir:    {{output_dir}}/src/main/java/
   flag_dir:      flags/
 ```
 
@@ -147,7 +147,7 @@ timestamp: ISO8601
 ### Step 8: ファイル出力
 
 ```
-src/main/java/{{package_path}}/{{class_name}}.java
+{{output_dir}}/src/main/java/{{package_path}}/{{class_name}}.java
 ```
 
 ---

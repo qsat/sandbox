@@ -13,7 +13,7 @@
 ```
 input:
   context_pack: context-pack/{screen_id}.yaml
-  output_dir:   src/main/resources/templates/
+  output_dir:   {{output_dir}}/src/main/resources/templates/
   flag_dir:     flags/
 ```
 
@@ -161,7 +161,7 @@ timestamp: ISO8601
 ## Output
 
 ```
-src/main/resources/templates/
+{{output_dir}}/src/main/resources/templates/
 ├── layouts/default.html
 ├── fragments/
 │   └── {partial_name}.html
