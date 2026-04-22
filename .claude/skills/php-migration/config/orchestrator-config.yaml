@@ -28,5 +28,6 @@ paths:
   snapshots_dir: snapshots/
   human_queue_dir: human-queue/
   output_dir: spring-boot-app/
+  specs_dir: specs/
   tasks_path: tasks.yaml
   report_path: final_report.yaml

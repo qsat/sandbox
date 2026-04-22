@@ -98,6 +98,7 @@ mode: screen
 | schemas/mapping-rules.md | 変換辞書 YAML スキーマ |
 | schemas/failure-handling.md | フラグ仕様・エスカレーションフロー |
 | schemas/orchestrator-design.md | タスクキュー・依存解決設計 |
+| schemas/specs-placement.md | 既存仕様の必要項目と配置定義 |
 
 ## ディレクトリ構造
 
