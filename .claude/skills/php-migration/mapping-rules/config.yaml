@@ -1,0 +1,14 @@
+# 設定ファイル変換ルール（ZF1 application.ini → Spring Boot application.yml）
+# mapping-rule-author が Phase B で自動生成・拡張する
+# proposed_spring_key の付与と追加ルールの記述がこのファイルの役割
+
+rules: []
+
+# ルールスキーマ（schemas/mapping-rules.md 参照）
+# 例:
+# - rule_id: config-db-host
+#   category: config
+#   zf1_pattern: "resources.db.params.host"
+#   spring_pattern: "spring.datasource.url"  # url に結合して使用
+#   note: "host単体ではなく port・dbname・charset と結合してJDBC URLを構築する"
+#   tags: [database, config]

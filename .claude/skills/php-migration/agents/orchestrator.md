@@ -95,6 +95,16 @@ tasks:
     input_path: "{{source_root}}"
     output_path: artifacts/phase-a/session-inventory.yaml
 
+  - task_id: phase-a-config-scanner
+    phase: A
+    agent: config-scanner
+    screen_id: null
+    depends_on: []
+    status: pending
+    retry_count: 0
+    input_path: "{{source_root}}"
+    output_path: artifacts/phase-a/config-inventory.yaml
+
   # Phase B: Phase A 全完了後に追加（フェーズゲートA→B 参照）
   # Phase C/D: Phase B 全完了後に追加（フェーズゲートB→C/D 参照）
 ```
@@ -185,13 +195,16 @@ Phase A → B ゲート:
 
     追加タスク:
     - task_id: phase-b-mapping-rule-author
-      depends_on: [phase-a-*（全4タスク）]
+      depends_on: [phase-a-*（全5タスク）]
 
     - task_id: phase-b-domain-modeler
       depends_on: [phase-a-api-catalog-builder]
 
+    - task_id: phase-b-config-migrator
+      depends_on: [phase-b-mapping-rule-author, phase-a-config-scanner]
+
     - task_id: phase-b-context-packer
-      depends_on: [phase-b-mapping-rule-author, phase-b-domain-modeler]
+      depends_on: [phase-b-mapping-rule-author, phase-b-domain-modeler, phase-b-config-migrator]
 
 Phase B → C/D ゲート:
   条件: phase=B の全タスクが status: done または escalated

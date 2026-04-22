@@ -17,6 +17,7 @@ input:
   template_inventory:  artifacts/phase-a/template-inventory.yaml
   api_catalog:         artifacts/phase-a/api-catalog.yaml
   session_inventory:   artifacts/phase-a/session-inventory.yaml
+  config_inventory:    artifacts/phase-a/config-inventory.yaml
   output_dir:          mapping-rules/
 
   # NEEDS_RULE対応時（追記モード）
@@ -80,11 +81,20 @@ $this->escape(...)
 | `Zend_View_Helper_HeadLink` | `th:href` + `<link>` |
 | カスタムHelper | タグは生成するが `spring_pattern` は `TODO` とする |
 
-### Step 4: APIクライアントパターンの収集
+### Step 4: 設定キーのSpringプロパティへのマッピング
+
+`config-inventory.yaml` の各 `config_key` に対して `proposed_spring_key` を付与し、`mapping-rules/config.yaml` に記録します。
+
+**付与ルール:**
+- `config-migrator.md` の「デフォルト変換ルール」テーブルを参照して対応するSpringキーを決定する
+- 複数のZF1キーが1つのSpringプロパティに結合される場合（例: host + port + dbname → jdbc url）は `spring_pattern` に結合先を記載し、`note` に結合方法を説明する
+- マッピング先が不明な場合は `spring_pattern: TODO` とする
+
+### Step 5: APIクライアントパターンの収集
 
 `api-catalog.yaml` の各 `call_id` の `source_location` から実装を読み込み、ZF1側の呼び出しパターンを抽出します。
 
-### Step 5: PHPイディオムの収集
+### Step 6: PHPイディオムの収集
 
 全Controllerファイルから言語レベルの変換パターンを抽出します。
 
@@ -100,9 +110,9 @@ strpos(...) !== false
 sprintf(...)
 ```
 
-### Step 6: mapping-rules/*.yaml の生成
+### Step 7: mapping-rules/*.yaml の生成
 
-`mapping-rules-schema.md` の共通スキーマに従い、5ファイルを生成します。
+`mapping-rules-schema.md` の共通スキーマに従い、6ファイルを生成します。
 
 **rule_id の採番規則:**
 ```
@@ -111,6 +121,7 @@ template.yaml   → tmpl-{連番3桁}  例: tmpl-001
 helper.yaml     → hlpr-{連番3桁}  例: hlpr-001
 api-client.yaml → apic-{連番3桁}  例: apic-001
 idiom.yaml      → idim-{連番3桁}  例: idim-001
+config.yaml     → conf-{連番3桁}  例: conf-001
 ```
 
 **Spring Bootパターンが一意に決まらない場合:**

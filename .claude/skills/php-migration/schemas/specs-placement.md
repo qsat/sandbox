@@ -116,6 +116,51 @@ ignore_selectors:
 
 ---
 
+### 8. 環境別変数設定（*.ini）
+
+ZF1 の `application.ini` は `config-scanner` が自動スキャンします（`source_root` 以下）。
+それに加えて、以下のファイルをプロジェクトルートの `specs/config/` に置くことで、移植先の Spring Boot プロファイルYAMLをより正確に生成できます。
+
+| ファイル | 配置先 | 必須/任意 | 参照エージェント |
+|---------|-------|---------|----------------|
+| ソースのINIをそのままコピー | `specs/config/application.ini` | 任意（source_rootにあれば不要） | config-scanner |
+| 環境別オーバーライド（開発） | `specs/config/development.ini` | 任意 | config-scanner |
+| 環境別オーバーライド（ステージング） | `specs/config/staging.ini` | 任意 | config-scanner |
+| 環境別オーバーライド（本番） | `specs/config/production.ini` | 任意 | config-scanner |
+| 機密値の実値（gitignore必須） | `specs/config/.secrets.ini` | 任意 | config-scanner |
+
+**`specs/config/` の用途:**
+- ZF1ソースが手元にない場合や、INIファイルが複数サーバーに分散している場合に使用
+- `source_root` 以下のINIを優先し、`specs/config/` は補完として扱う
+
+**`specs/config/` のINIファイル書式:**
+ZF1 `application.ini` と同じセクション継承記法を使用します。
+
+```ini
+; specs/config/staging.ini
+; production セクションの値を上書き
+[staging : production]
+resources.db.params.host = db.staging.example.com
+resources.cache.backend.options.servers.1.host = cache.staging.example.com
+```
+
+**機密値の扱い:**
+- `specs/config/.secrets.ini` に実際のパスワード・トークンを記述できます
+- このファイルは **必ず `.gitignore` に追加してください**
+- `config-scanner` は `sensitive: true` フラグを付けて記録し、`config-migrator` は `${ENV_VAR}` プレースホルダーに変換します（実値はコード中に出力しません）
+
+```ini
+; specs/config/.secrets.ini（gitignoreに追加すること）
+[production]
+resources.db.params.password = actual_production_password
+resources.mail.transport.password = smtp_password
+
+[development]
+resources.db.params.password = devpassword
+```
+
+---
+
 ## プロジェクトルートの完全なディレクトリ構造
 
 ```
@@ -136,7 +181,13 @@ ignore_selectors:
 │   ├── logic/                     ← 業務ロジック仕様
 │   ├── auth/                      ← 認証・認可仕様
 │   ├── fixtures/                  ← テストフィクスチャ
-│   └── mocks/                     ← APIモックデータ
+│   ├── mocks/                     ← APIモックデータ
+│   └── config/                    ← 環境別 *.ini（source_rootにない場合の補完）
+│       ├── application.ini        ← 共通設定
+│       ├── development.ini        ← 開発環境オーバーライド
+│       ├── staging.ini
+│       ├── production.ini
+│       └── .secrets.ini           ← 機密値（gitignore必須）
 │
 ├── snapshots/                     ← ゴールデンHTML（git管理推奨）
 │   └── {screen_id}/

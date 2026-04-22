@@ -52,6 +52,7 @@ mode: screen
 | template-analyzer | agents/template-analyzer.md | artifacts/phase-a/template-inventory.yaml |
 | api-catalog-builder | agents/api-catalog-builder.md | artifacts/phase-a/api-catalog.yaml |
 | session-scanner | agents/session-scanner.md | artifacts/phase-a/session-inventory.yaml |
+| config-scanner | agents/config-scanner.md | artifacts/phase-a/config-inventory.yaml |
 
 ### Phase B：設計（順次実行）
 
@@ -59,6 +60,7 @@ mode: screen
 |------------|---------|------|
 | mapping-rule-author | agents/mapping-rule-author.md | mapping-rules/*.yaml |
 | domain-modeler | agents/domain-modeler.md | artifacts/phase-b/domain-model.yaml |
+| config-migrator | agents/config-migrator.md | {{output_dir}}/src/main/resources/application*.yml |
 | context-packer | agents/context-packer.md | context-pack/{screen_id}.yaml |
 
 ### Phase C：移植（画面単位・並列実行）
