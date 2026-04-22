@@ -11,7 +11,7 @@
 ```
 input:
   source_root: string    # ZF1アプリケーションのルートディレクトリ
-  output_path: string    # 出力先 例: artifacts/phase-a/session-inventory.yaml
+  output_path: string    # 出力先 例: artifacts/phase-a/session-inventory/index.yaml
 ```
 
 解析対象: `source_root` 以下の全 `.php` ファイル
@@ -141,3 +141,5 @@ timestamp: ISO8601
 - PHPコードを実行しない（静的解析のみ）
 - `Zend_Session::start()` や `session_start()` の呼び出し箇所も記録するが、個別キーの解析が目的のためカウントのみ
 - `source_root` 以外のファイルは参照しない
+
+- 出力ディレクトリ配下に `index.yaml` を必ず生成すること（orchestrator の完了検出は `output_path` = `{dir}/index.yaml` の存在で行う）。追加の分割ファイルは同ディレクトリに任意で配置してよい

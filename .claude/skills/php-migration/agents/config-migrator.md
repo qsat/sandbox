@@ -12,7 +12,7 @@
 
 ```
 input:
-  config_inventory:  artifacts/phase-a/config-inventory.yaml
+  config_inventory:  artifacts/phase-a/config-inventory/index.yaml
   config_rules:      mapping-rules/config.yaml
   output_dir:        string    # 例: spring-boot-app/
 ```
@@ -148,9 +148,9 @@ SPRING_MAIL_PASSWORD=
 ### Step 7: 出力サマリの記録
 
 ```yaml
-# artifacts/phase-b/config-migration-summary.yaml
+# artifacts/phase-b/config-migration-summary/index.yaml
 generated_at: ISO8601
-source_inventory: artifacts/phase-a/config-inventory.yaml
+source_inventory: artifacts/phase-a/config-inventory/index.yaml
 output_files:
   - path: "{{output_dir}}/src/main/resources/application.yml"
     keys_count: int
@@ -173,7 +173,7 @@ todo_count: int
 - `{{output_dir}}/src/main/resources/application.yml`
 - `{{output_dir}}/src/main/resources/application-{env}.yml`（環境数分）
 - `{{output_dir}}/.env.example`
-- `artifacts/phase-b/config-migration-summary.yaml`
+- `artifacts/phase-b/config-migration-summary/index.yaml`
 
 ---
 
@@ -184,3 +184,5 @@ todo_count: int
 - 機密値（`sensitive: true`）は **絶対に** ハードコードしない。すべて `${ENV_VAR}` 形式にする
 - `proposed_spring_key` が `null` かつデフォルトルールにも該当しないキーは `# TODO` コメント付きで出力し、`unmapped_keys` に記録する
 - `config_keys` が空の場合は最小構成の `application.yml` のみ出力してサマリに `keys_count: 0` を記録する
+
+- 出力ディレクトリ配下に `index.yaml` を必ず生成すること（orchestrator の完了検出は `output_path` = `{dir}/index.yaml` の存在で行う）。追加の分割ファイルは同ディレクトリに任意で配置してよい

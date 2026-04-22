@@ -11,7 +11,7 @@
 ```
 input:
   source_root: string    # ZF1アプリケーションのルートディレクトリ
-  output_path: string    # 出力先 例: artifacts/phase-a/template-inventory.yaml
+  output_path: string    # 出力先 例: artifacts/phase-a/template-inventory/index.yaml
 ```
 
 解析対象ディレクトリ（source_root以下）:
@@ -128,3 +128,5 @@ timestamp: ISO8601
 - `source_root` 以外のファイルは参照しない
 - Smarty構文とPHP構文の両方を対象とする
 - `used_helpers` は正規化（小文字化・重複排除）して出力する
+
+- 出力ディレクトリ配下に `index.yaml` を必ず生成すること（orchestrator の完了検出は `output_path` = `{dir}/index.yaml` の存在で行う）。追加の分割ファイルは同ディレクトリに任意で配置してよい

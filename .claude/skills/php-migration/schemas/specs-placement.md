@@ -14,7 +14,7 @@
 | ZF1 が提供するAPI定義（内部向け） | `specs/openapi/internal/{endpoint}.yaml` | 任意 | route-analyzer, controller-migrator |
 
 **用途:**
-- `api-catalog-builder` が `artifacts/phase-a/api-catalog.yaml` を生成する際の型定義・エンドポイント仕様として参照
+- `api-catalog-builder` が `artifacts/phase-a/api-catalog/index.yaml` を生成する際の型定義・エンドポイント仕様として参照
 - `api-client-builder` が Spring WebClient コードを生成する際のリクエスト/レスポンス型の根拠として参照
 
 ---
@@ -28,7 +28,7 @@
 | マスタデータ定義 | `specs/db/master/*.csv` | 任意 | domain-modeler, service-builder |
 
 **用途:**
-- `domain-modeler` が `artifacts/phase-b/domain-model.yaml` のエンティティ定義・リレーション・フィールド型を確定する際に参照
+- `domain-modeler` が `artifacts/phase-b/domain-model/index.yaml` のエンティティ定義・リレーション・フィールド型を確定する際に参照
 - `service-builder` がリポジトリ層（JPA エンティティ・リポジトリインタフェース）を生成する際に参照
 
 ---
@@ -200,8 +200,15 @@ resources.db.params.password = devpassword
 │
 ├── mapping-rules/                 ← 変換辞書（Phase B で生成、git管理推奨）
 ├── artifacts/                     ← Phase A/B 成果物（gitignore推奨）
-│   ├── phase-a/                   ← routing/template/api-catalog/session inventory
-│   └── phase-b/                   ← domain-model
+│   ├── phase-a/
+│   │   ├── routing-inventory/     ← index.yaml + 分割ファイル（任意）
+│   │   ├── template-inventory/
+│   │   ├── api-catalog/
+│   │   ├── session-inventory/
+│   │   └── config-inventory/
+│   └── phase-b/
+│       ├── domain-model/
+│       └── config-migration-summary/
 ├── context-pack/                  ← コンテキストパック（gitignore推奨）
 ├── flags/                         ← エージェント間フラグ（gitignore推奨）
 ├── dod-results/                   ← 検証結果（gitignore推奨）

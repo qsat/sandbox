@@ -11,7 +11,7 @@
 ```
 input:
   source_root: string    # ZF1アプリケーションのルートディレクトリ
-  output_path: string    # 出力先 例: artifacts/phase-a/config-inventory.yaml
+  output_path: string    # 出力先 例: artifacts/phase-a/config-inventory/index.yaml
 ```
 
 解析対象ファイル（source_root以下）:
@@ -104,7 +104,7 @@ phpSettings.display_errors = 0
 ### Step 5: config-inventory.yaml の生成
 
 ```yaml
-# artifacts/phase-a/config-inventory.yaml
+# artifacts/phase-a/config-inventory/index.yaml
 generated_at: ISO8601
 source_root: string
 source_files:
@@ -190,3 +190,5 @@ INIファイルが1つも見つからない場合:
 - 機密値（`sensitive: true`）は `raw_values` と `resolved_values` に実際の値を記録する（このファイルはgitignore推奨）
 - `APPLICATION_PATH` 等のZF1定数は展開せず、`contains_constant: true` として記録する
 - セクション名が数値のみ（`[0]`, `[1]`）の場合は配列として扱い、`key` を `{prefix}.{index}` 形式に正規化する
+
+- 出力ディレクトリ配下に `index.yaml` を必ず生成すること（orchestrator の完了検出は `output_path` = `{dir}/index.yaml` の存在で行う）。追加の分割ファイルは同ディレクトリに任意で配置してよい
