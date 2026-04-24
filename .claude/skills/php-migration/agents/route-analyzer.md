@@ -13,7 +13,7 @@ orchestratorから以下のパスを受け取ります。
 ```
 input:
   source_root: string    # ZF1アプリケーションのルートディレクトリ
-  output_path: string    # 出力先 例: artifacts/routing-inventory.yaml
+  output_path: string    # 出力先 例: artifacts/phase-a/routing-inventory/index.yaml
 ```
 
 解析対象ファイル（source_root以下）:
@@ -124,3 +124,5 @@ timestamp: ISO8601
 - `eval()`、変数によるdynamic include、マクロ展開は解析せず `unresolvable: true` として記録する
 - ルートが重複定義されている場合は両方記録し `note: "duplicate"` を付ける
 - 出力YAMLのフィールド順はスキーマ定義の順序に従う
+
+- 出力ディレクトリ配下に `index.yaml` を必ず生成すること（orchestrator の完了検出は `output_path` = `{dir}/index.yaml` の存在で行う）。追加の分割ファイルは同ディレクトリに任意で配置してよい

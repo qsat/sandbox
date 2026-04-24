@@ -48,17 +48,19 @@ mode: screen
 
 | エージェント | ファイル | 出力 |
 |------------|---------|------|
-| route-analyzer | agents/route-analyzer.md | artifacts/routing-inventory.yaml |
-| template-analyzer | agents/template-analyzer.md | artifacts/template-inventory.yaml |
-| api-catalog-builder | agents/api-catalog-builder.md | artifacts/api-catalog.yaml |
-| session-scanner | agents/session-scanner.md | artifacts/session-inventory.yaml |
+| route-analyzer | agents/route-analyzer.md | artifacts/phase-a/routing-inventory/index.yaml |
+| template-analyzer | agents/template-analyzer.md | artifacts/phase-a/template-inventory/index.yaml |
+| api-catalog-builder | agents/api-catalog-builder.md | artifacts/phase-a/api-catalog/index.yaml |
+| session-scanner | agents/session-scanner.md | artifacts/phase-a/session-inventory/index.yaml |
+| config-scanner | agents/config-scanner.md | artifacts/phase-a/config-inventory/index.yaml |
 
 ### Phase B：設計（順次実行）
 
 | エージェント | ファイル | 出力 |
 |------------|---------|------|
 | mapping-rule-author | agents/mapping-rule-author.md | mapping-rules/*.yaml |
-| domain-modeler | agents/domain-modeler.md | artifacts/domain-model.yaml |
+| domain-modeler | agents/domain-modeler.md | artifacts/phase-b/domain-model/index.yaml |
+| config-migrator | agents/config-migrator.md | {{output_dir}}/src/main/resources/application*.yml |
 | context-packer | agents/context-packer.md | context-pack/{screen_id}.yaml |
 
 ### Phase C：移植（画面単位・並列実行）
@@ -98,6 +100,7 @@ mode: screen
 | schemas/mapping-rules.md | 変換辞書 YAML スキーマ |
 | schemas/failure-handling.md | フラグ仕様・エスカレーションフロー |
 | schemas/orchestrator-design.md | タスクキュー・依存解決設計 |
+| schemas/specs-placement.md | 既存仕様の必要項目と配置定義 |
 
 ## ディレクトリ構造
 
@@ -118,6 +121,15 @@ mode: screen
 ├── snapshots/             ← ゴールデン HTML（git管理推奨）
 │
 ├── artifacts/             ← Phase A/B 成果物（gitignore推奨）
+│   ├── phase-a/
+│   │   ├── routing-inventory/index.yaml      ← + 分割ファイル群（任意）
+│   │   ├── template-inventory/index.yaml
+│   │   ├── api-catalog/index.yaml
+│   │   ├── session-inventory/index.yaml
+│   │   └── config-inventory/index.yaml
+│   └── phase-b/
+│       ├── domain-model/index.yaml
+│       └── config-migration-summary/index.yaml
 ├── context-pack/          ← コンテキストパック（gitignore推奨）
 ├── flags/                 ← エージェント間フラグ（gitignore推奨）
 ├── dod-results/           ← 検証結果（gitignore推奨）

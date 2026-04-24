@@ -12,12 +12,12 @@
 
 ```
 input:
-  routing_inventory:   artifacts/routing-inventory.yaml
-  template_inventory:  artifacts/template-inventory.yaml
-  api_catalog:         artifacts/api-catalog.yaml
-  session_inventory:   artifacts/session-inventory.yaml
+  routing_inventory:   artifacts/phase-a/routing-inventory/index.yaml
+  template_inventory:  artifacts/phase-a/template-inventory/index.yaml
+  api_catalog:         artifacts/phase-a/api-catalog/index.yaml
+  session_inventory:   artifacts/phase-a/session-inventory/index.yaml
   mapping_rules_dir:   mapping-rules/
-  domain_model:        artifacts/domain-model.yaml
+  domain_model:        artifacts/phase-b/domain-model/index.yaml
   source_root:         string    # PHPソースツリーのルート
   output_dir:          context-pack/
   dod_defaults:        config/dod-defaults.yaml   # 非機能閾値のデフォルト値

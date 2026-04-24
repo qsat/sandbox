@@ -11,7 +11,7 @@
 ```
 input:
   source_root: string    # ZF1アプリケーションのルートディレクトリ
-  output_path: string    # 出力先 例: artifacts/api-catalog.yaml
+  output_path: string    # 出力先 例: artifacts/phase-a/api-catalog/index.yaml
 ```
 
 解析対象: `source_root` 以下の全 `.php` ファイル
@@ -152,3 +152,5 @@ timestamp: ISO8601
 - 同一エンドポイントへの複数箇所からの呼び出しは別エントリとして記録する（`call_id` の末尾連番で区別）
 - 外部APIのベースURLは設定ファイル（`application/configs/application.ini` 等）から取得を試みる
 - `source_root` 以外のファイルは参照しない
+
+- 出力ディレクトリ配下に `index.yaml` を必ず生成すること（orchestrator の完了検出は `output_path` = `{dir}/index.yaml` の存在で行う）。追加の分割ファイルは同ディレクトリに任意で配置してよい
