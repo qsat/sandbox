@@ -198,7 +198,7 @@ Phase A → B ゲート:
       depends_on: [phase-a-*（全5タスク）]
 
     - task_id: phase-b-domain-modeler
-      depends_on: [phase-a-api-catalog-builder]
+      depends_on: [phase-a-route-analyzer, phase-a-api-catalog-builder, phase-a-session-scanner]
 
     - task_id: phase-b-config-migrator
       depends_on: [phase-b-mapping-rule-author, phase-a-config-scanner]
