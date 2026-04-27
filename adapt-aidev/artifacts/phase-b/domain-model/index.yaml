@@ -1,0 +1,364 @@
+# adapt-aidev: domain-model
+# generated_at: 2026-04-27T00:00:00Z
+# source: adapt-aidev/artifacts/phase-a/spec-inventory/index.yaml
+# schema: adapt-aidev/schemas/domain-model.schema.yaml
+
+metadata:
+  generated_at: "2026-04-27T00:00:00Z"
+  schema_version: "1.0"
+  source_spec: adapt-aidev/artifacts/phase-a/spec-inventory/index.yaml
+
+# ─────────────────────────────────────────
+# フェーズ1: 戦略DDD
+# ─────────────────────────────────────────
+
+bounded_contexts:
+  - name: UserContext
+    description: ユーザー登録・認証・セッション管理を担うコンテキスト
+    url_prefixes: [/login, /register]
+    owns_entities: [User]
+    use_cases: [UC-001, UC-002]
+    package: com.example.action  # 現状: ActionクラスがServiceとRepositoryを兼ねる
+    ubiquitous_language:
+      - term: ユーザー
+        english: User
+        definition: システムに登録済みの利用者。usernameとパスワードハッシュを持つ
+      - term: 認証
+        english: Authentication
+        definition: usernameとパスワードによる本人確認。成功するとセッションにloginUserが保存される
+      - term: パスワードハッシュ
+        english: PasswordHash
+        definition: SHA-256でハッシュ化されたパスワード文字列。平文は保持しない
+
+  - name: TodoContext
+    description: TODOタスクのCRUD管理を担うコンテキスト
+    url_prefixes: [/todo]
+    owns_entities: [Todo]
+    use_cases: [UC-003, UC-004, UC-005]
+    package: com.example.action  # 現状: ActionクラスがServiceとRepositoryを兼ねる
+    ubiquitous_language:
+      - term: TODO
+        english: Todo
+        definition: ユーザーが管理する単一のタスク項目。title・完了状態・作成日時を持つ
+      - term: 完了
+        english: Completed
+        definition: Todoが達成された状態（completed=1）
+      - term: 未完了
+        english: Incomplete
+        definition: Todoが未達成の状態（completed=0）
+      - term: 所有者
+        english: Owner
+        definition: そのTodoを作成したユーザー。userId（外部キー）で識別する
+
+context_map:
+  - upstream: UserContext
+    downstream: TodoContext
+    relationship: customer_supplier
+    integration_point: "ログイン済みユーザーID（loginUser.id）をTodoContextが参照"
+    acl: false
+    note: "TodoContextはUserContextのUserをセッション経由で受け取り、userId（Long）のみを永続化する"
+
+# ─────────────────────────────────────────
+# フェーズ2: 戦術DDD
+# ─────────────────────────────────────────
+
+aggregates:
+  - id: AGG-001
+    name: User
+    context: UserContext
+    aggregate_root: User
+    entities:
+      - name: User
+        is_root: true
+        fields:
+          - name: id
+            type: Long  # 将来的に: UserId（値オブジェクト）
+            role: identity
+            note: "SEQUENCEによる自動採番（USERS_ID_SEQ）"
+          - name: username
+            type: String  # 将来的に: Username（値オブジェクト）
+            role: value_object
+            constraints: [not_null, unique, max_length_50]
+          - name: passwordHash
+            type: String  # 将来的に: PasswordHash（値オブジェクト）
+            role: value_object
+            note: "SHA-256ハッシュ値。64文字の16進数文字列"
+        invariants:
+          - "usernameはシステム内で一意でなければならない"
+          - "passwordHashはSHA-256形式（64文字16進数）でなければならない"
+          - "平文パスワードをUserエンティティは保持しない"
+        factory_methods:
+          - name: register
+            params: [username, rawPassword]
+            description: "新規ユーザー登録。rawPasswordをSHA-256でハッシュ化してUser生成"
+
+  - id: AGG-002
+    name: Todo
+    context: TodoContext
+    aggregate_root: Todo
+    entities:
+      - name: Todo
+        is_root: true
+        fields:
+          - name: id
+            type: Long  # 将来的に: TodoId（値オブジェクト）
+            role: identity
+            note: "SEQUENCEによる自動採番（TODOS_ID_SEQ）"
+          - name: userId
+            type: Long  # 将来的に: UserId（UserContextへの参照）
+            role: reference
+            note: "UserContextへの参照。IDのみ保持（集約間はIDで参照）"
+          - name: title
+            type: String  # 将来的に: Title（値オブジェクト）
+            role: value_object
+            constraints: [not_null, not_blank, max_length_200]
+          - name: completed
+            type: Integer  # 将来的に: TodoStatus（enum）
+            role: value_object
+            constraints: [not_null]
+            possible_values:
+              - 0: 未完了（INCOMPLETE）
+              - 1: 完了（COMPLETE）
+          - name: createdAt
+            type: Timestamp
+            role: value_object
+            note: "INSERT時にDEFAULT CURRENT_TIMESTAMPで自動設定"
+        invariants:
+          - "titleは空文字列でない"
+          - "userIdは既存ユーザーのIDでなければならない（DB外部キー制約）"
+          - "completedは0または1のみ"
+        factory_methods:
+          - name: create
+            params: [userId, title]
+            description: "新規Todo生成。completedは0（未完了）で初期化"
+        commands:
+          - name: updateTitle
+            params: [newTitle]
+          - name: markComplete
+            params: []
+          - name: markIncomplete
+            params: []
+
+value_objects:
+  - name: PasswordHash
+    context: UserContext
+    type: class
+    fields:
+      - name: value
+        type: String
+    factory: "hashPassword(rawPassword) → SHA-256でハッシュ化した64文字16進数文字列"
+    equality: by_value
+    note: "現状はActionクラスのstaticメソッドhashPassword()が担っている"
+
+  - name: TodoStatus
+    context: TodoContext
+    type: enum
+    values:
+      INCOMPLETE: "未完了（DBでは completed=0）"
+      COMPLETE: "完了（DBでは completed=1）"
+    note: "現状はInteger(0/1)で表現。将来的にenumクラスに昇格させると表現力が上がる"
+
+# ─────────────────────────────────────────
+# ユースケース定義（Phase C の実装基準）
+# ─────────────────────────────────────────
+use_case_definitions:
+  - id: UC-001
+    name: ユーザー登録
+    context: UserContext
+    actor: 未登録ユーザー
+    command: RegisterUser
+    input:
+      - name: username
+        type: String
+      - name: rawPassword
+        type: String
+        constraints: [min_length_4]
+    steps:
+      - "バリデーション: username・rawPasswordが必須。rawPasswordは4文字以上"
+      - "重複チェック: jdbcManager.from(User.class).where('username = ?', username).getCount() > 0 → エラー"
+      - "パスワードハッシュ化: hashPassword(rawPassword)"
+      - "User生成: user.username = username; user.password = hashedPassword"
+      - "永続化: jdbcManager.insert(user).execute()"
+    output: void
+    errors:
+      - UsernameAlreadyExists: "そのユーザー名は既に使われています"
+    post_condition: "USERSテーブルに新規レコード挿入。redirect:/login"
+    status: implemented
+
+  - id: UC-002
+    name: ログイン認証
+    context: UserContext
+    actor: 登録済みユーザー
+    command: AuthenticateUser
+    input:
+      - name: username
+        type: String
+      - name: password
+        type: String（平文）
+    steps:
+      - "バリデーション: username・passwordが必須"
+      - "ユーザー検索: jdbcManager.from(User.class).where('username = ?', username).getSingleResult()"
+      - "ユーザーが見つからない場合（null）: errorMessage = '認証失敗メッセージ' → return 'index.jsp'"
+      - "パスワードハッシュ比較: !hashPassword(password).equals(user.password) → 同上"
+      - "認証成功: request.getSession().setAttribute('loginUser', user) → return 'redirect:/todo'"
+    output: void
+    errors:
+      - AuthenticationFailed: "ユーザー名またはパスワードが正しくありません"
+    post_condition: "セッションにloginUser設定。redirect:/todo"
+    status: implemented
+
+  - id: UC-003
+    name: TODO追加
+    context: TodoContext
+    actor: ログイン済みユーザー
+    command: AddTodo
+    precondition: "セッションに loginUser が存在すること"
+    input:
+      - name: title
+        type: String
+        constraints: [required, not_blank]
+    steps:
+      - "ログインチェック: loginUser == null → return 'redirect:/login'"
+      - "バリデーション: titleが必須"
+      - "Todo生成: todo.title = title; todo.userId = loginUser.id;"
+      - "永続化: jdbcManager.insert(todo).execute()"
+      - "PRGリダイレクト: return 'redirect:/todo'"
+    output: void
+    errors:
+      - NotAuthenticated: "未ログインのため redirect:/login"
+    post_condition: "TODOSテーブルに新規レコード挿入。redirect:/todo"
+    status: implemented
+
+  - id: UC-004
+    name: TODO一覧表示
+    context: TodoContext
+    actor: ログイン済みユーザー
+    query: GetMyTodos
+    precondition: "セッションに loginUser が存在すること"
+    steps:
+      - "ログインチェック: loginUser == null → return 'redirect:/login'"
+      - "クエリ: jdbcManager.from(Todo.class).where('user_id = ?', loginUser.id).orderBy('created_at DESC').getResultList()"
+    output: "List<Todo>"
+    status: implemented
+
+  - id: UC-005
+    name: TODO更新
+    context: TodoContext
+    actor: ログイン済みユーザー
+    command: UpdateTodo
+    precondition: "セッションに loginUser が存在すること。対象Todoがloginユーザーの所有であること"
+    input:
+      - name: todoId
+        type: Long
+      - name: title
+        type: String
+      - name: completed
+        type: Integer
+    steps:
+      - "ログインチェック"
+      - "所有者チェック付き取得: jdbcManager.from(Todo.class).where('id = ? AND user_id = ?', todoId, loginUser.id).getSingleResult()"
+      - "更新: todo.title = title; todo.completed = (completed != null) ? completed : 0;"
+      - "永続化: jdbcManager.update(todo).execute()"
+      - "PRGリダイレクト: return 'redirect:/todo'"
+    status: implemented
+
+# ─────────────────────────────────────────
+# リポジトリインタフェース（論理定義）
+# ─────────────────────────────────────────
+repositories:
+  - name: UserRepository
+    context: UserContext
+    aggregate: User
+    note: "現状はActionクラス内でJdbcManagerを直接使用。リポジトリクラスは存在しない"
+    methods:
+      - name: findByUsername
+        params:
+          - name: username
+            type: String
+        returns: "User（null許容）"
+        current_impl: "jdbcManager.from(User.class).where(\"username = ?\", username).getSingleResult()"
+      - name: existsByUsername
+        params:
+          - name: username
+            type: String
+        returns: boolean
+        current_impl: "jdbcManager.from(User.class).where(\"username = ?\", username).getCount() > 0"
+      - name: save
+        params:
+          - name: user
+            type: User
+        returns: void
+        current_impl: "jdbcManager.insert(user).execute()"
+
+  - name: TodoRepository
+    context: TodoContext
+    aggregate: Todo
+    note: "現状はActionクラス内でJdbcManagerを直接使用。リポジトリクラスは存在しない"
+    methods:
+      - name: findByUserId
+        params:
+          - name: userId
+            type: Long
+        returns: "List<Todo>"
+        current_impl: "jdbcManager.from(Todo.class).where(\"user_id = ?\", userId).orderBy(\"created_at DESC\").getResultList()"
+      - name: findByIdAndUserId
+        params:
+          - name: id
+            type: Long
+          - name: userId
+            type: Long
+        returns: "Todo（null許容）"
+        current_impl: "jdbcManager.from(Todo.class).where(\"id = ? AND user_id = ?\", id, userId).getSingleResult()"
+      - name: save
+        params:
+          - name: todo
+            type: Todo
+        returns: void
+        current_impl: "jdbcManager.insert(todo).execute()"
+      - name: update
+        params:
+          - name: todo
+            type: Todo
+        returns: void
+        current_impl: "jdbcManager.update(todo).execute()"
+
+# ─────────────────────────────────────────
+# 実装マッピング（Phase C の参照情報）
+# ─────────────────────────────────────────
+implementation_mapping:
+  framework: SAStruts
+  mapping:
+    - domain_concept: "UC-002（ログイン認証）"
+      current_impl: "TODO(human): LoginAction.submit()未実装"
+      location: "study-sa/sample/src/main/java/com/example/action/LoginAction.java:submit()"
+      task_id: TODO-001
+      note: "hashPassword()はLoginAction内にstaticメソッドとして実装済み"
+
+    - domain_concept: "UC-003（TODO追加）"
+      current_impl: "TODO(human): TodoAction.add()未実装"
+      location: "study-sa/sample/src/main/java/com/example/action/TodoAction.java:add()"
+      task_id: TODO-002
+      note: "getLoginUser()ヘルパーはTodoActionに実装済み"
+
+    - domain_concept: "PasswordHash.of()"
+      current_impl: "LoginAction.hashPassword(String rawPassword) - staticメソッド"
+      location: "study-sa/sample/src/main/java/com/example/action/LoginAction.java:hashPassword()"
+      note: "RegisterActionにも同名のprivateメソッドが存在。重複している"
+
+    - domain_concept: "UserRepository.save()"
+      current_impl: "RegisterAction.submit()内に直接記述"
+      location: "study-sa/sample/src/main/java/com/example/action/RegisterAction.java"
+
+    - domain_concept: "TodoRepository.findByUserId()"
+      current_impl: "TodoAction.index()内に直接記述"
+      location: "study-sa/sample/src/main/java/com/example/action/TodoAction.java:index()"
+
+  pattern_notes:
+    - "SAStruts リダイレクト: return \"redirect:/path\" （URLプレフィックス）"
+    - "SAStruts フォワード: return \"view.jsp\" （ビューパス）"
+    - "S2JDBC getSingleResult(): 結果0件でnullを返す（例外なし）"
+    - "S2AOP プロキシ対策: publicフィールドへのEL式アクセスにはgetterメソッドが必要"
+    - "H2 Oracleモード: SEQUENCE採番は @GeneratedValue(strategy=SEQUENCE) + @SequenceGenerator"
+    - "PRGパターン: POST後は必ず redirect:/ プレフィックスで返す"
+    - "バリデーション: @Execute(validator=true, input=\"失敗時のJSP\") でバリデーション有効化"
+    - "セッション取得: (User) request.getSession().getAttribute(\"loginUser\")"

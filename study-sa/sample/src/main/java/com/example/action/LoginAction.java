@@ -36,14 +36,17 @@ public class LoginAction {
 
     @Execute(validator = true, input = "index.jsp")
     public String submit() {
-        // TODO(human): ログイン認証ロジックを実装してください
-        // ヒント:
-        //   1. jdbcManager.from(User.class).where("username = ?", username).getSingleResult() でユーザー検索
-        //   2. hashPassword(password) でハッシュ化してDBのpasswordと比較
-        //   3. 認証成功: request.getSession().setAttribute("loginUser", user) → return "redirect:/todo"
-        //   4. 認証失敗: errorMessage をセット → return "index.jsp"
-        //   (ユーザーが見つからない場合はgetSingleResult()がnullを返す)
-        return "index.jsp";
+        User user = jdbcManager.from(User.class)
+            .where("username = ?", username)
+            .getSingleResult();
+
+        if (user == null || !hashPassword(password).equals(user.password)) {
+            errorMessage = "ユーザー名またはパスワードが正しくありません";
+            return "index.jsp";
+        }
+
+        request.getSession().setAttribute("loginUser", user);
+        return "redirect:/todo";
     }
 
     public static String hashPassword(String rawPassword) {

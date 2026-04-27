@@ -1,0 +1,47 @@
+# adapt-aidev デフォルト設定
+
+pipeline:
+  skill_root: adapt-aidev              # スキルルートディレクトリ（sandbox相対）
+  artifacts_root: adapt-aidev/artifacts # 成果物出力先
+
+  phase_a:
+    output: artifacts/phase-a/spec-inventory/index.yaml
+    agent:  adapt-aidev/agents/spec-extractor.md
+
+  phase_b:
+    input:  artifacts/phase-a/spec-inventory/index.yaml
+    output: artifacts/phase-b/domain-model/index.yaml
+    agent:  adapt-aidev/agents/domain-modeler.md
+
+  phase_c:
+    domain_model: artifacts/phase-b/domain-model/index.yaml
+    spec_inventory: artifacts/phase-a/spec-inventory/index.yaml
+    agent:  adapt-aidev/agents/task-executor.md
+
+scan:
+  java_extensions: [.java]
+  doc_extensions:  [.md, .txt, .rst]
+  sql_extensions:  [.sql]
+  config_extensions: [.properties, .yml, .yaml]
+  exclude_dirs:
+    - target/
+    - build/
+    - .git/
+    - node_modules/
+
+supported_frameworks:
+  - name: SAStruts
+    action_pattern: "*Action.java"
+    url_rule: "com.example.action.XxxAction → /xxx"
+    execute_annotation: "@Execute"
+    di_annotation: "@Resource"
+
+  - name: Spring Boot
+    controller_annotations: ["@Controller", "@RestController"]
+    mapping_annotations: ["@GetMapping", "@PostMapping", "@RequestMapping", "@PutMapping", "@DeleteMapping"]
+    di_annotation: "@Autowired"
+
+  - name: Spring MVC
+    controller_annotations: ["@Controller"]
+    mapping_annotations: ["@RequestMapping"]
+    di_annotation: "@Autowired"

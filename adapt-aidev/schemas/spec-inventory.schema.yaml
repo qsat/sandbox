@@ -1,0 +1,103 @@
+# spec-inventory スキーマ定義
+# Phase A (spec-extractor) の出力形式を定義する
+
+$schema: "adapt-aidev/schemas/spec-inventory.schema.yaml"
+version: "1.0"
+
+fields:
+  metadata:
+    required: true
+    fields:
+      project_root:    { type: string, required: true }
+      generated_at:    { type: string, format: iso8601, required: true }
+      schema_version:  { type: string, default: "1.0" }
+
+  tech_stack:
+    required: true
+    fields:
+      framework:    { type: string, examples: [SAStruts, "Spring Boot", "Spring MVC"] }
+      orm:          { type: string, examples: [S2JDBC, "JPA/Hibernate", MyBatis] }
+      db:           { type: string, examples: [H2, MySQL, PostgreSQL, Oracle] }
+      build:        { type: string, examples: [Maven, Gradle] }
+      java_version: { type: string, examples: ["8", "11", "17", "21"] }
+
+  screens:
+    type: array
+    item_fields:
+      screen_id:      { type: string, required: true }
+      url:            { type: string, required: true }
+      http_methods:   { type: array, item_type: string }
+      handler_class:  { type: string }
+      handler_methods:
+        type: array
+        item_fields:
+          name:            { type: string, required: true }
+          http_method:     { type: string, enum: [GET, POST, PUT, DELETE, PATCH] }
+          description:     { type: string }
+          returns:         { type: string, description: "JSPパス or redirect:/xxx" }
+          has_todo_human:  { type: boolean, default: false }
+          todo_content:    { type: string }
+
+  entities:
+    type: array
+    item_fields:
+      class_name:   { type: string, required: true }
+      table_name:   { type: string }
+      fields:
+        type: array
+        item_fields:
+          name:          { type: string, required: true }
+          column:        { type: string }
+          type:          { type: string }
+          constraints:   { type: array, item_type: string }
+          default_value: { type: string }
+          references:    { type: string, description: "外部キー参照先 例: USERS.ID" }
+          note:          { type: string }
+      relationships:
+        type: array
+        item_fields:
+          type:         { type: string, enum: [one_to_many, many_to_one, many_to_many, one_to_one] }
+          target:       { type: string }
+          join_column:  { type: string }
+
+  business_rules:
+    type: array
+    item_fields:
+      id:           { type: string, required: true, pattern: "BR-\\d+" }
+      name:         { type: string, required: true }
+      description:  { type: string, required: true }
+      source_file:  { type: string }
+      source_line:  { type: integer }
+      type:         { type: string, enum: [security, authorization, validation, ui_pattern, business] }
+
+  use_cases:
+    type: array
+    item_fields:
+      id:               { type: string, required: true, pattern: "UC-\\d+" }
+      name:             { type: string, required: true }
+      actor:            { type: string }
+      screen_id:        { type: string }
+      flow:             { type: array, item_type: string }
+      related_entities: { type: array, item_type: string }
+      related_rules:    { type: array, item_type: string }
+      status:           { type: string, enum: [implemented, partial, not_implemented] }
+      todo_items:       { type: array, item_type: string }
+
+  todo_items:
+    type: array
+    item_fields:
+      id:                { type: string, required: true, pattern: "TODO-\\d+" }
+      file:              { type: string, required: true }
+      method:            { type: string }
+      description:       { type: string, required: true }
+      hint:              { type: string }
+      related_use_case:  { type: string }
+      priority:          { type: string, enum: [high, medium, low], default: medium }
+
+  existing_docs:
+    type: array
+    item_fields:
+      file:      { type: string, required: true }
+      type:      { type: string, enum: [tutorial, spec, progress_memo, readme, other] }
+      summary:   { type: string }
+      key_info:  { type: array, item_type: string }

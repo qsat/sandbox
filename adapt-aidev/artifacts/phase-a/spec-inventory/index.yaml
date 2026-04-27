@@ -1,0 +1,348 @@
+# adapt-aidev: spec-inventory
+# generated_at: 2026-04-27T00:00:00Z
+# source: study-sa/sample
+# schema: adapt-aidev/schemas/spec-inventory.schema.yaml
+
+metadata:
+  project_root: study-sa/sample
+  generated_at: "2026-04-27T00:00:00Z"
+  schema_version: "1.0"
+
+# ─────────────────────────────────────────
+# Step 1: 技術スタック
+# ─────────────────────────────────────────
+tech_stack:
+  framework: SAStruts
+  orm: S2JDBC
+  db: H2（Oracleモード）
+  build: Maven
+  java_version: "1.5 (source/target)"
+  additional:
+    - sa-struts（org.seasar.sastruts:sa-struts）
+    - S2JDBC（org.seasar.extension.jdbc.JdbcManager）
+    - H2 1.4.200（jdbc:h2:mem:todo;MODE=Oracle）
+    - JSTL 1.1.2
+    - JSP ビュー
+
+# ─────────────────────────────────────────
+# Step 2: 画面・エンドポイントインベントリ
+# ─────────────────────────────────────────
+screens:
+  - screen_id: index
+    url: /
+    http_methods: [GET]
+    handler_class: com.example.action.IndexAction
+    handler_methods:
+      - name: index
+        http_method: GET
+        description: トップページ表示
+        returns: index.jsp
+
+  - screen_id: login
+    url: /login
+    http_methods: [GET, POST]
+    handler_class: com.example.action.LoginAction
+    handler_methods:
+      - name: index
+        http_method: GET
+        description: ログイン画面表示
+        returns: login/index.jsp
+        validator: false
+      - name: submit
+        http_method: POST
+        description: ログイン認証処理
+        returns: "redirect:/todo（成功）または index.jsp（失敗）"
+        validator: true
+        validator_input: index.jsp
+        has_todo_human: true
+        todo_content: |
+          ログイン認証ロジックを実装してください
+          1. jdbcManager.from(User.class).where("username = ?", username).getSingleResult() でユーザー検索
+          2. hashPassword(password) でハッシュ化してDBのpasswordと比較
+          3. 認証成功: request.getSession().setAttribute("loginUser", user) → return "redirect:/todo"
+          4. 認証失敗: errorMessage をセット → return "index.jsp"
+          (ユーザーが見つからない場合はgetSingleResult()がnullを返す)
+
+  - screen_id: register
+    url: /register
+    http_methods: [GET, POST]
+    handler_class: com.example.action.RegisterAction
+    handler_methods:
+      - name: index
+        http_method: GET
+        description: ユーザー登録画面表示
+        returns: register/index.jsp
+        validator: false
+      - name: submit
+        http_method: POST
+        description: ユーザー登録処理
+        returns: "redirect:/login（成功）または index.jsp（エラー）"
+        validator: true
+        validator_input: index.jsp
+        has_todo_human: false
+
+  - screen_id: todo
+    url: /todo
+    http_methods: [GET, POST]
+    handler_class: com.example.action.TodoAction
+    handler_methods:
+      - name: index
+        http_method: GET
+        description: TODO一覧表示
+        returns: todo/index.jsp
+        validator: false
+      - name: add
+        http_method: POST
+        description: TODO追加
+        returns: "redirect:/todo"
+        validator: true
+        validator_input: index.jsp
+        has_todo_human: true
+        todo_content: |
+          Todoを新規保存してリダイレクトしてください
+          1. new Todo() でエンティティを生成
+          2. todo.title = title; と todo.userId = loginUser.id; をセット
+          3. jdbcManager.insert(todo).execute() で保存
+          4. return "redirect:/todo" でPRGパターンの完成
+      - name: edit
+        http_method: GET
+        description: TODO編集画面表示
+        returns: todo/edit.jsp
+        validator: false
+      - name: update
+        http_method: POST
+        description: TODO更新処理
+        returns: "redirect:/todo"
+        validator: false
+
+# ─────────────────────────────────────────
+# Step 3: ドメインエンティティ
+# ─────────────────────────────────────────
+entities:
+  - class_name: com.example.entity.User
+    table_name: USERS
+    fields:
+      - name: id
+        column: ID
+        type: Long
+        constraints: [primary_key, generated_sequence]
+        note: "シーケンス USERS_ID_SEQ"
+      - name: username
+        column: USERNAME
+        type: String
+        constraints: [not_null, unique]
+        note: "VARCHAR2(50)"
+      - name: password
+        column: PASSWORD
+        type: String
+        constraints: [not_null]
+        note: "SHA-256ハッシュ値を保存。VARCHAR2(64)"
+    relationships: []
+
+  - class_name: com.example.entity.Todo
+    table_name: TODOS
+    fields:
+      - name: id
+        column: ID
+        type: Long
+        constraints: [primary_key, generated_sequence]
+        note: "シーケンス TODOS_ID_SEQ"
+      - name: userId
+        column: USER_ID
+        type: Long
+        constraints: [not_null, foreign_key]
+        references: USERS.ID
+      - name: title
+        column: TITLE
+        type: String
+        constraints: [not_null]
+        note: "VARCHAR2(200)"
+      - name: completed
+        column: COMPLETED
+        type: Integer
+        default_value: "0"
+        note: "NUMBER(1) DEFAULT 0 NOT NULL。0=未完了、1=完了"
+      - name: createdAt
+        column: CREATED_AT
+        type: Timestamp
+        default_value: CURRENT_TIMESTAMP
+    relationships:
+      - type: many_to_one
+        target: User
+        join_column: USER_ID
+
+# ─────────────────────────────────────────
+# Step 4: ビジネスルール
+# ─────────────────────────────────────────
+business_rules:
+  - id: BR-001
+    name: パスワードSHA-256ハッシュ化
+    description: ユーザー登録・認証時はパスワードをSHA-256でハッシュ化する。平文パスワードはDBに保存しない
+    source_file: com.example.action.RegisterAction
+    type: security
+
+  - id: BR-002
+    name: ログイン必須チェック
+    description: Todo一覧・追加・編集・更新操作はセッションにloginUserが存在する場合のみ許可。未ログインは redirect:/login
+    source_file: com.example.action.TodoAction
+    type: authorization
+
+  - id: BR-003
+    name: Todo所有者チェック
+    description: TodoのCRUD操作は所有者（user_id = loginUser.id）のみ可能。SQLのWHERE句で保証
+    source_file: com.example.action.TodoAction
+    type: authorization
+
+  - id: BR-004
+    name: PRGパターン（Post-Redirect-Get）
+    description: POST処理後はリダイレクトして二重送信を防ぐ。SAStrutsでは "redirect:/xxx" を返す
+    source_file: com.example.action.RegisterAction
+    type: ui_pattern
+
+  - id: BR-005
+    name: ユーザー名一意性チェック
+    description: ユーザー登録時に同名ユーザーが存在する場合はエラーメッセージを表示
+    source_file: com.example.action.RegisterAction
+    type: validation
+
+  - id: BR-006
+    name: S2AOPプロキシ対策getter
+    description: SAStrutsのS2AOPプロキシ化されたActionクラスではEL式からpublicフィールドに直接アクセスできないため、getterメソッドが必要
+    source_file: com.example.action.LoginAction
+    type: ui_pattern
+    note: "はまりポイント: getXxx()メソッドを実装すること"
+
+# ─────────────────────────────────────────
+# Step 5: ユースケース
+# ─────────────────────────────────────────
+use_cases:
+  - id: UC-001
+    name: ユーザー登録
+    actor: 未登録ユーザー
+    screen_id: register
+    flow:
+      - ユーザーがusernameとpasswordを入力してフォーム送信（POST /register/submit）
+      - バリデーション（必須チェック・passwordの最小文字数4文字）
+      - usernameの重複チェック（getCount() > 0 → エラー）
+      - パスワードをSHA-256でハッシュ化
+      - USERSテーブルにINSERT（jdbcManager.insert(user).execute()）
+      - redirect:/login にリダイレクト
+    related_entities: [User]
+    related_rules: [BR-001, BR-004, BR-005]
+    status: implemented
+
+  - id: UC-002
+    name: ログイン認証
+    actor: 登録済みユーザー
+    screen_id: login
+    flow:
+      - ユーザーがusernameとpasswordを入力してフォーム送信（POST /login/submit）
+      - バリデーション（必須チェック）
+      - USERSテーブルからusernameで検索（getSingleResult() → null許容）
+      - パスワードハッシュ比較
+      - 成功: セッションにloginUserを保存 → redirect:/todo
+      - 失敗: errorMessageをセット → index.jsp に戻る
+    related_entities: [User]
+    related_rules: [BR-001, BR-004]
+    status: partial
+    todo_items:
+      - "LoginAction.submit() の認証ロジック実装"
+
+  - id: UC-003
+    name: TODO追加
+    actor: ログイン済みユーザー
+    screen_id: todo
+    flow:
+      - ユーザーがtitleを入力してフォーム送信（POST /todo/add）
+      - ログインチェック（loginUser == null → redirect:/login）
+      - バリデーション（titleは必須）
+      - Todoエンティティ生成（title, userId セット）
+      - TODOSテーブルにINSERT
+      - redirect:/todo にリダイレクト（PRGパターン）
+    related_entities: [Todo]
+    related_rules: [BR-002, BR-004]
+    status: partial
+    todo_items:
+      - "TodoAction.add() のTodo保存ロジック実装"
+
+  - id: UC-004
+    name: TODO一覧表示
+    actor: ログイン済みユーザー
+    screen_id: todo
+    flow:
+      - GET /todo へアクセス
+      - ログインチェック（loginUser == null → redirect:/login）
+      - TODOSテーブルからuser_id = loginUser.id のレコードをcreated_at DESC順で取得
+      - todo/index.jsp に渡して表示
+    related_entities: [Todo]
+    related_rules: [BR-002, BR-003]
+    status: implemented
+
+  - id: UC-005
+    name: TODO更新
+    actor: ログイン済みユーザー
+    screen_id: todo
+    flow:
+      - GET /todo/edit?todoId=xxx で編集画面表示
+      - ログインチェック
+      - id=todoId AND user_id=loginUser.id でTodoを取得（所有者チェック込み）
+      - edit.jspで表示
+      - POST /todo/update でtitle・completed更新
+      - jdbcManager.update(todo).execute()
+      - redirect:/todo
+    related_entities: [Todo]
+    related_rules: [BR-002, BR-003, BR-004]
+    status: implemented
+
+# ─────────────────────────────────────────
+# Step 6: 未実装タスク（TODO(human)マーカー）
+# ─────────────────────────────────────────
+todo_items:
+  - id: TODO-001
+    file: src/main/java/com/example/action/LoginAction.java
+    method: submit
+    description: "ログイン認証ロジックを実装する"
+    hint: |
+      1. jdbcManager.from(User.class).where("username = ?", username).getSingleResult() でユーザー検索
+      2. hashPassword(password) でハッシュ化してDBのpasswordと比較
+      3. 認証成功: request.getSession().setAttribute("loginUser", user) → return "redirect:/todo"
+      4. 認証失敗: errorMessage をセット → return "index.jsp"
+      (ユーザーが見つからない場合はgetSingleResult()がnullを返す)
+    related_use_case: UC-002
+    priority: high
+
+  - id: TODO-002
+    file: src/main/java/com/example/action/TodoAction.java
+    method: add
+    description: "Todoを新規保存してリダイレクトする"
+    hint: |
+      1. new Todo() でエンティティを生成
+      2. todo.title = title; と todo.userId = loginUser.id; をセット
+      3. jdbcManager.insert(todo).execute() で保存
+      4. return "redirect:/todo" でPRGパターンの完成
+    related_use_case: UC-003
+    priority: high
+
+# ─────────────────────────────────────────
+# Step 7: 既存ドキュメント
+# ─────────────────────────────────────────
+existing_docs:
+  - file: study-sa/sample/steps.md
+    type: tutorial
+    summary: "SAStruts TODO アプリの学習ステップ全体。アーキテクチャ概要・URLマッピングルール・各Stepの実装内容を記述"
+    key_info:
+      - "URLマッピング: com.example.action.XxxAction → /xxx"
+      - "S2JDBC JdbcManager でDB操作"
+      - "PRG（Post-Redirect-Get）パターンを使用"
+      - "H2 Oracleモード: NUMBER・VARCHAR2・SEQUENCEが使える"
+      - "SAStruts: @Execute(validator=true, input=\"index.jsp\") でバリデーション設定"
+
+  - file: study-sa/CLAUDE.local.md
+    type: progress_memo
+    summary: "実装済み/未実装の一覧・はまりポイント・次回タスク優先順"
+    key_info:
+      - "LoginAction.submit() の認証ロジック未実装（次のステップ）"
+      - "TodoAction.add() の保存ロジック未実装"
+      - "EL式対策: S2AOPプロキシのためgetterが必要"
+      - "maven-war-plugin 3.3.2 に更新済み（2.1-beta-1との非互換解消）"
+      - "H2 Oracleモード: jdbc:h2:mem:todo;MODE=Oracle"

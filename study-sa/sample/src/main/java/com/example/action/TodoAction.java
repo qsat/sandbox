@@ -62,12 +62,11 @@ public class TodoAction {
             return "redirect:/login";
         }
 
-        // TODO(human): Todoを新規保存してリダイレクトしてください
-        // ヒント:
-        //   1. new Todo() でエンティティを生成
-        //   2. todo.title = title; と todo.userId = loginUser.id; をセット
-        //   3. jdbcManager.insert(todo).execute() で保存
-        //   4. return "redirect:/todo" でPRGパターンの完成
+        Todo todo = new Todo();
+        todo.title = title;
+        todo.userId = loginUser.id;
+        jdbcManager.insert(todo).execute();
+
         return "redirect:/todo";
     }
 

@@ -1,0 +1,140 @@
+# domain-model スキーマ定義
+# Phase B (domain-modeler) の出力形式を定義する
+
+$schema: "adapt-aidev/schemas/domain-model.schema.yaml"
+version: "1.0"
+
+fields:
+  metadata:
+    required: true
+    fields:
+      generated_at:   { type: string, format: iso8601, required: true }
+      schema_version: { type: string, default: "1.0" }
+      source_spec:    { type: string, description: "参照した spec-inventory.yaml のパス" }
+
+  bounded_contexts:
+    type: array
+    item_fields:
+      name:             { type: string, required: true }
+      description:      { type: string, required: true }
+      url_prefixes:     { type: array, item_type: string }
+      owns_entities:    { type: array, item_type: string }
+      use_cases:        { type: array, item_type: string }
+      package:          { type: string, description: "Javaパッケージ名" }
+      ubiquitous_language:
+        type: array
+        item_fields:
+          term:       { type: string, required: true }
+          english:    { type: string, required: true }
+          definition: { type: string }
+
+  context_map:
+    type: array
+    item_fields:
+      upstream:           { type: string, required: true }
+      downstream:         { type: string, required: true }
+      relationship:       { type: string, enum: [customer_supplier, conformist, anticorruption_layer, shared_kernel, open_host_service] }
+      integration_point:  { type: string }
+      acl:                { type: boolean, default: false }
+      note:               { type: string }
+
+  aggregates:
+    type: array
+    item_fields:
+      id:             { type: string, required: true, pattern: "AGG-\\d+" }
+      name:           { type: string, required: true }
+      context:        { type: string, required: true }
+      aggregate_root: { type: string, required: true }
+      entities:
+        type: array
+        item_fields:
+          name:       { type: string, required: true }
+          is_root:    { type: boolean, default: false }
+          fields:
+            type: array
+            item_fields:
+              name:         { type: string, required: true }
+              type:         { type: string }
+              role:         { type: string, enum: [identity, value_object, reference, collection] }
+              constraints:  { type: array, item_type: string }
+              note:         { type: string }
+          invariants:       { type: array, item_type: string }
+          factory_methods:
+            type: array
+            item_fields:
+              name:        { type: string }
+              params:      { type: array, item_type: string }
+              description: { type: string }
+          commands:
+            type: array
+            item_fields:
+              name:   { type: string }
+              params: { type: array, item_type: string }
+
+  value_objects:
+    type: array
+    item_fields:
+      name:        { type: string, required: true }
+      context:     { type: string, required: true }
+      type:        { type: string, enum: [class, enum], default: class }
+      fields:
+        type: array
+        item_fields:
+          name: { type: string }
+          type: { type: string }
+      constraints: { type: array, item_type: string }
+      values:      { type: object, description: "enum の場合のみ: value→説明のマップ" }
+      factory:     { type: string }
+      equality:    { type: string, enum: [by_value, by_identity] }
+
+  use_case_definitions:
+    type: array
+    item_fields:
+      id:          { type: string, required: true, pattern: "UC-\\d+" }
+      name:        { type: string, required: true }
+      context:     { type: string }
+      actor:       { type: string }
+      command:     { type: string, description: "コマンド名 例: RegisterUser" }
+      query:       { type: string, description: "クエリ名 例: GetMyTodos（read-onlyの場合）" }
+      precondition: { type: string }
+      input:
+        type: array
+        item_fields:
+          name: { type: string }
+          type: { type: string }
+      steps:       { type: array, item_type: string }
+      output:      { type: string }
+      errors:      { type: array, item_type: string }
+      post_condition: { type: string }
+      status:      { type: string, enum: [implemented, partial, not_implemented] }
+      implementation_todo: { type: string }
+
+  repositories:
+    type: array
+    item_fields:
+      name:      { type: string, required: true }
+      context:   { type: string }
+      aggregate: { type: string }
+      methods:
+        type: array
+        item_fields:
+          name:    { type: string, required: true }
+          params:
+            type: array
+            item_fields:
+              name: { type: string }
+              type: { type: string }
+          returns: { type: string }
+
+  implementation_mapping:
+    fields:
+      framework: { type: string }
+      mapping:
+        type: array
+        item_fields:
+          domain_concept:  { type: string }
+          current_impl:    { type: string }
+          location:        { type: string }
+          task_id:         { type: string }
+          note:            { type: string }
+      pattern_notes: { type: array, item_type: string }

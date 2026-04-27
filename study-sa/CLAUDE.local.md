@@ -22,10 +22,10 @@
 
 ### アクション
 - ✅ `RegisterAction` — ユーザー登録（完全実装済み）
-- 🔲 `LoginAction.submit()` — **認証ロジック未実装（TODO(human)あり）** ← 次のステップ
+- ✅ `LoginAction.submit()` — 認証ロジック実装済み（adapt-aidev Phase C で実装）
 - ✅ `LoginAction.index()` — ログイン画面表示
 - ✅ `TodoAction.index/edit/update()` — 一覧・編集・更新
-- 🔲 `TodoAction.add()` — **Todo保存ロジック未実装（TODO(human)あり）**
+- ✅ `TodoAction.add()` — Todo保存ロジック実装済み（adapt-aidev Phase C で実装）
 
 ### JSP
 - ✅ `/WEB-INF/view/login/index.jsp`
@@ -40,29 +40,14 @@
 
 ## 次回再開時のタスク（優先順）
 
-### Step 4: LoginAction の認証ロジック実装（ユーザーが実装）
-**ファイル:** `sample/src/main/java/com/example/action/LoginAction.java`
-**TODO(human)箇所:** `submit()` メソッド内
+### ✅ Step 4: LoginAction の認証ロジック（adapt-aidev Phase C で実装完了）
 
-```
-実装内容:
-1. jdbcManager.from(User.class).where("username = ?", username).getSingleResult()
-2. user == null || !hashPassword(password).equals(user.password) → エラー
-3. 成功: request.getSession().setAttribute("loginUser", user) → redirect:/todo
-4. 失敗: errorMessage セット → return "index.jsp"
-```
+### ✅ Step 5: TodoAction.add() の実装（adapt-aidev Phase C で実装完了）
 
-### Step 5: TodoAction.add() の実装（ユーザーが実装）
-**ファイル:** `sample/src/main/java/com/example/action/TodoAction.java`
-**TODO(human)箇所:** `add()` メソッド内
-
-```
-実装内容:
-1. Todo todo = new Todo()
-2. todo.title = title; todo.userId = loginUser.id;
-3. jdbcManager.insert(todo).execute()
-4. return "redirect:/todo"
-```
+### Step 6: 動作確認（make restart でサーバー起動 → ブラウザで確認）
+- /register でユーザー登録
+- /login でログイン
+- /todo でTodo追加・一覧・編集
 
 ---
 
