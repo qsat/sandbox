@@ -116,6 +116,7 @@ mode: screen
 │
 ├── {zf1-source}/          ← 移植元 PHP（source_root に指定）
 ├── spring-boot-app/       ← 移植先 Spring Boot（output_dir）
+├── docs/                  ← 生成ドキュメント（docs_dir）
 │
 ├── mapping-rules/         ← 変換辞書（Phase B で生成・git管理推奨）
 ├── snapshots/             ← ゴールデン HTML（git管理推奨）

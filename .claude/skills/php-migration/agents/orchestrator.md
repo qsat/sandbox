@@ -19,6 +19,7 @@ input:
   context_pack_dir: context-pack/
   flags_dir:        flags/
   output_dir:       "{{config.paths.output_dir}}"   # orchestrator-config.yaml の output_dir を使用
+  docs_dir:         "{{config.paths.docs_dir}}"
   report_path:      final_report.yaml
 ```
 
@@ -40,6 +41,7 @@ flags_dir      = config.paths.flags_dir
 dod_results_dir = config.paths.dod_results_dir
 snapshots_dir  = config.paths.snapshots_dir
 human_queue_dir = config.paths.human_queue_dir
+docs_dir       = config.paths.docs_dir
 tasks_path     = config.paths.tasks_path
 report_path    = config.paths.report_path
 ```
