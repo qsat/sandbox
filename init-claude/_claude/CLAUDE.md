@@ -34,12 +34,12 @@ Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
 
 ## Language Defaults
 
-| Context         | Default choice         |
-|-----------------|------------------------|
-| Scripts         | Bash (POSIX-compatible)|
-| Web frontend    | TypeScript + React      |
-| Backend API     | Python (FastAPI) or TypeScript (Node) |
-| CLI tools       | Python or Go           |
+| Context         | Default choice              |
+|-----------------|-----------------------------|
+| Scripts         | Bash (POSIX-compatible)     |
+| Web frontend    | TypeScript + React          |
+| Backend API     | Java (Spring Boot)          |
+| CLI tools       | TypeScript + Bun            |
 | Config formats  | YAML for humans, JSON for machines |
 
 ## Testing Philosophy

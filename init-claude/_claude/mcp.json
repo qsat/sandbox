@@ -14,6 +14,13 @@
         "@modelcontextprotocol/server-filesystem",
         "/home/user/projects"
       ]
+    },
+    "figma": {
+      "command": "npx",
+      "args": ["-y", "figma-developer-mcp", "--stdio"],
+      "env": {
+        "FIGMA_API_KEY": "${FIGMA_API_KEY}"
+      }
     }
   }
 }
