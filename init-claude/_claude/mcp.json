@@ -22,7 +22,7 @@
       "command": "npx",
       "args": ["-y", "rtk-mcp"],
       "env": {
-        "RTK_TELEMETRY": "disabled"
+        "RTK_TELEMETRY_DISABLED": "1"
       }
     }
   }

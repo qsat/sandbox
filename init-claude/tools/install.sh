@@ -52,3 +52,8 @@ if ! $DRY_RUN; then
 fi
 
 log "Done. Restart Claude Code to apply changes."
+echo ""
+echo "Next steps:"
+echo "  1. RTK hook script: run 'rtk init -g' to install ~/.claude/hooks/rtk-rewrite.sh"
+echo "     (settings.json already references it — hook is inactive until rtk is installed)"
+echo "  2. Figma MCP: first connection will open browser OAuth"

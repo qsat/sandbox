@@ -30,7 +30,7 @@
           },
           {
             "type": "command",
-            "command": "~/.claude/hooks/PreToolUse/rtk-wrap.sh"
+            "command": "$HOME/.claude/hooks/rtk-rewrite.sh"
           }
         ]
       }
@@ -49,6 +49,7 @@
   },
 
   "env": {
-    "CLAUDE_CODE_ENABLE_TELEMETRY": "0"
+    "CLAUDE_CODE_ENABLE_TELEMETRY": "0",
+    "RTK_TELEMETRY_DISABLED": "1"
   }
 }
