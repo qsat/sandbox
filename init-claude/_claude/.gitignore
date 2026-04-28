@@ -1,0 +1,11 @@
+# Runtime data — never commit
+sessions/
+projects/
+backups/
+shell-snapshots/
+session-env/
+*.jsonl
+*.backup.*
+
+# Local overrides
+settings.local.json
