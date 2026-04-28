@@ -16,10 +16,13 @@
       ]
     },
     "figma": {
+      "url": "https://mcp.figma.com/mcp"
+    },
+    "rtk": {
       "command": "npx",
-      "args": ["-y", "figma-developer-mcp", "--stdio"],
+      "args": ["-y", "rtk-mcp"],
       "env": {
-        "FIGMA_API_KEY": "${FIGMA_API_KEY}"
+        "RTK_TELEMETRY": "disabled"
       }
     }
   }
