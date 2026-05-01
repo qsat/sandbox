@@ -1,0 +1,12 @@
+[
+  {
+    "key": "ctrl+r",
+    "command": "/review",
+    "description": "Run code review on current changes"
+  },
+  {
+    "key": "ctrl+i",
+    "command": "/init",
+    "description": "Initialize CLAUDE.md for current project"
+  }
+]
