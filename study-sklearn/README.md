@@ -10,17 +10,15 @@ scikit-learn の設計思想を **ドメインモデル** として説明でき�
 
 | # | マイルストーン | 成果物 | 状態 |
 |---|----------------|--------|------|
-| 4 | 自分の言葉で TS/Java に写像して説明できる | `mapping-ts-java.md` | 未着手 |
-| 3 | 主要モジュールを一通り読み、モデルを検証・修正 | `domain-model.md` の更新 | 未着手（サイト未到達） |
-| 2 | ユーザーガイドの章立てと読む順序を決める | `guide-outline.md` | 未着手（サイト未到達） |
-| 1 | ドメインモデルの叩き台を作る | `domain-model.md` | **記憶ベースで作成済み（未検証）** |
-| 0 | `scikit-learn.org` に到達できる | ネットワーク許可 | **ブロック中** |
+| 4 | 自分の言葉で TS/Java に写像して説明できる | `mapping-ts-java.md`（現状は `domain-model.md` 内に案） | 進行中 |
+| 3 | 主要モジュールを一通り読み、モデルを検証・修正 | `domain-model.md` の更新 | 進行中（Developing estimators 検証済み、compose 以降は未読） |
+| 2 | ユーザーガイドの章立てと読む順序を決める | `guide-outline.md` | **完了** |
+| 1 | ドメインモデルの叩き台を作る | `domain-model.md` | **完了** |
+| 0 | `scikit-learn.org` に到達できる | ネットワーク許可 | **完了**（v1.9.1 を参照） |
 
-## 既知のブロッカー
+## 次にやること
 
-- 環境のネットワークポリシーが `scikit-learn.org` を 403 で拒否する。
-- 解除手順: 環境設定 (Network access) で `scikit-learn.org` を許可ドメインに追加。
-- 解除されるまで、`domain-model.md` は「記憶ベースの仮説」として扱う。
+`guide-outline.md` の読む順序 2 以降（`compose.html` → CV / 探索 → `common_pitfalls.html` …）で、`domain-model.md` の「未検証で残っているもの」を潰す。
 
 ## 経緯
 
