@@ -29,8 +29,8 @@
 | | [3/4 分類と一般化線形モデル](./01_supervised/01_linear_models_3_classification_glm.ipynb) | ロジスティック回帰, GLM, SGD, Perceptron, PA（1.1.11〜1.1.13） | ✅ |
 | | [4/4 頑健な回帰と拡張](./01_supervised/01_linear_models_4_robust_poly.ipynb) | RANSAC, Theil-Sen, Huber, 分位点回帰, 多項式回帰（1.1.14〜1.1.16） | ✅ |
 | 1.2 線形判別分析と二次判別分析 | [LDA / QDA](./01_supervised/02_lda_qda.ipynb) | ベイズの定理, 多変量正規分布, マハラノビス距離, 次元削減, 縮小推定, ソルバ | ✅ |
-| 1.3 カーネルリッジ回帰 | | | 次 |
-| 1.4 サポートベクターマシン | | | |
+| 1.3 カーネルリッジ回帰 | [Kernel Ridge](./01_supervised/03_kernel_ridge.ipynb) | カーネルトリック, 双対解, RBF カーネル, SVR との比較, ガウス過程との関係 | ✅ |
+| 1.4 サポートベクターマシン | | | 次 |
 | 1.5 確率的勾配降下法 | | | |
 | 1.6 最近傍法 | | | |
 | 1.7 ガウス過程 | | | |
