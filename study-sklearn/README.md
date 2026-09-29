@@ -16,6 +16,10 @@ scikit-learn の設計思想を **ドメインモデル** として説明でき�
 | 1 | ドメインモデルの叩き台を作る | `domain-model.md` | **完了** |
 | 0 | `scikit-learn.org` に到達できる | ネットワーク許可 | **完了**（v1.9.1 を参照） |
 
+## ユーザーガイドの学習ノート
+
+[`guide/`](./guide/README.md) に、ガイドの並び順で「日本語ノート + 動作検証」を積み上げる。
+
 ## 次にやること
 
 `guide-outline.md` の読む順序 2 以降（`compose.html` → CV / 探索 → `common_pitfalls.html` …）で、`domain-model.md` の「未検証で残っているもの」を潰す。
