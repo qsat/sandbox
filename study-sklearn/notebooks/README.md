@@ -34,8 +34,9 @@
 | 1.4 サポートベクターマシン | [1/2 分類と回帰](./01_supervised/04_svm_1_classification_regression.ipynb) | マージン最大化, 多クラス（ovo/ovr）, スコアと確率, 不均衡データ, SVR, One-Class SVM（1.4.1〜1.4.3） | ✅ |
 | | [2/2 実践のコツ・カーネル・数式](./01_supervised/04_svm_2_practice_math.ipynb) | 計算量, スケーリング, nu, カーネル, C と gamma, 主問題と双対問題（1.4.4〜1.4.8） | ✅ |
 | 1.5 確率的勾配降下法 | [確率的勾配降下法](./01_supervised/05_sgd.ipynb) | SGD と勾配降下法, 分類・回帰の損失, オンライン One-Class SVM, 疎なデータ, 計算量, 停止条件, 実践のコツ, 数式と学習率, 実装の工夫（1.5.1〜1.5.9） | ✅ |
-| 1.6 最近傍法 | | | 次 |
-| 1.7 ガウス過程 | | | |
+| 1.6 最近傍法 | [1/2 近傍の探索・分類・回帰](./01_supervised/06_neighbors_1_knn.ipynb) | 距離, NearestNeighbors, 近傍グラフ, k と weights, 半径ベース, 次元の呪い, スケーリング（1.6.1〜1.6.3） | ✅ |
+| | [2/2 探索アルゴリズム・最近傍重心・NCA](./01_supervised/06_neighbors_2_algorithms_nca.ipynb) | 総当たり / KD Tree / Ball Tree, auto の規則, leaf_size, NearestCentroid と縮小, KNeighborsTransformer, NCA（1.6.4〜1.6.7） | ✅ |
+| 1.7 ガウス過程 | | | 次 |
 | 1.8 交差分解 | | | |
 | 1.9 ナイーブベイズ | | | |
 | 1.10 決定木 | | | |
