@@ -31,8 +31,9 @@
 | | [4/4 頑健な回帰と拡張](./01_supervised/01_linear_models_4_robust_poly.ipynb) | RANSAC, Theil-Sen, Huber, 分位点回帰, 多項式回帰（1.1.14〜1.1.16） | ✅ |
 | 1.2 線形判別分析と二次判別分析 | [LDA / QDA](./01_supervised/02_lda_qda.ipynb) | ベイズの定理, 多変量正規分布, マハラノビス距離, 次元削減, 縮小推定, ソルバ | ✅ |
 | 1.3 カーネルリッジ回帰 | [Kernel Ridge](./01_supervised/03_kernel_ridge.ipynb) | カーネルトリック, 双対解, RBF カーネル, SVR との比較, ガウス過程との関係 | ✅ |
-| 1.4 サポートベクターマシン | | | 次 |
-| 1.5 確率的勾配降下法 | | | |
+| 1.4 サポートベクターマシン | [1/2 分類と回帰](./01_supervised/04_svm_1_classification_regression.ipynb) | マージン最大化, 多クラス（ovo/ovr）, スコアと確率, 不均衡データ, SVR, One-Class SVM（1.4.1〜1.4.3） | ✅ |
+| | [2/2 実践のコツ・カーネル・数式](./01_supervised/04_svm_2_practice_math.ipynb) | 計算量, スケーリング, nu, カーネル, C と gamma, 主問題と双対問題（1.4.4〜1.4.8） | ✅ |
+| 1.5 確率的勾配降下法 | | | 次 |
 | 1.6 最近傍法 | | | |
 | 1.7 ガウス過程 | | | |
 | 1.8 交差分解 | | | |
