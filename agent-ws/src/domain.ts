@@ -56,6 +56,8 @@ export interface SessionRecord {
   reason?: string; // 許可内容・最終応答の1行目など
   since: number; // この状態になった時刻
   updated: number;
+  resume?: SessionStatus; // サブエージェントの許可待ちが解けたら戻る状態
+  transcript?: string; // 会話ログ。hook が発火しない中断を見つけるのに使う
 }
 
 export interface Session extends SessionRecord {
@@ -188,6 +190,7 @@ export function selectRepos(repos: Repository[], f: Filter): Repository[] {
 export const HOOK_EVENTS: Record<string, string | null> = {
   SessionStart: null,
   UserPromptSubmit: null,
+  PermissionRequest: "*", // 許可待ち。Notification より先に、どのエージェントの何のツールかを付けて届く
   PostToolUse: "*", // 許可後の再開・サブエージェントの直近ツール
   PostToolUseFailure: "*",
   Notification: "permission_prompt|elicitation_dialog|agent_needs_input",
@@ -203,11 +206,16 @@ export interface HookEvent {
   hook_event_name: string;
   session_id: string;
   cwd?: string;
+  transcript_path?: string;
+  source?: string; // SessionStart: startup / resume / clear / compact
   agent_id?: string; // サブエージェント内で発火したとき
-  agent_type?: string;
+  agent_type?: string; // 内部用のエージェント（入力候補の先読みなど）では空か無い
   tool_name?: string;
+  tool_input?: Record<string, unknown>;
+  notification_type?: string; // permission_prompt など。サブエージェント由来でも agent_id は付かない
   message?: string;
   last_assistant_message?: string;
+  background_tasks?: { status: string }[]; // Stop 時点のバックグラウンドのサブエージェントなど
   error?: string;
 }
 
@@ -222,29 +230,35 @@ export function applyHook(
   prev: { session: SessionRecord | null; subagent: Subagent | null },
   now: number,
 ): HookOutcome {
-  const session = (status: SessionStatus, reason?: string): HookOutcome => {
-    const p = prev.session;
+  const p = prev.session;
+  const session = (status: SessionStatus, reason?: string, o: { quiet?: boolean; resume?: SessionStatus } = {}): HookOutcome => {
     const changed = p?.status !== status;
     return {
-      session: { id: e.session_id, pid: p?.pid ?? null, cwd: p?.cwd ?? e.cwd ?? "", status, reason, since: p && !changed ? p.since : now, updated: now },
+      session: { id: e.session_id, pid: p?.pid ?? null, cwd: p?.cwd ?? e.cwd ?? "", status, reason, since: p && !changed ? p.since : now, updated: now, resume: o.resume,
+        transcript: e.transcript_path ?? p?.transcript },
       // 実行中への遷移と、起動直後の ready は通知しない
-      notify: changed && status !== "running" && !(status === "ready" && !p),
+      notify: changed && !o.quiet && status !== "running" && !(status === "ready" && !p),
     };
   };
   const subagent = (status: SubagentStatus, detail?: string): Subagent => {
-    const p = prev.subagent;
-    const type = e.agent_type ?? p?.type ?? "subagent";
-    return { sessionId: e.session_id, id: e.agent_id ?? "", type, status, detail: detail ?? p?.detail, since: p?.status === status ? p.since : now, updated: now };
+    const a = prev.subagent;
+    const type = e.agent_type || a?.type || "subagent";
+    return { sessionId: e.session_id, id: e.agent_id ?? "", type, status, detail: detail ?? a?.detail, since: a?.status === status ? a.since : now, updated: now };
   };
+  // 内部用のエージェントは表示もしないし、本体の状態も変えない
+  if (e.agent_id && !e.agent_type) return {};
   const inSubagent = Boolean(e.agent_id);
 
   switch (e.hook_event_name) {
     case "SessionStart":
-      return session("ready");
+      return e.source === "compact" && p ? {} : session("ready");
     case "UserPromptSubmit":
       return session("running");
-    case "Stop":
-      return session("ready", firstLine(e.last_assistant_message));
+    case "Stop": {
+      // バックグラウンドのサブエージェントが残っていれば、終わったときに本体が自動で再開するので通知しない
+      const background = e.background_tasks?.some((t) => t.status === "running");
+      return session("ready", firstLine(e.last_assistant_message), { quiet: background });
+    }
     case "StopFailure":
       return session("error", firstLine(e.error ?? e.message));
     case "SessionEnd":
@@ -253,19 +267,58 @@ export function applyHook(
       return inSubagent ? { subagent: subagent("running") } : {};
     case "SubagentStop":
       return inSubagent ? { subagent: subagent("done", firstLine(e.last_assistant_message)) } : {};
-    case "Notification": {
-      const who = e.agent_type ? `[${e.agent_type}] ` : "";
-      const main = session("waiting", firstLine(who + (e.message ?? "")));
-      return inSubagent ? { ...main, subagent: subagent("waiting", firstLine(e.message)) } : main;
+    case "PermissionRequest": {
+      const what = describeTool(e);
+      const main = session("waiting", firstLine(inSubagent ? `[${e.agent_type}] ${what}` : what), {
+        resume: p?.status === "waiting" ? p.resume : p?.status,
+      });
+      return inSubagent ? { ...main, subagent: subagent("waiting", firstLine(what)) } : main;
     }
+    case "Notification":
+      // 許可待ちは PermissionRequest で詳細つきで記録済み（こちらには agent_id もツールも無い）
+      if (e.notification_type === "permission_prompt" && p?.status === "waiting") return {};
+      return session("waiting", firstLine(e.message), { resume: p?.status === "waiting" ? p.resume : p?.status });
     case "PostToolUse":
     case "PostToolUseFailure":
       if (!inSubagent) return session("running");
-      // サブエージェントのツールが動いた = 本体が許可待ちなら許可された
-      return { ...(prev.session?.status === "waiting" ? session("running") : {}), subagent: subagent("running", e.tool_name) };
+      // サブエージェントのツールが動いた = 本体の許可待ちは解けた。本体は許可待ちの前の状態に戻す
+      return {
+        ...(p?.status === "waiting" ? session(p.resume ?? "running", undefined, { quiet: true }) : {}),
+        subagent: subagent("running", e.tool_name),
+      };
     default:
       return {};
   }
+}
+
+/** 許可を求めているツールの1行要約（Bash: echo hi など） */
+function describeTool(e: HookEvent): string {
+  const i = e.tool_input ?? {};
+  const arg = [i.command, i.file_path, i.url, i.pattern, i.description].find((v) => typeof v === "string");
+  return [e.tool_name ?? "tool", arg].filter(Boolean).join(": ");
+}
+
+/**
+ * Esc での中断と許可の拒否では hook が何も発火しない。会話ログの末尾がその記録なら入力待ちに戻す
+ * （どちらも user の "[Request interrupted by user…]" が書かれる）
+ */
+export function settleInterrupted(s: SessionRecord, transcriptTail: string[], now: number): SessionRecord | null {
+  if (s.status !== "running" && s.status !== "waiting") return null;
+  for (const line of transcriptTail.toReversed()) {
+    let entry: { type?: string; timestamp?: string; message?: { content?: unknown } };
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue; // 末尾を途中から読んだ1行目など
+    }
+    if (entry.type !== "user" && entry.type !== "assistant") continue;
+    const content = entry.message?.content;
+    // 前のターンの中断を拾わないよう、この状態になった後の記録に限る
+    const interrupted = Date.parse(entry.timestamp ?? "") >= s.since && Array.isArray(content) &&
+      content.some((c) => c?.type === "text" && String(c.text).startsWith("[Request interrupted by user"));
+    return interrupted ? { ...s, status: "ready", reason: "中断しました", resume: undefined, since: now, updated: now } : null;
+  }
+  return null;
 }
 
 const MINUTE = 60_000;

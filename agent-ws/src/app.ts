@@ -3,13 +3,14 @@
  */
 import type { Filter, HookEvent, JumpResult, JumpTarget, Notice, Pid, Repository, Session } from "./domain.ts";
 import {
-  applyHook, attachProcesses, detectAgent, findPane, HOOK_EVENTS, linkSessions, repoName, selectRepos, SESSION_TTL, subagentExpired,
+  applyHook, attachProcesses, detectAgent, findPane, HOOK_EVENTS, linkSessions, repoName, selectRepos, SESSION_TTL, settleInterrupted, subagentExpired,
 } from "./domain.ts";
 import * as git from "./infra/git.ts";
 import * as proc from "./infra/proc.ts";
 import { realPath } from "./infra/shell.ts";
 import * as store from "./infra/store.ts";
 import * as tmux from "./infra/tmux.ts";
+import { tailSince } from "./infra/transcript.ts";
 
 /** ghq 管理下のリポジトリと worktree 構成（重いので watch ではキャッシュする） */
 export function loadRepositories(roots: string[], query?: string): Repository[] {
@@ -31,12 +32,16 @@ export function snapshot(repos: Repository[], filter: Filter): Repository[] {
   }));
 }
 
-/** 生きているセッション（プロセスが消えたもの・期限切れのサブエージェントは掃除する） */
+/** 生きているセッション（プロセスが消えたもの・期限切れのサブエージェントは掃除する。中断されたものは入力待ちに戻す） */
 export function loadSessions(now = Date.now()): Session[] {
-  const sessions = store.listSessions().filter((s) => {
+  const sessions = store.listSessions().flatMap((s) => {
     const alive = s.pid ? proc.isAlive(s.pid) : now - s.updated < SESSION_TTL;
     if (!alive) store.removeSession(s.id);
-    return alive;
+    if (!alive) return [];
+    const tail = s.transcript && (s.status === "running" || s.status === "waiting") ? tailSince(s.transcript, s.updated) : null;
+    const settled = tail && settleInterrupted(s, tail, now);
+    if (settled) store.putSession(settled);
+    return [settled || s];
   });
   const subagents = store.listSubagents().filter((a) => {
     const keep = sessions.some((s) => s.id === a.sessionId) && !subagentExpired(a, now);

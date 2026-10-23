@@ -10,12 +10,14 @@
  *   agent-ws hooks-config                                     ~/.claude/settings.json に足す hooks 設定を出力
  *
  * 環境変数: AGENT_WS_NOTIFY（通知する状態。既定 waiting,ready,error。空で通知しない）/ AGENT_WS_STATE_DIR / GHQ_ROOT
+ *           AGENT_WS_DUMP（hook の入力をそのまま追記するファイル。入力の形を確かめるとき用）
  *
  * 構成（依存は矢印の向きだけ）:
  *   cli.ts ─┬→ app.ts ─┬→ domain.ts   型と純粋なルール
  *           │          └→ infra/*     git・プロセス・状態ファイル・tmux
  *           └→ ui/*  ───→ domain.ts   行モデル（view）・色（terminal）・対話（watch）
  */
+import { appendFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { parseArgs } from "node:util";
 import * as app from "./src/app.ts";
@@ -100,6 +102,8 @@ switch (command) {
     // 失敗しても Claude Code の動作は止めない
     try {
       const input = await Bun.stdin.text();
+      // 入力の確認用: 受け取った JSON をそのまま1行ずつ追記する
+      if (process.env.AGENT_WS_DUMP) appendFileSync(process.env.AGENT_WS_DUMP, `${input.replace(/\n/g, " ")}\n`);
       const notice = app.handleHook(JSON.parse(input || "{}") as HookEvent);
       const notifyOn = (process.env.AGENT_WS_NOTIFY ?? "waiting,ready,error").split(",");
       if (notice && notifyOn.includes(notice.session.status)) {

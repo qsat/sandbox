@@ -34,10 +34,14 @@ waiting・ready・error への遷移で通知する（tmux の display-message �
 - プロセスがどの worktree に属するかは、プロセスの cwd で判定する（Linux は /proc/<pid>/cwd、macOS は lsof）
 - リポジトリはメイン worktree のパスで束ねる。フラット展開の worktree が ghq 配下にあっても重複しない
 - dirty 件数（git status）は表示する worktree だけ数える。watch ではリポジトリ構成を15秒キャッシュし、プロセスと状態は毎回取り直す
-- hook は全イベント共通の1コマンドにし、何が起きたかは `hook_event_name` で判断する。登録するイベントは domain.ts の `HOOK_EVENTS`（SessionStart, UserPromptSubmit, PostToolUse, PostToolUseFailure, Notification, Stop, StopFailure, SubagentStart, SubagentStop, SessionEnd）
+- hook は全イベント共通の1コマンドにし、何が起きたかは `hook_event_name` で判断する。登録するイベントは domain.ts の `HOOK_EVENTS`（SessionStart, UserPromptSubmit, PermissionRequest, PostToolUse, PostToolUseFailure, Notification, Stop, StopFailure, SubagentStart, SubagentStop, SessionEnd）
 - 状態ファイルは `~/.local/state/agent-ws/sessions/` に置く。セッションごとに `<id>.json`、サブエージェントは並列に書かれるので1体1ファイル（`<id>.sub.<agent>.json`）。書き込みは tmp ファイルからの rename
 - claude 本体の pid は、hook プロセスの祖先を辿って記録する。pid が死んだセッションは読み込み時に掃除する
-- サブエージェントは本体プロセスの中で動くので、hook の `agent_id` でだけ観測できる。サブエージェントの許可待ちは本体にも「[type] …」として反映し、そのサブエージェントの PostToolUse で解除する
+- サブエージェントは本体プロセスの中で動くので、hook の `agent_id` でだけ観測できる。`agent_type` が空のもの（入力候補の先読みなど内部用）は無視する
+- 許可待ちは PermissionRequest で記録する（「[type] Bash: コマンド」）。Notification の permission_prompt は数秒遅れて届き、サブエージェント由来でも `agent_id` が付かないので、すでに許可待ちなら何もしない
+- サブエージェントの許可待ちは本体にも反映し、そのサブエージェントの PostToolUse で解除する。本体は許可待ちの前の状態（`resume`）に戻す。バックグラウンドのサブエージェントだと本体はすでに Stop していて ready に戻る
+- Stop の時点でバックグラウンドのサブエージェントが動いていれば（`background_tasks`）、本体は終わったときに自動で再開するので ready でも通知しない
+- Esc での中断と許可の拒否では hook が1つも発火しない。どちらも会話ログ（`transcript_path`）に `[Request interrupted by user…]` が書かれるので、running / waiting のセッションに限り、前回の hook より後に会話ログが更新されていれば末尾 16KB を読み、この状態になった後の中断記録があれば ready（中断しました）に戻す
 - tmux は -F 出力中のタブ（ロケールによっては非 ASCII も）を `_` に置き換えるので、区切りは ASCII の `|~|` にしている
 - 移動先: pid の祖先が pane_pid に当たるペイン → そのパスにいるペイン → （watch か --create のとき）新しいウィンドウ
 
@@ -48,11 +52,18 @@ waiting・ready・error への遷移で通知する（tmux の display-message �
 - Node 22.18 から Bun に移した。Bun 固有の API は `Bun.spawnSync`（infra/shell.ts）、`Bun.stdin`（cli.ts の hook）、`bun:test` の3か所だけで、残りは Bun が互換実装している node:* をそのまま使っている
 
 ## 検証状況
-- 済み: tsc（strict）が通る。単体テスト5件（`bun test`）が通る。tmux 3.4 に偽 claude プロセスを置いた E2E（一覧、サブエージェント、jump、watch の Enter、新規ウィンドウ、--popup、SessionEnd 時の掃除、LC_ALL=C）が動く
+- 済み（本物の Claude Code 2.1.309 を tmux 内で対話実行。hook の入力は `src/fixtures/` に保存し、テストで再生している）:
+  - hook の入力の形。Notification の種別は `notification_type`。hooks 設定の `args` 形式は使える
+  - 一覧と status: 起動直後の入力待ち、本体 pid の特定、許可待ち（理由つき）、許可の拒否と Esc での中断からの復帰、バックグラウンドのサブエージェントの許可待ち→許可→完了、SessionEnd での掃除
+- 済み: tsc（strict）が通る。単体テスト8件（`bun test`）が通る。tmux 3.4 に偽 claude プロセスを置いた E2E（一覧、サブエージェント、jump、watch の Enter、新規ウィンドウ、--popup、SessionEnd 時の掃除、LC_ALL=C）が動く
 - 未検証:
-  - 本物の Claude Code の hook 入力。Notification の種別フィールド名（notification_type?）や SubagentStart の入力は、ドキュメントが途中で切れて未確認。stdin をファイルにダンプして確かめるのが早い
+  - Notification の elicitation_dialog / agent_needs_input、StopFailure、PostToolUseFailure の実際の入力。確かめるときは `AGENT_WS_DUMP=<ファイル>` を付けて claude を起動すると hook の入力がそのまま追記される
+  - バックグラウンドのサブエージェントの許可を拒否したときの本体側の状態
   - macOS での通知と lsof 経路
   - codex など claude 以外のエージェントの応答状況（現状は「? 状態不明」）
+
+## 既知の制約
+- 応答が始まる前に Esc で取り消すと、プロンプトが入力欄に戻るだけで hook も会話ログの記録も無い。次のプロンプトを送るまで「実行中」のまま残る
 
 ## 保留中の論点
 1. コード量: 1ファイル771行を層分けして904行に増えた（コメント・空行を除く）。減らすなら機能を削るしかない。候補は、エージェント以外のプロセス表示、--json、ghq が無い環境向けの走査、claude と codex 以外の判定。どれを削るかはまだ決めていない
