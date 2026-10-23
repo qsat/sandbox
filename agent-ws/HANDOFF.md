@@ -42,12 +42,13 @@ waiting・ready・error への遷移で通知する（tmux の display-message �
 - 移動先: pid の祖先が pane_pid に当たるペイン → そのパスにいるペイン → （watch か --create のとき）新しいウィンドウ
 
 ## セットアップ
-- `node cli.ts hooks-config` の出力を `~/.claude/settings.json` の hooks にマージする
-- tmux: `bind a display-popup -E -w 90% -h 80% "node ~/path/agent-ws/cli.ts watch --popup"` と `set -g status-right "#(node ~/path/agent-ws/cli.ts status --tmux)"`
-- Node 22.18 以上なら .ts をそのまま実行できる。実行時の依存はない。開発時だけ typescript と @types/node@22 を使う
+- `bun cli.ts hooks-config` の出力を `~/.claude/settings.json` の hooks にマージする
+- tmux: `bind a display-popup -E -w 90% -h 80% "bun ~/path/agent-ws/cli.ts watch --popup"` と `set -g status-right "#(bun ~/path/agent-ws/cli.ts status --tmux)"`
+- 実行環境は Bun（.ts をそのまま実行する）。実行時の依存はない。開発時だけ typescript と @types/bun を使う（`bun install`）
+- Node 22.18 から Bun に移した。Bun 固有の API は `Bun.spawnSync`（infra/shell.ts）、`Bun.stdin`（cli.ts の hook）、`bun:test` の3か所だけで、残りは Bun が互換実装している node:* をそのまま使っている
 
 ## 検証状況
-- 済み: tsc（strict）が通る。単体テスト5件（`node --test src/*.test.ts`）が通る。tmux 3.4 に偽 claude プロセスを置いた E2E（一覧、サブエージェント、jump、watch の Enter、新規ウィンドウ、--popup、SessionEnd 時の掃除、LC_ALL=C）が動く
+- 済み: tsc（strict）が通る。単体テスト5件（`bun test`）が通る。tmux 3.4 に偽 claude プロセスを置いた E2E（一覧、サブエージェント、jump、watch の Enter、新規ウィンドウ、--popup、SessionEnd 時の掃除、LC_ALL=C）が動く
 - 未検証:
   - 本物の Claude Code の hook 入力。Notification の種別フィールド名（notification_type?）や SubagentStart の入力は、ドキュメントが途中で切れて未確認。stdin をファイルにダンプして確かめるのが早い
   - macOS での通知と lsof 経路
@@ -57,4 +58,4 @@ waiting・ready・error への遷移で通知する（tmux の display-message �
 1. コード量: 1ファイル771行を層分けして904行に増えた（コメント・空行を除く）。減らすなら機能を削るしかない。候補は、エージェント以外のプロセス表示、--json、ghq が無い環境向けの走査、claude と codex 以外の判定。どれを削るかはまだ決めていない
 2. 子プロセスを ppid でエージェントの下にネストする案（リポジトリ > worktree > エージェント > 子プロセス）。提案したが未回答
 3. ペインが無い worktree の新しいウィンドウを今いるセッションに作っている。リポジトリ名のセッションに作るかどうか
-4. PostToolUse のたびに node が起動する（ツール1回あたり数十ms）。気になるなら軽量化を検討する
+4. PostToolUse のたびに hook のプロセスが起動する。Bun にしたことで1回あたり約135ms（Node）から約32msに縮んだ（手元で10回連続実行して計測）。まだ気になるなら軽量化を検討する

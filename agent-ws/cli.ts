@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * agent-ws — ghq 管理下のリポジトリ > worktree > プロセス を、AI エージェントの応答状況つきで表示する
  *
@@ -99,8 +99,7 @@ switch (command) {
   case "hook": {
     // 失敗しても Claude Code の動作は止めない
     try {
-      let input = "";
-      for await (const chunk of process.stdin.setEncoding("utf8")) input += chunk;
+      const input = await Bun.stdin.text();
       const notice = app.handleHook(JSON.parse(input || "{}") as HookEvent);
       const notifyOn = (process.env.AGENT_WS_NOTIFY ?? "waiting,ready,error").split(",");
       if (notice && notifyOn.includes(notice.session.status)) {

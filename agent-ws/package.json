@@ -5,15 +5,12 @@
   "bin": {
     "agent-ws": "./cli.ts"
   },
-  "engines": {
-    "node": ">=22.18"
-  },
   "scripts": {
-    "test": "node --test src/*.test.ts",
+    "test": "bun test",
     "typecheck": "tsc"
   },
   "devDependencies": {
-    "@types/node": "^22",
+    "@types/bun": "latest",
     "typescript": ">=5.8"
   }
 }
