@@ -3,14 +3,15 @@ import { lines, realPath, run } from "./shell.ts";
 
 // tmux は -F の出力中の制御文字（ロケールによっては非 ASCII も）を "_" に置き換えるので ASCII で区切る
 const SEP = "|~|";
-const FORMAT = ["pane_id", "pane_pid", "session_name", "window_index", "window_name", "pane_current_path", "pane_active", "window_active"]
+const FORMAT = ["pane_id", "pane_pid", "session_name", "window_index", "window_name", "pane_current_path", "pane_active", "window_active", "session_attached"]
   .map((f) => `#{${f}}`)
   .join(SEP);
 
 export function listPanes(): Pane[] {
   return lines(run("tmux", ["list-panes", "-a", "-F", FORMAT])).map((l) => {
-    const [id, pid, session, window, windowName, path, paneActive, windowActive] = l.split(SEP);
-    return { id, pid: Number(pid), session, window, windowName, path: realPath(path), active: paneActive === "1" && windowActive === "1" };
+    const [id, pid, session, window, windowName, path, paneActive, windowActive, attached] = l.split(SEP);
+    const active = paneActive === "1" && windowActive === "1" && attached !== "0";
+    return { id, pid: Number(pid), session, window, windowName, path: realPath(path), active };
   });
 }
 
@@ -21,5 +22,10 @@ export const focusPane = (id: string) =>
 /** 新しいウィンドウを開いてそのペイン ID を返す */
 export const newWindow = (path: string, name: string) =>
   run("tmux", ["new-window", "-P", "-F", "#{pane_id}", "-c", path, "-n", name])?.trim() || null;
+
+/** 全クライアントのステータスラインを描き直す（status-interval を待たずに反映する） */
+export function refreshStatus(): void {
+  for (const client of lines(run("tmux", ["list-clients", "-F", "#{client_name}"]))) run("tmux", ["refresh-client", "-S", "-t", client]);
+}
 
 export const displayMessage = (text: string) => run("tmux", ["display-message", "-d", "5000", text]);

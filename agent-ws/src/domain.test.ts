@@ -57,7 +57,7 @@ async function replay(file: string) {
     if (out.subagent) subagents.set(out.subagent.id, out.subagent);
     session = out.session === "delete" ? null : (out.session ?? session);
     const subs = [...subagents.values()].map((a) => `${a.type}:${a.status}`).join(",");
-    return { event: e.hook_event_name, status: session?.status, reason: session?.reason, subs, notify: Boolean(out.notify) };
+    return { event: e.hook_event_name, status: session?.status, reason: session?.reason, subs, notify: Boolean(out.notify), unseen: Boolean(session?.unseen) };
   });
 }
 
@@ -66,7 +66,7 @@ test("実データ: バックグラウンドのサブエージェントが許可
   const at = (event: string, nth = 0) => steps.filter((s) => s.event === event)[nth];
 
   // 本体のターンはサブエージェントを残して終わる（自動で再開するので通知しない）
-  expect(at("Stop")).toMatchObject({ status: "ready", notify: false });
+  expect(at("Stop")).toMatchObject({ status: "ready", notify: false, unseen: false });
   // サブエージェントの許可待ちは本体にも出し、通知する
   expect(at("PermissionRequest")).toMatchObject({
     status: "waiting", reason: "[general-purpose] Bash: echo hi > b.txt", subs: "general-purpose:waiting", notify: true,
@@ -76,7 +76,7 @@ test("実データ: バックグラウンドのサブエージェントが許可
   // 許可されたら本体は許可待ちの前（ready）に戻る。通知はしない
   expect(at("PostToolUse", 1)).toMatchObject({ status: "ready", subs: "general-purpose:running", notify: false });
   // サブエージェントの結果で本体が自動で再開し、完了で通知する
-  expect(at("Stop", 1)).toMatchObject({ status: "ready", reason: "完了しました。`echo hi > b.txt` はエラーなしで実行されました（ファイルの中身は開いて確認していません）。", notify: true });
+  expect(at("Stop", 1)).toMatchObject({ status: "ready", reason: "完了しました。`echo hi > b.txt` はエラーなしで実行されました（ファイルの中身は開いて確認していません）。", notify: true, unseen: true });
   // agent_type が空の内部用エージェントはサブエージェントとして数えない
   expect(at("SubagentStop", 1).subs).toBe("general-purpose:done");
   expect(steps.at(-1)).toMatchObject({ event: "SessionEnd", status: undefined });
@@ -100,4 +100,19 @@ test("settleInterrupted: 会話ログの末尾が中断（Esc・許可の拒否�
   // 前のターンの中断（この状態になる前の記録）は無視する
   expect(settleInterrupted({ ...waiting, since: 2_500 }, denied, 3_000)).toBeNull();
   expect(settleInterrupted({ ...waiting, status: "ready" }, denied, 3_000)).toBeNull();
+});
+
+test("applyHook: AskUserQuestion は許可待ちではなく質問待ち。後から来る Notification で上書きしない", () => {
+  const running = applyHook(ev("UserPromptSubmit"), none, 1).session as SessionRecord;
+  const asking = applyHook(ev("PermissionRequest", { tool_name: "AskUserQuestion" }), { ...none, session: running }, 2);
+  expect(asking).toMatchObject({ session: { status: "asking", resume: "running" }, notify: true });
+  const notice = applyHook(ev("Notification", { notification_type: "permission_prompt", message: "Claude needs your permission" }), { ...none, session: asking.session as SessionRecord }, 3);
+  expect(notice).toEqual({});
+});
+
+test("applyHook: 完了の未確認は次のプロンプトで消える", () => {
+  const done = applyHook(ev("Stop", { last_assistant_message: "終わり" }), { ...none, session: applyHook(ev("UserPromptSubmit"), none, 1).session as SessionRecord }, 2);
+  expect((done.session as SessionRecord).unseen).toBe(true);
+  const next = applyHook(ev("UserPromptSubmit"), { ...none, session: done.session as SessionRecord }, 3);
+  expect((next.session as SessionRecord).unseen).toBeUndefined();
 });

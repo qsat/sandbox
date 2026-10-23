@@ -11,13 +11,15 @@ AI エージェント（主に Claude Code）を複数の git worktree で並行
 ## できること（cli.ts のサブコマンド）
 - `list [query] [--all] [--agents-only] [--json]`: 一覧を1回表示する。既定では「追加 worktree がある、または何か動いている」リポジトリだけを出す
 - `watch [query] [--interval=2] [--popup]`: 常駐表示。j/k で選択、Enter でそのペイン／ウィンドウへ移動、r で再読込、q で終了。`--popup` を付けると移動後に終了する
-- `status [--tmux]`: ステータスライン用の1行（例: 🤖3 ⏳1 ✓2 ⤷2）。状態ファイルしか読まないので軽い
+- `status [--tmux]`: ステータスライン用の印。対応が要るものの有無だけを出し、何も無ければ空（⏳ 許可待ち / ❓ 質問待ち / ✓ 完了して未確認 / ✗ エラー）。中身はポップアップ（`watch --popup`）で見る。状態ファイルしか読まないので軽い
+- `seen <pane_pid>`: そのペインで完了したセッションを既読にする。tmux の pane-focus-in から呼ぶ
 - `jump <pid|path> [--create] [--dry-run]`: その pid（の祖先）やパスがいる tmux ペインへ移動する
 - `hook`: Claude Code の hook から呼ばれる（stdin に JSON）
 - `hooks-config`: `~/.claude/settings.json` に足す hooks 設定を出力する
 
-状態は ready（入力待ち）/ running（実行中）/ waiting（許可待ち）/ error（エラー）の4つ。サブエージェントは running / waiting / done。
-waiting・ready・error への遷移で通知する（tmux の display-message と、osascript または notify-send）。通知する状態は `AGENT_WS_NOTIFY` で絞れる。
+状態は ready（入力待ち）/ running（実行中）/ waiting（許可待ち）/ asking（質問待ち）/ error（エラー）の5つ。サブエージェントは running / waiting / done。
+ターンが完了した ready には「未確認」（`unseen`）が付き、一覧では「✓ 完了」と出る。次のプロンプト・そのペインへのフォーカス・ポップアップからの移動で消える。
+waiting・asking・ready・error への遷移で通知する（tmux の display-message と、osascript または notify-send）。通知する状態は `AGENT_WS_NOTIFY` で絞れる。
 
 ## 構成（依存は矢印の向きだけ）
     cli.ts ─┬→ src/app.ts ─┬→ src/domain.ts   型と純粋なルール（I/O なし、単体テストあり）
@@ -43,11 +45,21 @@ waiting・ready・error への遷移で通知する（tmux の display-message �
 - Stop の時点でバックグラウンドのサブエージェントが動いていれば（`background_tasks`）、本体は終わったときに自動で再開するので ready でも通知しない
 - Esc での中断と許可の拒否では hook が1つも発火しない。どちらも会話ログ（`transcript_path`）に `[Request interrupted by user…]` が書かれるので、running / waiting のセッションに限り、前回の hook より後に会話ログが更新されていれば末尾 16KB を読み、この状態になった後の中断記録があれば ready（中断しました）に戻す
 - tmux は -F 出力中のタブ（ロケールによっては非 ASCII も）を `_` に置き換えるので、区切りは ASCII の `|~|` にしている
+- 質問待ち: AskUserQuestion は許可待ちと同じ PermissionRequest で届く（ツール名で分ける）。Notification は "Claude needs your permission" で区別できない。MCP の elicitation_dialog も質問待ちにする
+- 「完了」は ready のうちターン完了で未確認のもの。ready をそのまま印にすると、手が空いている claude で常に点いてしまうため。完了した時点でそのペインが表示中（クライアントが接続したセッションの、アクティブなウィンドウのアクティブなペイン）なら最初から既読にする
+- 既読にする経路は3つ: 次のプロンプト（UserPromptSubmit で状態が変わる）、pane-focus-in → `seen`、ポップアップからの移動（jump）。`seen` はフォーカスのたびに呼ばれるので、未確認が無ければ ps も呼ばずに終わる
+- 印の有無が変わったら `tmux refresh-client -S` で全クライアントのステータスラインを描き直す（`#()` も再実行される。tmux 3.4 で確認）。status-interval を待たない
 - 移動先: pid の祖先が pane_pid に当たるペイン → そのパスにいるペイン → （watch か --create のとき）新しいウィンドウ
 
 ## セットアップ
 - `bun cli.ts hooks-config` の出力を `~/.claude/settings.json` の hooks にマージする
-- tmux: `bind a display-popup -E -w 90% -h 80% "bun ~/path/agent-ws/cli.ts watch --popup"` と `set -g status-right "#(bun ~/path/agent-ws/cli.ts status --tmux)"`
+- tmux（~/.tmux.conf）:
+
+      bind a display-popup -E -w 90% -h 80% "bun ~/path/agent-ws/cli.ts watch --popup"
+      set -g status-right "#(bun ~/path/agent-ws/cli.ts status --tmux)"
+      set -g focus-events on
+      set-hook -g pane-focus-in 'run-shell -b "bun ~/path/agent-ws/cli.ts seen #{pane_pid}"'
+
 - 実行環境は Bun（.ts をそのまま実行する）。実行時の依存はない。開発時だけ typescript と @types/bun を使う（`bun install`）
 - Node 22.18 から Bun に移した。Bun 固有の API は `Bun.spawnSync`（infra/shell.ts）、`Bun.stdin`（cli.ts の hook）、`bun:test` の3か所だけで、残りは Bun が互換実装している node:* をそのまま使っている
 
@@ -55,7 +67,8 @@ waiting・ready・error への遷移で通知する（tmux の display-message �
 - 済み（本物の Claude Code 2.1.309 を tmux 内で対話実行。hook の入力は `src/fixtures/` に保存し、テストで再生している）:
   - hook の入力の形。Notification の種別は `notification_type`。hooks 設定の `args` 形式は使える
   - 一覧と status: 起動直後の入力待ち、本体 pid の特定、許可待ち（理由つき）、許可の拒否と Esc での中断からの復帰、バックグラウンドのサブエージェントの許可待ち→許可→完了、SessionEnd での掃除
-- 済み: tsc（strict）が通る。単体テスト8件（`bun test`）が通る。tmux 3.4 に偽 claude プロセスを置いた E2E（一覧、サブエージェント、jump、watch の Enter、新規ウィンドウ、--popup、SessionEnd 時の掃除、LC_ALL=C）が動く
+  - ステータスラインの印（クライアントを接続した tmux 3.4）: 別ウィンドウを見ている間の完了で ✓ → そのウィンドウへ移ると pane-focus-in で消える、表示中のペインで完了したら ✓ を出さない、AskUserQuestion で ❓、jump で既読
+- 済み: tsc（strict）が通る。単体テスト11件（`bun test`）が通る。tmux 3.4 に偽 claude プロセスを置いた E2E（一覧、サブエージェント、jump、watch の Enter、新規ウィンドウ、--popup、SessionEnd 時の掃除、LC_ALL=C）が動く
 - 未検証:
   - Notification の elicitation_dialog / agent_needs_input、StopFailure、PostToolUseFailure の実際の入力。確かめるときは `AGENT_WS_DUMP=<ファイル>` を付けて claude を起動すると hook の入力がそのまま追記される
   - バックグラウンドのサブエージェントの許可を拒否したときの本体側の状態

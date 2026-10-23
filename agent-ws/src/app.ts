@@ -3,7 +3,7 @@
  */
 import type { Filter, HookEvent, JumpResult, JumpTarget, Notice, Pid, Repository, Session } from "./domain.ts";
 import {
-  applyHook, attachProcesses, detectAgent, findPane, HOOK_EVENTS, linkSessions, repoName, selectRepos, SESSION_TTL, settleInterrupted, subagentExpired,
+  ancestry, applyHook, attachProcesses, detectAgent, findPane, HOOK_EVENTS, linkSessions, repoName, selectRepos, SESSION_TTL, settleInterrupted, subagentExpired,
 } from "./domain.ts";
 import * as git from "./infra/git.ts";
 import * as proc from "./infra/proc.ts";
@@ -66,8 +66,12 @@ export function handleHook(e: HookEvent, now = Date.now()): Notice | null {
   if (out.session === "delete") store.removeSession(e.session_id);
   if (!out.session || out.session === "delete") return null;
 
-  const session = { ...out.session, pid: out.session.pid ?? findAgentPid() };
+  const pid = out.session.pid ?? findAgentPid();
+  // いま表示しているペインで完了したなら、もう見ている
+  const unseen = out.session.unseen && !paneOf(pid)?.active;
+  const session = { ...out.session, pid, unseen: unseen || undefined };
   store.putSession(session);
+  if (prev.session?.status !== session.status || Boolean(prev.session?.unseen) !== Boolean(session.unseen)) tmux.refreshStatus();
   if (!out.notify) return null;
   const main = git.listWorktrees(session.cwd)[0]?.path;
   return { repo: main ? repoName(main, git.ghqRoots()) : session.cwd, branch: git.currentBranch(session.cwd), session };
@@ -84,12 +88,36 @@ function findAgentPid(): Pid | null {
   return null;
 }
 
+const parentOf = () => {
+  const ppid = new Map(proc.psTable().map((p) => [p.pid, p.ppid]));
+  return (pid: Pid) => ppid.get(pid);
+};
+
+/** そのプロセスが動いている tmux ペイン */
+function paneOf(pid: Pid | null) {
+  return pid ? findPane({ title: "", name: "", pid }, tmux.listPanes(), parentOf()) : undefined;
+}
+
+/** そのペインで完了したセッションを既読にする（tmux の pane-focus-in とポップアップからの移動で呼ぶ） */
+export function markSeen(panePid: Pid): number {
+  const unseen = store.listSessions().filter((s) => s.unseen && s.pid);
+  if (!unseen.length) return 0; // フォーカスのたびに呼ばれるので、未確認が無ければ ps もしない
+  const up = parentOf();
+  const seen = unseen.filter((s) => [...ancestry(s.pid ?? undefined, up)].includes(panePid));
+  for (const s of seen) store.putSession({ ...s, unseen: undefined });
+  if (seen.length) tmux.refreshStatus();
+  return seen.length;
+}
+
 /** 行の指す先の tmux ペインへ移動。見つからず create なら新しいウィンドウを開く */
 export function jump(t: JumpTarget, o: { create: boolean; dryRun?: boolean }): JumpResult {
-  const ppid = new Map(proc.psTable().map((p) => [p.pid, p.ppid]));
-  const pane = findPane(t, tmux.listPanes(), (pid) => ppid.get(pid));
+  const pane = findPane(t, tmux.listPanes(), parentOf());
   if (pane && o.dryRun) return { kind: "found", pane };
-  if (pane) return tmux.focusPane(pane.id) ? { kind: "focused", pane } : { kind: "failed", title: t.title };
+  if (pane) {
+    if (!tmux.focusPane(pane.id)) return { kind: "failed", title: t.title };
+    markSeen(pane.pid);
+    return { kind: "focused", pane };
+  }
   if (!o.create || !t.path || o.dryRun) return { kind: "notFound", title: t.title };
   const id = tmux.newWindow(t.path, t.name);
   return id && tmux.focusPane(id) ? { kind: "created", path: t.path } : { kind: "failed", title: t.title };

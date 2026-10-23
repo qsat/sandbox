@@ -8,8 +8,8 @@
 export type Pid = number;
 export type AgentKind = "claude" | "codex" | "aider" | "gemini" | "cursor" | "copilot" | "opencode" | "amp";
 
-/** ready: 入力待ち（起動直後・ターン完了） / waiting: 許可・質問への回答待ち */
-export type SessionStatus = "ready" | "running" | "waiting" | "error";
+/** ready: 入力待ち（起動直後・ターン完了） / waiting: 許可待ち / asking: 質問への回答待ち */
+export type SessionStatus = "ready" | "running" | "waiting" | "asking" | "error";
 export type SubagentStatus = "running" | "waiting" | "done";
 export type Status = SessionStatus | SubagentStatus;
 
@@ -57,6 +57,7 @@ export interface SessionRecord {
   since: number; // この状態になった時刻
   updated: number;
   resume?: SessionStatus; // サブエージェントの許可待ちが解けたら戻る状態
+  unseen?: boolean; // ターンが完了して、まだ見ていない
   transcript?: string; // 会話ログ。hook が発火しない中断を見つけるのに使う
 }
 
@@ -83,7 +84,7 @@ export interface Pane {
   window: string;
   windowName: string;
   path: string;
-  active: boolean;
+  active: boolean; // クライアントが接続しているセッションの、いま表示されているペイン
 }
 
 /** 移動先: pid（の祖先）がいるペイン、なければ path にいるペイン */
@@ -225,17 +226,23 @@ export interface HookOutcome {
   notify?: boolean;
 }
 
+/** 人の操作を待っている状態 */
+export const isBlocked = (st: SessionStatus | undefined) => st === "waiting" || st === "asking";
+
+/** 質問としてユーザーに答えを求めるツール（許可待ちと同じ PermissionRequest で届く） */
+const QUESTION_TOOLS = new Set(["AskUserQuestion"]);
+
 export function applyHook(
   e: HookEvent,
   prev: { session: SessionRecord | null; subagent: Subagent | null },
   now: number,
 ): HookOutcome {
   const p = prev.session;
-  const session = (status: SessionStatus, reason?: string, o: { quiet?: boolean; resume?: SessionStatus } = {}): HookOutcome => {
+  const session = (status: SessionStatus, reason?: string, o: { quiet?: boolean; resume?: SessionStatus; unseen?: boolean } = {}): HookOutcome => {
     const changed = p?.status !== status;
     return {
       session: { id: e.session_id, pid: p?.pid ?? null, cwd: p?.cwd ?? e.cwd ?? "", status, reason, since: p && !changed ? p.since : now, updated: now, resume: o.resume,
-        transcript: e.transcript_path ?? p?.transcript },
+        unseen: o.unseen || undefined, transcript: e.transcript_path ?? p?.transcript },
       // 実行中への遷移と、起動直後の ready は通知しない
       notify: changed && !o.quiet && status !== "running" && !(status === "ready" && !p),
     };
@@ -245,6 +252,8 @@ export function applyHook(
     const type = e.agent_type || a?.type || "subagent";
     return { sessionId: e.session_id, id: e.agent_id ?? "", type, status, detail: detail ?? a?.detail, since: a?.status === status ? a.since : now, updated: now };
   };
+  // 許可待ち・質問が解けたときに戻る状態（重なったら最初の待ちの前）
+  const resumeTo = p && isBlocked(p.status) ? p.resume : p?.status;
   // 内部用のエージェントは表示もしないし、本体の状態も変えない
   if (e.agent_id && !e.agent_type) return {};
   const inSubagent = Boolean(e.agent_id);
@@ -257,7 +266,7 @@ export function applyHook(
     case "Stop": {
       // バックグラウンドのサブエージェントが残っていれば、終わったときに本体が自動で再開するので通知しない
       const background = e.background_tasks?.some((t) => t.status === "running");
-      return session("ready", firstLine(e.last_assistant_message), { quiet: background });
+      return session("ready", firstLine(e.last_assistant_message), { quiet: background, unseen: !background });
     }
     case "StopFailure":
       return session("error", firstLine(e.error ?? e.message));
@@ -269,21 +278,20 @@ export function applyHook(
       return inSubagent ? { subagent: subagent("done", firstLine(e.last_assistant_message)) } : {};
     case "PermissionRequest": {
       const what = describeTool(e);
-      const main = session("waiting", firstLine(inSubagent ? `[${e.agent_type}] ${what}` : what), {
-        resume: p?.status === "waiting" ? p.resume : p?.status,
-      });
+      const status = QUESTION_TOOLS.has(e.tool_name ?? "") ? "asking" : "waiting";
+      const main = session(status, firstLine(inSubagent ? `[${e.agent_type}] ${what}` : what), { resume: resumeTo });
       return inSubagent ? { ...main, subagent: subagent("waiting", firstLine(what)) } : main;
     }
     case "Notification":
-      // 許可待ちは PermissionRequest で詳細つきで記録済み（こちらには agent_id もツールも無い）
-      if (e.notification_type === "permission_prompt" && p?.status === "waiting") return {};
-      return session("waiting", firstLine(e.message), { resume: p?.status === "waiting" ? p.resume : p?.status });
+      // 許可待ち・質問は PermissionRequest で詳細つきで記録済み（こちらには agent_id もツールも無い）
+      if (e.notification_type === "permission_prompt" && isBlocked(p?.status)) return {};
+      return session(e.notification_type === "elicitation_dialog" ? "asking" : "waiting", firstLine(e.message), { resume: resumeTo });
     case "PostToolUse":
     case "PostToolUseFailure":
       if (!inSubagent) return session("running");
       // サブエージェントのツールが動いた = 本体の許可待ちは解けた。本体は許可待ちの前の状態に戻す
       return {
-        ...(p?.status === "waiting" ? session(p.resume ?? "running", undefined, { quiet: true }) : {}),
+        ...(p && isBlocked(p.status) ? session(p.resume ?? "running", undefined, { quiet: true }) : {}),
         subagent: subagent("running", e.tool_name),
       };
     default:
@@ -303,7 +311,7 @@ function describeTool(e: HookEvent): string {
  * （どちらも user の "[Request interrupted by user…]" が書かれる）
  */
 export function settleInterrupted(s: SessionRecord, transcriptTail: string[], now: number): SessionRecord | null {
-  if (s.status !== "running" && s.status !== "waiting") return null;
+  if (s.status !== "running" && !isBlocked(s.status)) return null;
   for (const line of transcriptTail.toReversed()) {
     let entry: { type?: string; timestamp?: string; message?: { content?: unknown } };
     try {
@@ -336,10 +344,15 @@ export function firstLine(s: string | undefined, max = 80): string | undefined {
 // ---------------------------------------------------------------------
 // 移動先のペイン特定
 // ---------------------------------------------------------------------
+/** pid 自身から祖先へ順に辿る */
+export function* ancestry(pid: Pid | undefined, parentOf: (pid: Pid) => Pid | undefined): Generator<Pid> {
+  for (let i = 0; pid && pid > 1 && i < 32; pid = parentOf(pid), i++) yield pid;
+}
+
 /** pid の祖先を辿って pane_pid に行き着くペイン。なければ path 配下にいるペイン（完全一致・アクティブ優先） */
 export function findPane(t: JumpTarget, panes: Pane[], parentOf: (pid: Pid) => Pid | undefined): Pane | undefined {
   const byPid = new Map(panes.map((p) => [p.pid, p]));
-  for (let pid = t.pid, i = 0; pid && pid > 1 && i < 32; pid = parentOf(pid), i++) {
+  for (const pid of ancestry(t.pid, parentOf)) {
     const hit = byPid.get(pid);
     if (hit) return hit;
   }
