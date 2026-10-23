@@ -1,0 +1,19 @@
+{
+  "name": "agent-ws",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agent-ws": "./cli.ts"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test src/*.test.ts",
+    "typecheck": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": ">=5.8"
+  }
+}
