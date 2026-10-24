@@ -9,6 +9,7 @@
     "build": "bun build src/entry/cli.ts --target=bun --outfile=dist/agent-ws.js --minify-syntax --minify-whitespace --define 'process.env.NODE_ENV=\"production\"'",
     "test": "bun test",
     "e2e": "AGENT_WS_E2E=1 bun test src/entry/__tests__/e2e",
+    "smoke": "bash scripts/smoke-claude.sh",
     "typecheck": "tsc",
     "lint": "biome lint .",
     "format": "biome format --write .",

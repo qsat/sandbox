@@ -46,7 +46,8 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
     State: { app: { agents, attention, workspace, lifecycle }, ui: { visit, watch } }
 
     src/
-      entry/          cli.ts（引数の解析と振り分け）・コマンドごとの組み立て（list / watch / status / seen / jump / hook）・store.ts
+      entry/          cli.ts（引数の解析と振り分け）・コマンドごとの組み立て（list / watch / status / seen / jump / hook）・store.ts。
+                      組み立ては、テストから呼べる関数（listText・statusText・jump・receiveHook・watchStore）と、入出力をつなぐ run* に分けている
       redux/
         createStore.ts  Store のファクトリ。createStore({ log, effects })。rootReducer・addAppListener・listen
         modules/
@@ -136,10 +137,26 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
       set-hook -g pane-focus-in 'run-shell -b "bun ~/path/agent-ws/dist/agent-ws.js seen #{pane_pid}"'
 
 - 実行環境は Bun。依存は @reduxjs/toolkit だけ（bundle に含まれる）。開発時は typescript・@types/bun・@biomejs/biome も使う
-- テストは対象のモジュールがある場所の `__tests__/` に置く（テストデータも `__tests__/fixtures/`）
+- テストは対象のモジュールがある場所の `__tests__/` に置く（テストデータも `__tests__/fixtures/`）。層は「テスト」の節
 - フォーマットと lint は Biome（Rome の後継）。設定は biome.json（スペース2・行幅140・ダブルクォート・セミコロンあり・末尾カンマあり、lint は推奨ルール、import の並べ替えも Biome に任せる）。tsconfig でも未使用の変数・引数・import を検出する
-- スクリプト: `bun run check`（Biome の検査・型チェック・テストをまとめて。失敗すれば終了コードが 0 以外）、`bun run fix`（フォーマット・lint の自動修正・import の並べ替え）、`lint`・`format`・`typecheck`・`test`・`build`
+- スクリプト: `bun run check`（Biome の検査・型チェック・テストをまとめて。失敗すれば終了コードが 0 以外）、`bun run fix`（フォーマット・lint の自動修正・import の並べ替え）、`e2e`（端末込みの E2E）、`smoke`（本物の Claude Code でのスモークテスト）、`lint`・`format`・`typecheck`・`test`・`build`
 - Bun 固有の API は `Bun.spawnSync`（redux/middlewares/shared/shell.ts）、`Bun.stdin`（entry/hook.ts）、`bun:test` だけで、残りは Bun が互換実装している node:* を使っている
+
+## テスト
+確認したいことに合わせて3つの層に分けている。下の層ほど本物に近く、重い。
+
+| 層 | 場所 | 動かし方 | 本物 | 差し替え |
+|---|---|---|---|---|
+| 単体 | 各モジュールの `__tests__/` | `bun run check`（`bun test`） | slice・selector・middleware・描画 | middleware ごとの I/O |
+| A. シナリオ | `src/entry/__tests__/scenarios.test.ts` | `bun run check` | entry から eventLog（一時ディレクトリ）まで全部 | tmux・ps・git・通知（`mock.module`） |
+| B. 端末込みの E2E | `src/entry/__tests__/e2e/` | `bun run e2e`（AGENT_WS_E2E=1。check では飛ばす） | tmux（script で接続したクライアントつき）・ps・git・hooks-config | claude（記録した hook 入力を流す偽物） |
+| C. スモーク | `scripts/smoke-claude.sh` | `bun run smoke [--dist] [--keep]`（手で動かす） | Claude Code も含めて全部 | なし（モデルを呼ぶ） |
+
+- A は、本物の Claude Code から記録した hook 入力（`src/redux/middlewares/claude/__tests__/fixtures/claude-code-2.1.309-turns.jsonl` と、中断を書いた会話ログ `transcript-deny.jsonl`・`transcript-esc.jsonl`）を entry の関数に流し、印・一覧・通知・jump の行き先・popup が閉じるかを確かめる。1つのセッションの流れを、起動 → 完了 → フォーカスで確認 → 許可 → 表示中の完了 → 拒否 → 質問 → Esc → 終了の順にたどる
+- B の偽の claude（`fake-claude.ts`）は `claude` という名前のシンボリックリンクから起動する。ps からは `bun …/claude` に見えるので本物と同じくエージェントとして見つかり、hook はその子として動くので本体の pid も本物と同じく祖先から分かる。hooks は `hooks-config` の出力を settings.json に置き、その matcher どおりに流す。tmux の設定は「セットアップ」と同じ。ステータスラインは status-right を `SR[…]` で囲み、クライアントの端末に描かれた中身から読む
+  - 壊したら落ちることを確かめた: `refresh-client -S` を呼ばない → ステータスラインが消えない、popup を閉じない → 閉じない
+  - tmux の癖: `display-popup` はポップアップが閉じるまで戻らない。新しいペインのシェルはログインシェルなので /etc/profile が PATH を上書きする（default-command で避けている）
+- C は、作業ディレクトリに分けた CLAUDE_CONFIG_DIR（初回の案内とフォルダの信頼を済ませたもの）で claude を起動し、hooks は `--settings` で渡す。使っている人の設定は触らない。認証は環境変数（ANTHROPIC_API_KEY か CLAUDE_CODE_OAUTH_TOKEN）。hook の入力は dump.jsonl に残すので、形が変わっていたら fixture を取り直す
 
 ## 検証状況
 - 済み（本物の Claude Code 2.1.309 を、クライアントを接続した tmux 3.4 の中で対話実行。bundle した dist で確認）:
@@ -149,7 +166,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
   - subscribe: `watch --interval=60` でも、許可待ち・他プロセスが記録した中断が即座に反映される。claude の起動は1秒以内、終了は約1秒で一覧に反映される
   - ステータスラインは状態が変わったときに描き直される（status-interval=600 でも `#()` が再実行される）
   - hook 1回の処理は約40ms（bundle 版。同じ条件で比べて、ドメインの再設計の前後で変わらない）。状態が変わらない PostToolUse はログに残らない
-- 済み: tsc（strict）が通る。単体テスト22件（`bun test`）が通る。`bun run check` が通る
+- 済み: tsc（strict）が通る。`bun run check` が通る（単体とシナリオで36件。E2E の9件は飛ばす）。`bun run e2e` の9件が通る（3回続けて。1回20秒ほど）。`bun run smoke` が本物の Claude Code 2.1.310 で19項目すべて通る（fixture は 2.1.309 で記録。hook の種類と順序は同じ）
 - 未検証:
   - Notification の elicitation_dialog / agent_needs_input、StopFailure、PostToolUseFailure の実際の入力。確かめるときは `AGENT_WS_DUMP=<ファイル>` を付けて claude を起動すると hook の入力がそのまま追記される
   - バックグラウンドのサブエージェントの許可を拒否したときの本体側の状態
