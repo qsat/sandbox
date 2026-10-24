@@ -1,9 +1,9 @@
-import type { JumpTarget } from "../domain/model.ts";
-import { realPath } from "../infra/shell.ts";
-import { navigationListeners } from "../redux/modules/navigation/listener.ts";
-import { selectLastJump } from "../redux/modules/navigation/selector.ts";
-import { jumpRequested } from "../redux/modules/navigation/slice.ts";
-import { statusLineListeners } from "../redux/modules/statusLine/listener.ts";
+import type { JumpTarget } from "../redux/modules/ui/navigation/slice.ts";
+import { realPath } from "../redux/infra/shell.ts";
+import { navigationListeners } from "../redux/modules/ui/navigation/listener.ts";
+import { selectLastJump } from "../redux/modules/ui/navigation/selector.ts";
+import { jumpRequested } from "../redux/modules/ui/navigation/slice.ts";
+import { statusLineListeners } from "../redux/modules/ui/statusLine/listener.ts";
 import { formatCells, type ColorMode } from "../ui/terminal.ts";
 import { jumpMessage } from "../ui/view.ts";
 import { sessionStore } from "./store.ts";

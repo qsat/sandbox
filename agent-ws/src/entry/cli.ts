@@ -14,13 +14,13 @@
  *           AGENT_WS_DUMP（hook の入力をそのまま追記するファイル。入力の形を確かめるとき用）
  *
  * 構成（依存は矢印の向きだけ）:
- *   entry/*（初期化）─┬→ redux/createStore・redux/modules/{slug}/{slice,selector,listener}
- *                    │        └→ domain/model（純粋）・claude/hook（Claude Code の入力の境界）・infra/*（I/O）
- *                    └→ ui/*（表示）
+ *   entry/*（初期化）─┬→ redux/createStore ─→ redux/modules/{app,ui}/{slug}/{slice,selector,listener}
+ *                    │                          └→ redux/utils/*（純粋な関数）・redux/infra/*（I/O）
+ *                    └→ ui/*（描画）
  */
 import { parseArgs } from "node:util";
-import { hooksConfig } from "../claude/hook.ts";
-import { realPath } from "../infra/shell.ts";
+import { hooksConfig } from "../redux/modules/app/sessions/hook.ts";
+import { realPath } from "../redux/infra/shell.ts";
 import type { ColorMode } from "../ui/terminal.ts";
 import { runHook } from "./hook.ts";
 import { runJump } from "./jump.ts";

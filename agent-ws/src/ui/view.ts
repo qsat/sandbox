@@ -1,12 +1,15 @@
 /**
  * 表示モデル: ドメイン → 行（Row）。何を・どんな意味で見せるかだけ決め、色や装飾はしない
  */
-import type { JumpResult, JumpTarget, Notice, Proc, Repository, Worktree } from "../domain/model.ts";
-import { isUnder, repoName } from "../domain/model.ts";
-import { attention, visibleSubagents } from "../redux/modules/sessions/selector.ts";
-import type { Session, SessionStatus, Status } from "../redux/modules/sessions/slice.ts";
-import { isBlocked } from "../redux/modules/sessions/slice.ts";
-import type { StatusFlags } from "../redux/modules/statusLine/selector.ts";
+import type { JumpResult, JumpTarget } from "../redux/modules/ui/navigation/slice.ts";
+import type { Notice } from "../redux/modules/app/notification/selector.ts";
+import type { Proc, Repository, Worktree } from "../redux/modules/app/workspace/slice.ts";
+import { isUnder } from "../redux/utils/isUnder.ts";
+import { repoName } from "../redux/utils/repoName.ts";
+import { attention, visibleSubagents } from "../redux/modules/app/sessions/selector.ts";
+import type { Session, SessionStatus, Status } from "../redux/modules/app/sessions/slice.ts";
+import { isBlocked } from "../redux/modules/app/sessions/slice.ts";
+import type { StatusFlags } from "../redux/modules/ui/statusLine/selector.ts";
 
 /** 意味としてのトーン。実際の色は terminal.ts が決める */
 export type Tone = "plain" | "strong" | "dim" | "title" | "agent" | "ok" | "warn" | Status;

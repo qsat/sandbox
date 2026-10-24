@@ -1,8 +1,8 @@
 import { homedir } from "node:os";
-import { ghqRoots } from "../infra/git.ts";
-import { workspaceListeners } from "../redux/modules/workspace/listener.ts";
-import { selectTree } from "../redux/modules/workspace/selector.ts";
-import { dirtyRequested, processesRequested, reposRequested, type Filter } from "../redux/modules/workspace/slice.ts";
+import { ghqRoots } from "../redux/infra/git.ts";
+import { workspaceListeners } from "../redux/modules/app/workspace/listener.ts";
+import { selectTree } from "../redux/modules/app/workspace/selector.ts";
+import { dirtyRequested, processesRequested, reposRequested, type Filter } from "../redux/modules/app/workspace/slice.ts";
 import { formatRow, type ColorMode } from "../ui/terminal.ts";
 import { treeRows } from "../ui/view.ts";
 import { sessionStore } from "./store.ts";

@@ -10,11 +10,16 @@
  */
 import { addListener, combineReducers, configureStore, createListenerMiddleware, type Dispatch, type UnknownAction } from "@reduxjs/toolkit";
 import { persistence } from "./middlewares/persistence.ts";
-import { navigation } from "./modules/navigation/slice.ts";
-import { sessionsReducer } from "./modules/sessions/slice.ts";
-import { workspace } from "./modules/workspace/slice.ts";
+import { sessionsReducer } from "./modules/app/sessions/slice.ts";
+import { workspace } from "./modules/app/workspace/slice.ts";
+import { navigation } from "./modules/ui/navigation/slice.ts";
+import { watchView } from "./modules/ui/watch/slice.ts";
 
-const rootReducer = combineReducers({ sessions: sessionsReducer, workspace: workspace.reducer, navigation: navigation.reducer });
+/** app: エージェントとワークスペースの状態 / ui: 画面の状態 */
+const rootReducer = combineReducers({
+  app: combineReducers({ sessions: sessionsReducer, workspace: workspace.reducer }),
+  ui: combineReducers({ navigation: navigation.reducer, watch: watchView.reducer }),
+});
 
 export type RootState = ReturnType<typeof rootReducer>;
 export type AppDispatch = Dispatch<UnknownAction>;

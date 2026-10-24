@@ -1,4 +1,4 @@
-import { selectStatusFlags } from "../redux/modules/statusLine/selector.ts";
+import { selectStatusFlags } from "../redux/modules/ui/statusLine/selector.ts";
 import { formatCells, type ColorMode } from "../ui/terminal.ts";
 import { statusLine } from "../ui/view.ts";
 import { sessionStore } from "./store.ts";

@@ -1,10 +1,10 @@
 import { appendFileSync } from "node:fs";
-import type { HookInput } from "../claude/hook.ts";
-import { notify } from "../infra/notify.ts";
-import { notificationListeners } from "../redux/modules/notification/listener.ts";
-import { sessionListeners } from "../redux/modules/sessions/listener.ts";
-import { hookReceived } from "../redux/modules/sessions/slice.ts";
-import { statusLineListeners } from "../redux/modules/statusLine/listener.ts";
+import type { HookInput } from "../redux/modules/app/sessions/hook.ts";
+import { notify } from "../redux/infra/notify.ts";
+import { notificationListeners } from "../redux/modules/app/notification/listener.ts";
+import { sessionListeners } from "../redux/modules/app/sessions/listener.ts";
+import { hookReceived } from "../redux/modules/app/sessions/slice.ts";
+import { statusLineListeners } from "../redux/modules/ui/statusLine/listener.ts";
 import { notification } from "../ui/view.ts";
 import { initStore } from "./store.ts";
 

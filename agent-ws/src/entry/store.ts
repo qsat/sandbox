@@ -2,8 +2,8 @@
  * 各コマンドの Store の初期化: 共通の Store に、そのコマンドで要る listener だけを登録する
  */
 import { createStore, listen, type AppListener, type AppStore } from "../redux/createStore.ts";
-import { sessionListeners } from "../redux/modules/sessions/listener.ts";
-import { sessionsRequested, settleRequested } from "../redux/modules/sessions/slice.ts";
+import { sessionListeners } from "../redux/modules/app/sessions/listener.ts";
+import { sessionsRequested, settleRequested } from "../redux/modules/app/sessions/slice.ts";
 
 export function initStore(...groups: AppListener[][]): AppStore {
   const store = createStore();
