@@ -11,15 +11,17 @@ export interface WorkspaceState {
   roots: string[]; // ghq のルート（リポジトリ名の基準）
   repos: Repository[]; // worktree 構成（agents と dirty は空）
   dirty: Record<string, number | null>; // worktree のパス → 変更ファイル数
+  scannedAt: number | null; // リポジトリ構成を最後に取った時刻
 }
 
 export const workspace = createSlice({
   name: "workspace",
-  initialState: { roots: [], repos: [], dirty: {} } as WorkspaceState,
+  initialState: { roots: [], repos: [], dirty: {}, scannedAt: null } as WorkspaceState,
   reducers: {
-    reposScanned: (st, a: PayloadAction<{ roots: string[]; repos: Repository[] }>) => {
+    reposScanned: (st, a: PayloadAction<{ roots: string[]; repos: Repository[]; at: number }>) => {
       st.roots = a.payload.roots;
       st.repos = a.payload.repos;
+      st.scannedAt = a.payload.at;
     },
     dirtyScanned: (st, a: PayloadAction<Record<string, number | null>>) => {
       st.dirty = a.payload;

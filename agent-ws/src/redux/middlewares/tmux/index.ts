@@ -1,7 +1,7 @@
 /**
  * tmux middleware: 人がどこを見ているか・どこへ行くか（tmux のペイン）
  *
- * - visitRequested: 行き先のペインへ移動する（無ければ新しいウィンドウ）。結果は visited
+ * - destinationChosen: 人が選んだ行き先のペインへ移動する（無ければ新しいウィンドウ）。結果は visited
  * - paneFocused: そのペインにいるエージェントの完了を確認したことにする
  * - turnFinished: いま表示しているペインで完了したなら、もう見ている
  * - ステータスラインの印が変わったら、status-interval を待たずに描き直す
@@ -11,14 +11,14 @@ import { selectAgent, selectAgents } from "../../modules/app/agents/selector.ts"
 import { turnFinished } from "../../modules/app/agents/slice.ts";
 import { selectStatusFlags, selectUnseen } from "../../modules/app/attention/selector.ts";
 import { acknowledged } from "../../modules/app/attention/slice.ts";
-import { paneFocused, visited, visitRequested } from "../../modules/ui/visit/slice.ts";
+import { destinationChosen, paneFocused, visited } from "../../modules/ui/visit/slice.ts";
 import type { Pid } from "../../types/agent.ts";
 import type { VisitResult, VisitTarget } from "../../types/visit.ts";
 import { ancestry } from "../../utils/ancestry.ts";
 import { findPane } from "../../utils/findPane.ts";
 import { isReplayed } from "../../utils/replayed.ts";
-import { psTable } from "../system/proc.ts";
-import { realPath } from "../system/shell.ts";
+import { psTable } from "../processes/proc.ts";
+import { realPath } from "../shared/shell.ts";
 import * as cli from "./tmux.ts";
 
 const parentOf = () => {
@@ -35,7 +35,7 @@ export const tmux = (): AppMiddleware => (api) => {
     if (pane && dryRun) return { kind: "found", pane };
     if (pane) {
       if (!cli.focusPane(pane.id)) return { kind: "failed", title: t.title };
-      api.dispatch(paneFocused({ panePid: pane.pid, at: Date.now() }));
+      api.dispatch(paneFocused({ panePid: pane.pid, at: api.getState().app.lifecycle.now }));
       return { kind: "focused", pane };
     }
     if (!create || !t.path || dryRun) return { kind: "notFound", title: t.title };
@@ -46,7 +46,7 @@ export const tmux = (): AppMiddleware => (api) => {
   return (next) => (action) => {
     const before = api.getState();
     const result = next(action);
-    if (visitRequested.match(action)) {
+    if (destinationChosen.match(action)) {
       const p = action.payload;
       api.dispatch(visited(visit(p.target, p.create, p.dryRun ?? false)));
     } else if (paneFocused.match(action)) {

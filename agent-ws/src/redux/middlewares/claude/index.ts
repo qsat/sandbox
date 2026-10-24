@@ -13,8 +13,8 @@ import { agentAttached, agentEnded, turnInterrupted } from "../../modules/app/ag
 import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
 import type { Pid } from "../../types/agent.ts";
 import { detectAgent } from "../../utils/detectAgent.ts";
-import { inspect } from "../system/proc.ts";
-import { realPath } from "../system/shell.ts";
+import { inspect } from "../processes/proc.ts";
+import { realPath } from "../shared/shell.ts";
 import { type HookInput, toEvents } from "./hook.ts";
 import { interruptedSince, tailSince } from "./transcript.ts";
 

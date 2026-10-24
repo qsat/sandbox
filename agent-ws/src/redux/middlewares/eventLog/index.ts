@@ -38,7 +38,8 @@ export const eventLog =
     const offsets = new Map<string, number>(); // このプロセスが読み終えた位置。見張りでは差分だけ流す
     let stopWatching: (() => void) | undefined;
 
-    const load = (id: string, mtimeMs: number) => {
+    /** at: いまの時刻（期限切れの判断に使う） */
+    const load = (id: string, mtimeMs: number, at: number) => {
       const r = log.read(id);
       if (!r) return;
       if (r.snapshot) api.dispatch(replayed(agentRestored(r.snapshot)));
@@ -48,8 +49,7 @@ export const eventLog =
       const [agent, attention] = recordOf(st, id);
       if (agent && attention && r.events.length >= SNAPSHOT_EVERY) log.saveSnapshot(id, { agent, attention }, r.offset);
       // pid の分からないエージェントは、プロセスで生死を確かめられないので期限で閉じる
-      const now = Date.now();
-      if (agent && !agent.pid && now - mtimeMs > TTL) api.dispatch(agentEnded({ agentId: id, at: now }));
+      if (agent && !agent.pid && at - mtimeMs > TTL) api.dispatch(agentEnded({ agentId: id, at }));
     };
 
     const follow = () => {
@@ -57,7 +57,7 @@ export const eventLog =
       for (const { id, mtimeMs } of present) {
         const from = offsets.get(id);
         if (from === undefined) {
-          load(id, mtimeMs);
+          load(id, mtimeMs, api.getState().app.lifecycle.now);
           continue;
         }
         const r = log.read(id, from);
@@ -89,7 +89,7 @@ export const eventLog =
       }
       const result = next(action);
       if (initialized.match(action)) {
-        for (const l of log.list()) load(l.id, l.mtimeMs);
+        for (const l of log.list()) load(l.id, l.mtimeMs, action.payload.at);
         if (o.follow && !stopWatching) {
           let timer: Timer | undefined;
           stopWatching = log.watch(() => {

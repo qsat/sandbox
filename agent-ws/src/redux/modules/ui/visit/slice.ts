@@ -4,7 +4,7 @@
 import { createAction, createSlice, type PayloadAction } from "@reduxjs/toolkit";
 import type { Pid } from "../../../types/agent.ts";
 import type { VisitResult, VisitTarget } from "../../../types/visit.ts";
-import { cursorSet } from "../watch/slice.ts";
+import { rowSelected } from "../watch/slice.ts";
 
 export interface VisitState {
   last: VisitResult | null;
@@ -20,14 +20,14 @@ export const visit = createSlice({
   },
   // 選択を動かしたら、前の移動の結果は出さない
   extraReducers: (b) => {
-    b.addCase(cursorSet, (st) => {
+    b.addCase(rowSelected, (st) => {
       st.last = null;
     });
   },
 });
 export const { visited } = visit.actions;
 
-/** そこへ行ってほしい。見つからず create なら新しいウィンドウを開く。結果は visited で戻る */
-export const visitRequested = createAction<{ target: VisitTarget; create: boolean; dryRun?: boolean }>("visit/requested");
+/** 人が行き先を選んだ（create: 開いているペインが無ければ新しいウィンドウを開いてよい / dryRun: 探すだけ） */
+export const destinationChosen = createAction<{ target: VisitTarget; create: boolean; dryRun?: boolean }>("visit/destinationChosen");
 /** 人がそのペインにフォーカスした（tmux の pane-focus-in・移動の結果） */
 export const paneFocused = createAction<{ panePid: Pid; at: number }>("visit/paneFocused");

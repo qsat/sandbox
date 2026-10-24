@@ -9,7 +9,7 @@ import { selectNotice } from "../../modules/app/attention/selector.ts";
 import type { Notice, NoticeKind } from "../../types/attention.ts";
 import { isReplayed } from "../../utils/replayed.ts";
 import { repoName } from "../../utils/repoName.ts";
-import * as git from "../system/git.ts";
+import * as git from "../git/git.ts";
 import { notify } from "./notify.ts";
 
 export interface NotifierOptions {

@@ -11,7 +11,7 @@ import { agentAttached, turnFinished, turnStarted } from "../modules/app/agents/
 import { selectUnseen } from "../modules/app/attention/selector.ts";
 import { acknowledged } from "../modules/app/attention/slice.ts";
 import { initialized, ticked } from "../modules/app/lifecycle/slice.ts";
-import { visitRequested } from "../modules/ui/visit/slice.ts";
+import { destinationChosen } from "../modules/ui/visit/slice.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "agent-ws-test-"));
 const hook = (input: Record<string, unknown>, at: number) => hookReceived({ input: { session_id: "s1", cwd: dir, ...input }, at });
@@ -30,7 +30,9 @@ test("hook の入力は middleware が出来事に変えてログに残し、別
   store.dispatch(acknowledged({ agentId: "s1", at: 4 }));
   const other = createStore({ log: eventLog({ dir }) });
   other.dispatch(initialized({ at: 9 }));
-  expect(other.getState().app).toEqual({ ...store.getState().app });
+  // ログから組み立てるのはエージェントと確認の状況（いまの時刻はプロセスごと）
+  const { agents, attention } = store.getState().app;
+  expect(other.getState().app).toMatchObject({ agents, attention });
 });
 
 test("middleware を組まない Store では、起動しても何も起こらない（何をするかは組んだ middleware が決める）", () => {
@@ -41,7 +43,7 @@ test("middleware を組まない Store では、起動しても何も起こら�
 
 test("移動の結果は visited で Store に戻る", () => {
   const store = createStore({ effects: [tmux()] });
-  store.dispatch(visitRequested({ target: { title: "x", name: "x", path: "/nonexistent" }, create: false }));
+  store.dispatch(destinationChosen({ target: { title: "x", name: "x", path: "/nonexistent" }, create: false }));
   expect(store.getState().ui.visit.last).toEqual({ kind: "notFound", title: "x" });
 });
 

@@ -1,4 +1,4 @@
-import { run } from "../system/shell.ts";
+import { run } from "../shared/shell.ts";
 import { displayMessage } from "../tmux/tmux.ts";
 
 /** tmux のメッセージとデスクトップ通知（hook は端末を持たないので /dev/tty には書けない） */

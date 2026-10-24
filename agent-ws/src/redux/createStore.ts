@@ -3,7 +3,7 @@
  *
  *   dispatch ─→ listener ─→ effects ─→ log ─→ reducer
  *     listener: 時間の経過を待つなど I/O を伴わないつなぎ（要るモジュールにだけある）
- *     effects:  entry が選んだ middleware（claude・system・tmux・notifier）。意図を受けて I/O し、結果を出来事として戻す
+ *     effects:  entry が選んだ middleware（claude・processes・git・tmux・notifier・clock）。出来事に反応して I/O し、結果を出来事として戻す
  *     log:      出来事の記録（eventLog）。reducer の直前に置く。effects が出来事の途中で出した出来事（表示中の完了の確認など）
  *               より先に記録しないと、ログの順序が入れ替わり、流し直したときの状態が変わってしまう
  *
@@ -21,13 +21,14 @@ import {
 } from "@reduxjs/toolkit";
 import { agentsReducer } from "./modules/app/agents/slice.ts";
 import { attentionReducer } from "./modules/app/attention/slice.ts";
+import { lifecycleReducer } from "./modules/app/lifecycle/slice.ts";
 import { workspace } from "./modules/app/workspace/slice.ts";
 import { visit } from "./modules/ui/visit/slice.ts";
 import { watchView } from "./modules/ui/watch/slice.ts";
 
-/** app: エージェント・人の対応・ワークスペース / ui: 画面の状態 */
+/** app: エージェント・人の対応・ワークスペース・いまの時刻 / ui: 画面の状態 */
 export const rootReducer = combineReducers({
-  app: combineReducers({ agents: agentsReducer, attention: attentionReducer, workspace: workspace.reducer }),
+  app: combineReducers({ agents: agentsReducer, attention: attentionReducer, workspace: workspace.reducer, lifecycle: lifecycleReducer }),
   ui: combineReducers({ visit: visit.reducer, watch: watchView.reducer }),
 });
 

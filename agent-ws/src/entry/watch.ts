@@ -1,13 +1,15 @@
 import { homedir } from "node:os";
 import { claude } from "../redux/middlewares/claude/index.ts";
 import { clock } from "../redux/middlewares/clock/index.ts";
-import { system } from "../redux/middlewares/system/index.ts";
+import { git } from "../redux/middlewares/git/index.ts";
+import { processes } from "../redux/middlewares/processes/index.ts";
 import { tmux } from "../redux/middlewares/tmux/index.ts";
+import { selectNow } from "../redux/modules/app/lifecycle/selector.ts";
 import { selectRoots, selectTree } from "../redux/modules/app/workspace/selector.ts";
 import { selectLastVisit } from "../redux/modules/ui/visit/selector.ts";
-import { visitRequested } from "../redux/modules/ui/visit/slice.ts";
-import { selectWatchView } from "../redux/modules/ui/watch/selector.ts";
-import { cursorSet, reloadPressed, scrolled } from "../redux/modules/ui/watch/slice.ts";
+import { destinationChosen } from "../redux/modules/ui/visit/slice.ts";
+import { selectShouldClose, selectWatchView } from "../redux/modules/ui/watch/selector.ts";
+import { reloadPressed, rowSelected, watchOpened } from "../redux/modules/ui/watch/slice.ts";
 import type { Filter } from "../redux/types/workspace.ts";
 import type { ColorMode } from "../ui/terminal.ts";
 import { treeRows, visitMessage } from "../ui/view.ts";
@@ -16,29 +18,29 @@ import { start } from "./store.ts";
 
 export function runWatch(o: { query?: string; filter: Filter; intervalMs: number; popup: boolean; color: ColorMode }): void {
   const store = start(
-    [system({ processes: true, repos: { query: o.query }, dirty: o.filter }), claude(), tmux(), clock({ intervalMs: o.intervalMs })],
+    [processes({ list: true }), git({ repos: { query: o.query }, dirty: o.filter }), claude(), tmux(), clock({ intervalMs: o.intervalMs })],
     { follow: true },
   );
+  store.dispatch(watchOpened({ popup: o.popup }));
   runTui({
     rows: () => {
       const st = store.getState();
-      return treeRows(selectTree(st, o.filter), { roots: selectRoots(st), home: homedir(), now: Date.now() });
+      return treeRows(selectTree(st, o.filter), { roots: selectRoots(st), home: homedir(), now: selectNow(st) });
     },
     view: () => {
       const st = store.getState();
       const last = selectLastVisit(st);
-      return { ...selectWatchView(st), message: last ? visitMessage(last) : undefined };
+      return {
+        cursor: selectWatchView(st).cursor,
+        now: selectNow(st),
+        message: last ? visitMessage(last) : undefined,
+        close: selectShouldClose(st),
+      };
     },
     subscribe: (onChange) => void store.subscribe(onChange),
-    select: (key) => store.dispatch(cursorSet(key)),
-    scroll: (top) => store.dispatch(scrolled(top)),
-    visit: (target) => {
-      store.dispatch(visitRequested({ target, create: true }));
-      const r = selectLastVisit(store.getState());
-      return r?.kind === "focused" || r?.kind === "created";
-    },
+    select: (key) => store.dispatch(rowSelected(key)),
+    choose: (target) => store.dispatch(destinationChosen({ target, create: true })),
     reload: () => store.dispatch(reloadPressed()),
-    exitOnVisit: o.popup,
     color: o.color,
   });
 }

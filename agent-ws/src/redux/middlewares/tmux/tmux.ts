@@ -1,5 +1,5 @@
 import type { Pane } from "../../types/visit.ts";
-import { lines, realPath, run } from "../system/shell.ts";
+import { lines, realPath, run } from "../shared/shell.ts";
 
 // tmux は -F の出力中の制御文字（ロケールによっては非 ASCII も）を "_" に置き換えるので ASCII で区切る
 const SEP = "|~|";
