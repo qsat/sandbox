@@ -1,5 +1,5 @@
-import { run } from "../shared/shell.ts";
-import { displayMessage } from "../tmux/tmux.ts";
+import { run } from "../../middlewares/shared/shell.ts";
+import { displayMessage } from "../../middlewares/tmux/tmux.ts";
 
 /** tmux のメッセージとデスクトップ通知（hook は端末を持たないので /dev/tty には書けない） */
 export function notify(title: string, body: string): void {

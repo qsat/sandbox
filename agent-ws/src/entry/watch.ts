@@ -10,6 +10,7 @@ import { selectLastVisit } from "../redux/modules/ui/visit/selector.ts";
 import { destinationChosen } from "../redux/modules/ui/visit/slice.ts";
 import { selectShouldClose, selectWatchView } from "../redux/modules/ui/watch/selector.ts";
 import { reloadPressed, rowSelected, watchOpened } from "../redux/modules/ui/watch/slice.ts";
+import { statusLine } from "../redux/subscribers/statusLine.ts";
 import type { Filter } from "../redux/types/workspace.ts";
 import type { ColorMode } from "../ui/terminal.ts";
 import { treeRows, visitMessage } from "../ui/view.ts";
@@ -27,7 +28,7 @@ export interface WatchOptions {
 export function watchStore(o: WatchOptions) {
   const store = start(
     [processes({ list: true }), git({ repos: { query: o.query }, dirty: o.filter }), claude(), tmux(), clock({ intervalMs: o.intervalMs })],
-    { follow: true },
+    { log: { follow: true }, subscribers: [statusLine()] },
   );
   store.dispatch(watchOpened({ popup: o.popup }));
   return store;

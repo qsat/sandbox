@@ -14,6 +14,11 @@ export const visit = createSlice({
   name: "visit",
   initialState: { last: null } as VisitState,
   reducers: {
+    /** 人が行き先を選んだ（create: 開いているペインが無ければ新しいウィンドウを開いてよい / dryRun: 探すだけ）。前の結果は消える */
+    destinationChosen: (st, _: PayloadAction<{ target: VisitTarget; create: boolean; dryRun?: boolean }>) => {
+      st.last = null;
+    },
+    /** 移動の結果 */
     visited: (st, a: PayloadAction<VisitResult>) => {
       st.last = a.payload;
     },
@@ -25,9 +30,7 @@ export const visit = createSlice({
     });
   },
 });
-export const { visited } = visit.actions;
+export const { destinationChosen, visited } = visit.actions;
 
-/** 人が行き先を選んだ（create: 開いているペインが無ければ新しいウィンドウを開いてよい / dryRun: 探すだけ） */
-export const destinationChosen = createAction<{ target: VisitTarget; create: boolean; dryRun?: boolean }>("visit/destinationChosen");
-/** 人がそのペインにフォーカスした（tmux の pane-focus-in・移動の結果） */
+/** 人がそのペインにフォーカスした（どの reducer も扱わない合図。tmux の middleware が確認に変える）（tmux の pane-focus-in・移動の結果） */
 export const paneFocused = createAction<{ panePid: Pid; at: number }>("visit/paneFocused");

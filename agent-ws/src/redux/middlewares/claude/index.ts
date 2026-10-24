@@ -13,12 +13,13 @@ import { agentAttached, agentEnded, turnInterrupted } from "../../modules/app/ag
 import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
 import type { Pid } from "../../types/agent.ts";
 import { detectAgent } from "../../utils/detectAgent.ts";
+import { effects, on } from "../effects.ts";
 import { inspect } from "../processes/proc.ts";
 import { realPath } from "../shared/shell.ts";
 import { type HookInput, toEvents } from "./hook.ts";
 import { interruptedSince, tailSince } from "./transcript.ts";
 
-/** Claude Code の hook が呼ばれた（input は stdin の JSON そのまま） */
+/** Claude Code の hook が呼ばれた（input は stdin の JSON そのまま）。外から届いた合図で、どの reducer も扱わない */
 export const hookReceived = createAction<{ input: unknown; at: number }>("claude/hookReceived");
 
 /** hook の祖先プロセスを辿って claude 本体の pid を探す */
@@ -32,27 +33,26 @@ function findAgentPid(): Pid | null {
   return null;
 }
 
-export const claude = (): AppMiddleware => (api) => (next) => (action) => {
-  const result = next(action);
-  if (hookReceived.match(action)) {
-    const input = action.payload.input as HookInput;
-    const at = action.payload.at;
-    const events = toEvents(input, at);
-    if (!events.length) return result;
-    const agentId = input.session_id;
-    const known = selectAgent(api.getState(), agentId);
-    const onlyEnd = events.every((e) => agentEnded.match(e));
-    if (!onlyEnd && (!known?.pid || (input.transcript_path && !known.transcript))) {
-      const cwd = input.cwd ? realPath(input.cwd) : (known?.cwd ?? "");
-      api.dispatch(agentAttached({ agentId, at, pid: known?.pid ?? findAgentPid(), cwd, transcript: input.transcript_path }));
-    }
-    for (const e of events) api.dispatch(e);
-  } else if (initialized.match(action) || ticked.match(action)) {
-    for (const a of selectAgents(api.getState())) {
-      if (!a.transcript || (a.turn.status !== "running" && !isBlocked(a.turn.status))) continue;
-      const tail = tailSince(a.transcript, a.turn.since);
-      if (tail && interruptedSince(tail, a.turn.since)) api.dispatch(turnInterrupted({ agentId: a.id, at: action.payload.at }));
-    }
-  }
-  return result;
-};
+export const claude = (): AppMiddleware =>
+  effects((api) => [
+    on(hookReceived, ({ payload: { input: raw, at } }) => {
+      const input = raw as HookInput;
+      const events = toEvents(input, at);
+      if (!events.length) return;
+      const agentId = input.session_id;
+      const known = selectAgent(api.getState(), agentId);
+      const onlyEnd = events.every((e) => agentEnded.match(e));
+      if (!onlyEnd && (!known?.pid || (input.transcript_path && !known.transcript))) {
+        const cwd = input.cwd ? realPath(input.cwd) : (known?.cwd ?? "");
+        api.dispatch(agentAttached({ agentId, at, pid: known?.pid ?? findAgentPid(), cwd, transcript: input.transcript_path }));
+      }
+      for (const e of events) api.dispatch(e);
+    }),
+    on([initialized, ticked], ({ payload: { at } }) => {
+      for (const a of selectAgents(api.getState())) {
+        if (!a.transcript || (a.turn.status !== "running" && !isBlocked(a.turn.status))) continue;
+        const tail = tailSince(a.transcript, a.turn.since);
+        if (tail && interruptedSince(tail, a.turn.since)) api.dispatch(turnInterrupted({ agentId: a.id, at }));
+      }
+    }),
+  ]);

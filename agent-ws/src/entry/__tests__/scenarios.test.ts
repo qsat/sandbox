@@ -4,7 +4,7 @@
  * 外界（tmux・ps・git・通知）は偽物に差し替える。ログは一時ディレクトリに書く
  */
 import { describe, expect, mock, test } from "bun:test";
-import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Pane } from "../../redux/types/visit.ts";
@@ -80,7 +80,7 @@ mock.module("../../redux/middlewares/git/git.ts", () => ({
   countDirty: (path: string) => world.dirty[path] ?? 0,
   currentBranch: () => "feat",
 }));
-mock.module("../../redux/middlewares/notifier/notify.ts", () => ({
+mock.module("../../redux/subscribers/notifier/notify.ts", () => ({
   notify: (title: string, body: string) => world.notices.push(`${title} ${body}`),
 }));
 
@@ -122,10 +122,12 @@ function hooks(inputs: string[], agentId: string, transcript: string) {
 }
 
 /** 録った会話ログを、いまの時刻で書き出す（Esc・拒否は hook が発火せず、会話ログにだけ残る） */
+/** 会話ログを、直前の hook より後に書かれたものとして置く（ファイルの時刻は数 ms 単位と粗いので、書いた時刻は明示する） */
 async function writeTranscript(path: string, fixture: string) {
-  const now = new Date().toISOString();
-  const lines = (await read(fixture)).map((l) => JSON.stringify({ ...JSON.parse(l), timestamp: now }));
+  const at = new Date(Date.now() + 1);
+  const lines = (await read(fixture)).map((l) => JSON.stringify({ ...JSON.parse(l), timestamp: at.toISOString() }));
   writeFileSync(path, `${lines.join("\n")}\n`);
+  utimesSync(path, at, at);
 }
 
 // ---------------------------------------------------------------------

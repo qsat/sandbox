@@ -14,6 +14,7 @@ import { agentEnded, agentForgotten, agentRestored, isAgentEvent } from "../../m
 import { acknowledged } from "../../modules/app/attention/slice.ts";
 import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
 import { isReplayed, replayed } from "../../utils/replayed.ts";
+import { effects, on } from "../effects.ts";
 import { defaultDir, openLog } from "./log.ts";
 
 /** pid が分からないエージェントを、ログの更新が途絶えてから保持する期間 */
@@ -31,9 +32,8 @@ export interface EventLogOptions {
   follow?: boolean; // 他のプロセスが書いた分を取り込み続ける（watch）
 }
 
-export const eventLog =
-  (o: EventLogOptions = {}): AppMiddleware =>
-  (api) => {
+export const eventLog = (o: EventLogOptions = {}): AppMiddleware =>
+  effects((api) => {
     const log = openLog(o.dir ?? defaultDir());
     const offsets = new Map<string, number>(); // このプロセスが読み終えた位置。見張りでは差分だけ流す
     let stopWatching: (() => void) | undefined;
@@ -73,33 +73,31 @@ export const eventLog =
       }
     };
 
-    return (next) => (action) => {
-      if (isRecorded(action) && !isReplayed(action)) {
+    return [
+      // 状態を変えた出来事だけを記録する（流し直した出来事は記録済み）
+      on(isRecorded, (action, prev) => {
+        if (isReplayed(action)) return;
         const id = action.payload.agentId;
-        const [agent, attention] = recordOf(api.getState(), id);
-        const result = next(action);
-        const after = recordOf(api.getState(), id);
         if (agentEnded.match(action)) {
           log.remove(id);
           offsets.delete(id);
-        } else if (after[0] !== agent || after[1] !== attention) {
-          log.append(id, action);
+          return;
         }
-        return result;
-      }
-      const result = next(action);
-      if (initialized.match(action)) {
-        for (const l of log.list()) load(l.id, l.mtimeMs, action.payload.at);
-        if (o.follow && !stopWatching) {
-          let timer: Timer | undefined;
-          stopWatching = log.watch(() => {
-            clearTimeout(timer); // 連続した追記はまとめて取り込む
-            timer = setTimeout(follow, 50);
-          });
-        }
-      } else if (ticked.match(action) && o.follow) {
-        follow(); // 見張りが取りこぼしたときの保険
-      }
-      return result;
-    };
-  };
+        const [agent, attention] = recordOf(api.getState(), id);
+        const [agentBefore, attentionBefore] = recordOf(prev, id);
+        if (agent !== agentBefore || attention !== attentionBefore) log.append(id, action);
+      }),
+      on(initialized, ({ payload: { at } }) => {
+        for (const l of log.list()) load(l.id, l.mtimeMs, at);
+        if (!o.follow || stopWatching) return;
+        let timer: Timer | undefined;
+        stopWatching = log.watch(() => {
+          clearTimeout(timer); // 連続した追記はまとめて取り込む
+          timer = setTimeout(follow, 50);
+        });
+      }),
+      on(ticked, () => {
+        if (o.follow) follow(); // 見張りが取りこぼしたときの保険
+      }),
+    ];
+  });

@@ -3,14 +3,14 @@
  */
 import type { AppMiddleware } from "../../createStore.ts";
 import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
+import { effects, on } from "../effects.ts";
 
-export const clock =
-  (o: { intervalMs: number }): AppMiddleware =>
-  (api) => {
+export const clock = (o: { intervalMs: number }): AppMiddleware =>
+  effects((api) => {
     let timer: Timer | undefined;
-    return (next) => (action) => {
-      const result = next(action);
-      if (initialized.match(action) && !timer) timer = setInterval(() => api.dispatch(ticked({ at: Date.now() })), o.intervalMs);
-      return result;
-    };
-  };
+    return [
+      on(initialized, () => {
+        timer ??= setInterval(() => api.dispatch(ticked({ at: Date.now() })), o.intervalMs);
+      }),
+    ];
+  });

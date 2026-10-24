@@ -14,6 +14,7 @@ import { dirtyScanned, reposScanned } from "../../modules/app/workspace/slice.ts
 import { reloadPressed } from "../../modules/ui/watch/slice.ts";
 import type { Filter, Repository } from "../../types/workspace.ts";
 import { repoName } from "../../utils/repoName.ts";
+import { always, effects, on } from "../effects.ts";
 import * as cli from "./git.ts";
 
 export interface GitOptions {
@@ -25,7 +26,7 @@ export interface GitOptions {
 const REPOS_EVERY = 15_000;
 
 /** ghq 管理下のリポジトリ（フラット展開の worktree が ghq 配下にあっても重複させない） */
-function scanRepos(roots: string[], query?: string): Repository[] {
+function scanRepoPaths(roots: string[], query?: string): Repository[] {
   const byMain = new Map<string, Repository>();
   for (const path of cli.listRepoPaths(roots, query)) {
     const worktrees = cli.listWorktrees(path);
@@ -45,37 +46,37 @@ const shownWorktrees = (filter: Filter) =>
       .map((w) => w.path);
   });
 
-export const git =
-  (o: GitOptions = {}): AppMiddleware =>
-  (api) => {
+export const git = (o: GitOptions = {}): AppMiddleware =>
+  effects((api) => {
     const selectShown = o.dirty ? shownWorktrees(o.dirty) : () => [];
     let counted: string | null = null; // 最後に数えたときの表示する worktree（中身で比べる）
     let counts = 0;
 
-    const scanReposAt = (at: number) => {
+    const scanRepos = (at: number) => {
       if (!o.repos) return;
       const roots = cli.ghqRoots();
-      api.dispatch(reposScanned({ roots, repos: scanRepos(roots, o.repos.query), at }));
+      api.dispatch(reposScanned({ roots, repos: scanRepoPaths(roots, o.repos.query), at }));
     };
-    const countDirty = (shown: string[]) => {
+    const countDirty = () => {
+      if (!o.dirty) return;
+      const shown = selectShown(api.getState());
       counted = shown.join("\n");
       counts++;
       api.dispatch(dirtyScanned(Object.fromEntries(shown.map((p) => [p, cli.countDirty(p)]))));
     };
 
-    return (next) => (action) => {
-      const result = next(action);
-      const countsBefore = counts;
-      if (initialized.match(action) || reloadPressed.match(action)) {
-        scanReposAt(api.getState().app.lifecycle.now);
-      } else if (ticked.match(action)) {
+    return [
+      on([initialized, reloadPressed], () => scanRepos(api.getState().app.lifecycle.now)),
+      on(ticked, ({ payload: { at } }) => {
+        const before = counts;
         const last = api.getState().app.workspace.scannedAt;
-        if (last === null || action.payload.at - last >= REPOS_EVERY) scanReposAt(action.payload.at);
-      }
-      if (!o.dirty) return result;
-      // 表示する worktree が変わったら数え直す。時間が経ったら（ファイルが変わっているかもしれないので）、まだ数えていなければ数え直す
-      const shown = selectShown(api.getState());
-      if (shown.join("\n") !== counted || (ticked.match(action) && counts === countsBefore)) countDirty(shown);
-      return result;
-    };
-  };
+        if (last === null || at - last >= REPOS_EVERY) scanRepos(at);
+        // ファイルが変わっているかもしれないので、まだ数えていなければ数え直す
+        if (counts === before) countDirty();
+      }),
+      // 表示する worktree（リポジトリ構成・エージェントの居場所から決まる）が変わったら数え直す
+      always(() => {
+        if (o.dirty && selectShown(api.getState()).join("\n") !== counted) countDirty();
+      }),
+    ];
+  });

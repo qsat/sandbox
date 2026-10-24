@@ -11,6 +11,7 @@ import { agentAttached, agentEnded, agentForgotten, agentProcessesScanned } from
 import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
 import type { AgentProcess } from "../../types/agent.ts";
 import { detectAgent } from "../../utils/detectAgent.ts";
+import { effects, on } from "../effects.ts";
 import * as proc from "./proc.ts";
 
 /** SessionEnd はプロセスが終わる前に届くので、終わるのを待ってから取り直す */
@@ -24,9 +25,8 @@ function agentProcesses(): AgentProcess[] {
   });
 }
 
-export const processes =
-  (o: { list?: boolean } = {}): AppMiddleware =>
-  (api) => {
+export const processes = (o: { list?: boolean } = {}): AppMiddleware =>
+  effects((api) => {
     let rescanQueued = false;
     const scan = () => api.dispatch(agentProcessesScanned(agentProcesses()));
     /** 出来事が続けて届いても、取り直しは1回にまとめる */
@@ -39,20 +39,21 @@ export const processes =
       }, delayMs);
     };
 
-    return (next) => (action) => {
-      const result = next(action);
-      if (initialized.match(action) || ticked.match(action)) {
+    return [
+      on([initialized, ticked], ({ payload: { at } }) => {
         for (const a of selectAgents(api.getState())) {
-          if (a.pid && !proc.isAlive(a.pid)) api.dispatch(agentEnded({ agentId: a.id, at: action.payload.at }));
+          if (a.pid && !proc.isAlive(a.pid)) api.dispatch(agentEnded({ agentId: a.id, at }));
         }
         if (o.list) scan();
-      } else if (o.list && agentForgotten.match(action)) {
-        rescanSoon(AFTER_END);
-      } else if (o.list && agentAttached.match(action)) {
+      }),
+      on(agentForgotten, () => {
+        if (o.list) rescanSoon(AFTER_END);
+      }),
+      // エージェントが増えて、その pid がまだ一覧に無い
+      on(agentAttached, ({ payload }) => {
         const st = api.getState();
-        const pid = st.app.agents.byId[action.payload.agentId]?.pid;
-        if (pid && !selectAgentProcesses(st).some((p) => p.pid === pid)) rescanSoon(0);
-      }
-      return result;
-    };
-  };
+        const pid = st.app.agents.byId[payload.agentId]?.pid;
+        if (o.list && pid && !selectAgentProcesses(st).some((p) => p.pid === pid)) rescanSoon(0);
+      }),
+    ];
+  });
