@@ -3,7 +3,7 @@
  * 選択中の行・スクロール位置は呼び出し側の状態（Store の ui.watch）にあり、ここは読んで描くのと、変更を頼むだけ。
  * 何を表示するか・どう移動するかも関数で受け取る（このモジュールは I/O の中身を知らない）
  */
-import type { JumpTarget } from "../redux/types/navigation.ts";
+import type { VisitTarget } from "../redux/types/visit.ts";
 import type { ColorMode } from "./terminal.ts";
 import { formatRow, paint } from "./terminal.ts";
 import type { Cell, Row } from "./view.ts";
@@ -14,9 +14,9 @@ export interface WatchOptions {
   subscribe: (onChange: () => void) => void; // 表示する状態が変わったら呼ばれる
   select: (key: string | null) => void;
   scroll: (top: number) => void;
-  jump: (t: JumpTarget) => boolean; // 移動できたら true（結果のメッセージは view().message に出る）
+  visit: (t: VisitTarget) => boolean; // 移動できたら true（結果のメッセージは view().message に出る）
   reload: () => void; // r キー: リポジトリ構成から読み直す
-  exitOnJump: boolean; // display-popup 内で使うとき、移動したら閉じる
+  exitOnVisit: boolean; // display-popup 内で使うとき、移動したら閉じる
   color: ColorMode;
 }
 
@@ -65,7 +65,7 @@ export function runWatch(o: WatchOptions): void {
   };
   const enter = () => {
     const target = o.rows().find((r) => r.key === o.view().cursor)?.target;
-    if (target && o.jump(target) && o.exitOnJump) quit();
+    if (target && o.visit(target) && o.exitOnVisit) quit();
   };
   const keys: Record<string, () => void> = {
     j: () => move(1),

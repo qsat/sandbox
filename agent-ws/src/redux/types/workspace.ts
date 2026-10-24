@@ -1,10 +1,6 @@
-/** リポジトリ・worktree・プロセス */
+/** ワークスペース: リポジトリと worktree（どこで作業しているか） */
 
-import type { Session } from "./session.ts";
-
-export type Pid = number;
-
-export type AgentKind = "claude" | "codex" | "aider" | "gemini" | "cursor" | "copilot" | "opencode" | "amp";
+import type { Agent, AgentProcess } from "./agent.ts";
 
 export interface Repository {
   name: string; // ghq root からの相対（github.com/owner/repo）
@@ -21,26 +17,17 @@ export interface Worktree {
   locked: boolean;
   prunable: boolean;
   dirty: number | null; // 変更ファイル数（表示対象だけ数える）
-  processes: Proc[];
+  agents: AgentAt[]; // この worktree にいるエージェント（selector で結びつける）
 }
 
-/** OS から見えるプロセス */
-export interface ProcInfo {
-  pid: Pid;
-  ppid: Pid;
-  elapsed: string;
-  command: string;
-  cwd: string | null; // 読めなければ null
-}
-
-/** worktree に属するプロセス。エージェントなら agent / session が付く */
-export interface Proc extends ProcInfo {
-  cwd: string;
-  agent: AgentKind | null;
-  session: Session | null;
+/** worktree にいるエージェント: プロセスと、hook で分かった状況（hook が届いていなければ null）と、完了を見ていないか */
+export interface AgentAt {
+  process: AgentProcess;
+  agent: Agent | null;
+  unseen: boolean;
 }
 
 export interface Filter {
-  all: boolean; // 何も動いていないリポジトリも出す
-  agentsOnly: boolean; // エージェントのプロセスだけ（いない worktree は省く）
+  all: boolean; // エージェントがいないリポジトリも出す
+  agentsOnly: boolean; // エージェントのいる worktree だけ
 }

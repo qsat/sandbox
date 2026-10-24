@@ -1,12 +1,14 @@
 /**
  * Store を作る（ファクトリ。import しただけではインスタンスは作られない）
  *
- *   dispatch ─→ middleware ─┬→ listener（各モジュールの listener.ts。entry が必要な分だけ addAppListener で登録する）
- *                           └→ persistence（セッションのアクションをログに追記）
+ *   dispatch ─→ listener ─→ effects ─→ log ─→ reducer
+ *     listener: 時間の経過を待つなど I/O を伴わないつなぎ（要るモジュールにだけある）
+ *     effects:  entry が選んだ middleware（claude・system・tmux・notifier）。意図を受けて I/O し、結果を出来事として戻す
+ *     log:      出来事の記録（eventLog）。reducer の直前に置く。effects が出来事の途中で出した出来事（表示中の完了の確認など）
+ *               より先に記録しないと、ログの順序が入れ替わり、流し直したときの状態が変わってしまう
  *
- * reducer と middleware は全コマンド共通。listener はコマンドによって要らない・困るもの
- * （status から tmux を再描画させる、hook 以外で通知するなど）があるので、ここでは登録しない。
- * thunk は使わない（I/O はすべて listener が受け持ち、結果をアクションで戻す）。
+ * modules（slice・selector・listener）は I/O を知らない。どの middleware を組むかはコマンドごとに entry が決める
+ * （status から tmux を再描画させない、通知は hook だけ、など）。thunk は使わない。
  */
 import {
   addListener,
@@ -14,35 +16,42 @@ import {
   configureStore,
   createListenerMiddleware,
   type Dispatch,
+  type Middleware,
   type UnknownAction,
 } from "@reduxjs/toolkit";
-import { persistence } from "./middlewares/persistence.ts";
-import { sessionsReducer } from "./modules/app/sessions/slice.ts";
+import { agentsReducer } from "./modules/app/agents/slice.ts";
+import { attentionReducer } from "./modules/app/attention/slice.ts";
 import { workspace } from "./modules/app/workspace/slice.ts";
-import { navigation } from "./modules/ui/navigation/slice.ts";
+import { visit } from "./modules/ui/visit/slice.ts";
 import { watchView } from "./modules/ui/watch/slice.ts";
 
-/** app: エージェントとワークスペースの状態 / ui: 画面の状態 */
-const rootReducer = combineReducers({
-  app: combineReducers({ sessions: sessionsReducer, workspace: workspace.reducer }),
-  ui: combineReducers({ navigation: navigation.reducer, watch: watchView.reducer }),
+/** app: エージェント・人の対応・ワークスペース / ui: 画面の状態 */
+export const rootReducer = combineReducers({
+  app: combineReducers({ agents: agentsReducer, attention: attentionReducer, workspace: workspace.reducer }),
+  ui: combineReducers({ visit: visit.reducer, watch: watchView.reducer }),
 });
 
 export type RootState = ReturnType<typeof rootReducer>;
 export type AppDispatch = Dispatch<UnknownAction>;
+export type AppMiddleware = Middleware<unknown, RootState, AppDispatch>;
 
 /** 型付きの listener 登録アクション。各モジュールの listener.ts はこれを返し、entry が dispatch する */
 export const addAppListener = addListener.withTypes<RootState, AppDispatch>();
 export type AppListener = ReturnType<typeof addAppListener>;
 
-export function createStore() {
+export interface StoreParts {
+  log?: AppMiddleware; // 出来事の記録。reducer の直前に組む
+  effects?: AppMiddleware[]; // 外部システムとのやりとり
+}
+
+export function createStore({ log, effects = [] }: StoreParts = {}) {
   return configureStore({
     reducer: rootReducer,
     // 状態もアクションも素の JSON なので、開発時の検査は省く（hook の起動を軽くする）
     middleware: (defaults) =>
       defaults({ thunk: false, serializableCheck: false, immutableCheck: false })
         .prepend(createListenerMiddleware().middleware)
-        .concat(persistence),
+        .concat(...effects, ...(log ? [log] : [])),
   });
 }
 

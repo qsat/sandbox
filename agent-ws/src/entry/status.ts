@@ -1,9 +1,12 @@
-import { selectStatusFlags } from "../redux/modules/ui/statusLine/selector.ts";
+import { claude } from "../redux/middlewares/claude/index.ts";
+import { system } from "../redux/middlewares/system/index.ts";
+import { selectStatusFlags } from "../redux/modules/app/attention/selector.ts";
 import { type ColorMode, formatCells } from "../ui/terminal.ts";
 import { statusLine } from "../ui/view.ts";
-import { sessionStore } from "./store.ts";
+import { loadAgents, storeWith } from "./store.ts";
 
-/** ステータスラインから呼ばれる。ここで tmux を描き直させると自分がまた呼ばれるので、statusLine の listener は登録しない */
+/** ステータスラインから呼ばれる。ここで tmux を描き直させると自分がまた呼ばれるので、tmux の middleware は組まない */
 export function runStatus(o: { color: ColorMode }): void {
-  console.log(formatCells(statusLine(selectStatusFlags(sessionStore().getState())), o.color));
+  const store = loadAgents(storeWith(system(), claude()));
+  console.log(formatCells(statusLine(selectStatusFlags(store.getState())), o.color));
 }

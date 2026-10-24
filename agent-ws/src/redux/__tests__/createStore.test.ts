@@ -2,42 +2,61 @@ import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { type AppMiddleware, createStore } from "../createStore.ts";
+import { claude, hookReceived } from "../middlewares/claude/index.ts";
+import { eventLog } from "../middlewares/eventLog/index.ts";
+import { tmux } from "../middlewares/tmux/index.ts";
+import { agentAttached, agentsRequested, turnFinished, turnStarted } from "../modules/app/agents/slice.ts";
+import { selectUnseen } from "../modules/app/attention/selector.ts";
+import { acknowledged } from "../modules/app/attention/slice.ts";
+import { visitRequested } from "../modules/ui/visit/slice.ts";
 
-// ログの置き場所は読み込み時に決まるので、先に一時ディレクトリへ向けてから読み込む
 const dir = mkdtempSync(join(tmpdir(), "agent-ws-test-"));
-process.env.AGENT_WS_STATE_DIR = dir;
-const { createStore, listen } = await import("../createStore.ts");
-const { sessionListeners } = await import("../modules/app/sessions/listener.ts");
-const { hookReceived, sessionsRequested } = await import("../modules/app/sessions/slice.ts");
-const { navigationListeners } = await import("../modules/ui/navigation/listener.ts");
-const { jumpRequested } = await import("../modules/ui/navigation/slice.ts");
-const eventLog = await import("../infra/eventLog.ts");
+const hook = (input: Record<string, unknown>, at: number) => hookReceived({ input: { session_id: "s1", cwd: dir, ...input }, at });
 
-test("意図は dispatch の中で listener が処理し、セッションのアクションはログに残る", () => {
-  expect(eventLog.DIR).toBe(dir);
-  const store = createStore();
-  listen(store, sessionListeners());
-  store.dispatch(hookReceived({ input: { hook_event_name: "SessionStart", session_id: "s1", cwd: dir }, at: 1 }));
-  store.dispatch(hookReceived({ input: { hook_event_name: "UserPromptSubmit", session_id: "s1" }, at: 2 }));
-  // dispatch から戻った時点で処理が終わっている（entry はこれに頼っている）
-  expect(store.getState().app.sessions.s1).toMatchObject({ status: "running", since: 2 });
+test("hook の入力は middleware が出来事に変えてログに残し、別の Store がログから同じ状態を組み立てる", () => {
+  const store = createStore({ log: eventLog({ dir }), effects: [claude()] });
+  store.dispatch(hook({ hook_event_name: "SessionStart" }, 1));
+  store.dispatch(hook({ hook_event_name: "UserPromptSubmit" }, 2));
+  store.dispatch(hook({ hook_event_name: "Stop", last_assistant_message: "終わり" }, 3));
+  // dispatch から戻った時点で I/O まで終わっている（entry はこれに頼っている）
+  expect(store.getState().app.agents.byId.s1?.turn).toMatchObject({ status: "ready", reason: "終わり", since: 3 });
+  expect(selectUnseen(store.getState(), "s1")).toBe(true);
 
-  // 別のプロセス（別の Store）はログから同じ状態を組み立てる
-  const other = createStore();
-  listen(other, sessionListeners());
-  other.dispatch(sessionsRequested());
-  expect(other.getState().app.sessions.s1).toEqual(store.getState().app.sessions.s1);
+  // 別のプロセス（別の Store）はログから同じ状態を組み立てる。確認（acknowledged）もログに残る
+  store.dispatch(acknowledged({ agentId: "s1", at: 4 }));
+  const other = createStore({ log: eventLog({ dir }) });
+  other.dispatch(agentsRequested());
+  expect(other.getState().app).toEqual({ ...store.getState().app });
 });
 
-test("listener を登録しない Store では意図は何も起こさない（entry が要る分だけ登録する）", () => {
+test("middleware を組まない Store では意図は何も起こさない（entry が要る分だけ組む）", () => {
   const store = createStore();
-  store.dispatch(sessionsRequested());
-  expect(store.getState().app.sessions).toEqual({});
+  store.dispatch(agentsRequested());
+  expect(store.getState().app.agents.byId).toEqual({});
 });
 
-test("移動の結果は jumped で Store に戻る", () => {
-  const store = createStore();
-  listen(store, navigationListeners());
-  store.dispatch(jumpRequested({ target: { title: "x", name: "x", path: "/nonexistent" }, create: false }));
-  expect(store.getState().ui.navigation.lastJump).toEqual({ kind: "notFound", title: "x" });
+test("移動の結果は visited で Store に戻る", () => {
+  const store = createStore({ effects: [tmux()] });
+  store.dispatch(visitRequested({ target: { title: "x", name: "x", path: "/nonexistent" }, create: false }));
+  expect(store.getState().ui.visit.last).toEqual({ kind: "notFound", title: "x" });
+});
+
+test("effects が出来事の途中で出した出来事は、元の出来事より後に記録される（流し直しても同じ状態になる）", () => {
+  const logDir = mkdtempSync(join(tmpdir(), "agent-ws-test-"));
+  // 表示中のペインで完了したときの tmux のように、完了の途中で確認を出す
+  const seesIt: AppMiddleware = (api) => (next) => (action) => {
+    const result = next(action);
+    if (turnFinished.match(action)) api.dispatch(acknowledged({ agentId: action.payload.agentId, at: action.payload.at }));
+    return result;
+  };
+  const store = createStore({ log: eventLog({ dir: logDir }), effects: [seesIt] });
+  store.dispatch(agentAttached({ agentId: "a", at: 1, pid: null, cwd: dir }));
+  store.dispatch(turnStarted({ agentId: "a", at: 2 }));
+  store.dispatch(turnFinished({ agentId: "a", at: 3, background: false }));
+  expect(selectUnseen(store.getState(), "a")).toBe(false);
+
+  const other = createStore({ log: eventLog({ dir: logDir }) });
+  other.dispatch(agentsRequested());
+  expect(selectUnseen(other.getState(), "a")).toBe(false);
 });

@@ -1,10 +1,10 @@
-import type { JumpTarget, Pane } from "../types/navigation.ts";
-import type { Pid } from "../types/workspace.ts";
+import type { Pid } from "../types/agent.ts";
+import type { Pane, VisitTarget } from "../types/visit.ts";
 import { ancestry } from "./ancestry.ts";
 import { isUnder } from "./isUnder.ts";
 
 /** pid の祖先を辿って pane_pid に行き着くペイン。なければ path 配下にいるペイン（完全一致・アクティブ優先） */
-export function findPane(t: JumpTarget, panes: Pane[], parentOf: (pid: Pid) => Pid | undefined): Pane | undefined {
+export function findPane(t: VisitTarget, panes: Pane[], parentOf: (pid: Pid) => Pid | undefined): Pane | undefined {
   const byPid = new Map(panes.map((p) => [p.pid, p]));
   for (const pid of ancestry(t.pid, parentOf)) {
     const hit = byPid.get(pid);

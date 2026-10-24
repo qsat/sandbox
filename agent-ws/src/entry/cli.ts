@@ -14,13 +14,13 @@
  *           AGENT_WS_DUMP（hook の入力をそのまま追記するファイル。入力の形を確かめるとき用）
  *
  * 構成（依存は矢印の向きだけ）:
- *   entry/*（初期化）─┬→ redux/createStore ─→ redux/modules/{app,ui}/{slug}/{slice,selector,listener}
- *                    │                          └→ redux/utils/*（純粋な関数）・redux/infra/*（I/O）
- *                    └→ ui/*（描画）
+ *   entry/*（コマンドごとに middleware を選んで Store を作る）─┬→ redux/middlewares/*（外部システムとのやりとり: eventLog・claude・system・tmux・notifier）
+ *                                                             │        └→ redux/modules/{app,ui}/*（ドメイン: slice・selector・listener。I/O を知らない）
+ *                                                             └→ ui/*（描画）
  */
 import { parseArgs } from "node:util";
-import { realPath } from "../redux/infra/shell.ts";
-import { hooksConfig } from "../redux/modules/app/sessions/hook.ts";
+import { hooksConfig } from "../redux/middlewares/claude/hook.ts";
+import { realPath } from "../redux/middlewares/system/shell.ts";
 import type { ColorMode } from "../ui/terminal.ts";
 import { runHook } from "./hook.ts";
 import { runJump } from "./jump.ts";

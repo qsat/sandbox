@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { Pane } from "../../types/navigation.ts";
+import type { Pane } from "../../types/visit.ts";
 import { findPane } from "../findPane.ts";
 
 test("findPane: pid の祖先 → パスの順で探す", () => {

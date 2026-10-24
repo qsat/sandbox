@@ -1,4 +1,4 @@
-import type { Pid } from "../types/workspace.ts";
+import type { Pid } from "../types/agent.ts";
 
 /** pid 自身から祖先へ順に辿る */
 export function* ancestry(pid: Pid | null | undefined, parentOf: (pid: Pid) => Pid | undefined): Generator<Pid> {

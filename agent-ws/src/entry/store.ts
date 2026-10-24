@@ -1,20 +1,20 @@
 /**
- * 各コマンドの Store の初期化: 共通の Store に、そのコマンドで要る listener だけを登録する
+ * Store の組み立て: コマンドごとに要る middleware（と listener）を選んで Store を作る
  */
-import { type AppListener, type AppStore, createStore, listen } from "../redux/createStore.ts";
-import { sessionListeners } from "../redux/modules/app/sessions/listener.ts";
-import { sessionsRequested, settleRequested } from "../redux/modules/app/sessions/slice.ts";
+import { type AppMiddleware, type AppStore, createStore } from "../redux/createStore.ts";
+import { eventLog } from "../redux/middlewares/eventLog/index.ts";
+import { agentsRequested, interruptionCheckRequested, livenessCheckRequested } from "../redux/modules/app/agents/slice.ts";
 
-export function initStore(...groups: AppListener[][]): AppStore {
-  const store = createStore();
-  listen(store, ...groups);
+export { listen } from "../redux/createStore.ts";
+
+/** ログからエージェントを組み立て、プロセスが消えたもの・中断されたものを片付ける（system と claude の middleware が要る） */
+export function loadAgents(store: AppStore): AppStore {
+  const at = Date.now();
+  store.dispatch(agentsRequested());
+  store.dispatch(livenessCheckRequested({ at }));
+  store.dispatch(interruptionCheckRequested({ at }));
   return store;
 }
 
-/** ログからセッションを組み立て、消えたプロセス・中断を片付けた Store */
-export function sessionStore(...groups: AppListener[][]): AppStore {
-  const store = initStore(sessionListeners(), ...groups);
-  store.dispatch(sessionsRequested());
-  store.dispatch(settleRequested({ at: Date.now() }));
-  return store;
-}
+/** 出来事を記録する Store（記録は reducer の直前、effects はその外側に組まれる） */
+export const storeWith = (...effects: AppMiddleware[]) => createStore({ log: eventLog(), effects });
