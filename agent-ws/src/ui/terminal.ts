@@ -6,11 +6,30 @@ import type { Cell, Row, Tone } from "./view.ts";
 export type ColorMode = "none" | "ansi" | "tmux";
 
 const ANSI: Record<Tone, string> = {
-  plain: "", strong: "1", dim: "2", title: "1;36", agent: "35", ok: "32", warn: "33",
-  waiting: "1;33", asking: "1;34", ready: "32", running: "36", error: "31", done: "2;32",
+  plain: "",
+  strong: "1",
+  dim: "2",
+  title: "1;36",
+  agent: "35",
+  ok: "32",
+  warn: "33",
+  waiting: "1;33",
+  asking: "1;34",
+  ready: "32",
+  running: "36",
+  error: "31",
+  done: "2;32",
 };
 const TMUX: Partial<Record<Tone, string>> = {
-  agent: "magenta", ok: "green", warn: "yellow", waiting: "yellow", asking: "blue", ready: "green", running: "cyan", error: "red", done: "green",
+  agent: "magenta",
+  ok: "green",
+  warn: "yellow",
+  waiting: "yellow",
+  asking: "blue",
+  ready: "green",
+  running: "cyan",
+  error: "red",
+  done: "green",
 };
 const GAP = "  ";
 

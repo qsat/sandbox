@@ -25,5 +25,7 @@ export async function runHook(): Promise<void> {
       }),
     );
     store.dispatch(hookReceived({ input: JSON.parse(input || "{}") as HookInput, at: Date.now() }));
-  } catch { /* 無視 */ }
+  } catch {
+    /* 無視 */
+  }
 }

@@ -68,12 +68,17 @@ export function runWatch(o: WatchOptions): void {
     if (target && o.jump(target) && o.exitOnJump) quit();
   };
   const keys: Record<string, () => void> = {
-    j: () => move(1), "\x1b[B": () => move(1),
-    k: () => move(-1), "\x1b[A": () => move(-1),
-    g: () => move(-Infinity), G: () => move(Infinity),
+    j: () => move(1),
+    "\x1b[B": () => move(1),
+    k: () => move(-1),
+    "\x1b[A": () => move(-1),
+    g: () => move(-Infinity),
+    G: () => move(Infinity),
     r: () => o.reload(),
     "\r": enter,
-    q: quit, "\x1b": quit, "\x03": quit,
+    q: quit,
+    "\x1b": quit,
+    "\x03": quit,
   };
 
   out.write("\x1b[?25l"); // カーソル非表示
@@ -85,7 +90,14 @@ export function runWatch(o: WatchOptions): void {
     process.stdin.on("data", (key: string) => keys[key]?.());
   }
   // 変化が続いても描画は 1 フレームにまとめる
-  let pending: Timer | undefined;
-  o.subscribe(() => (pending ??= setTimeout(() => ((pending = undefined), draw()), 30)));
+  let pending = false;
+  o.subscribe(() => {
+    if (pending) return;
+    pending = true;
+    setTimeout(() => {
+      pending = false;
+      draw();
+    }, 30);
+  });
   draw();
 }

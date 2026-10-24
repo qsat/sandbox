@@ -1,7 +1,7 @@
 /**
  * セッションの副作用: ログの読み込み・取り込み・掃除、hook の受け付け、既読化
  */
-import { addAppListener, type AppDispatch, type AppListener, type RootState } from "../../../createStore.ts";
+import { type AppDispatch, type AppListener, addAppListener, type RootState } from "../../../createStore.ts";
 import * as eventLog from "../../../infra/eventLog.ts";
 import * as proc from "../../../infra/proc.ts";
 import { realPath } from "../../../infra/shell.ts";
@@ -14,8 +14,20 @@ import { findPane } from "../../../utils/findPane.ts";
 import { interruptedSince, toActions } from "./hook.ts";
 import { selectSession, selectSessions } from "./selector.ts";
 import {
-  attached, ended, followStarted, forgotten, hookReceived, interrupted, isBlocked, logReplayed, logsChanged, seen, seenInPaneRequested,
-  sessionsRequested, settleRequested, stopped,
+  attached,
+  ended,
+  followStarted,
+  forgotten,
+  hookReceived,
+  interrupted,
+  isBlocked,
+  logReplayed,
+  logsChanged,
+  seen,
+  seenInPaneRequested,
+  sessionsRequested,
+  settleRequested,
+  stopped,
 } from "./slice.ts";
 
 /** pid が分からないセッションを、ログの更新が途絶えてから保持する期間 */
@@ -148,7 +160,7 @@ export const sessionListeners = (): AppListener[] => [
         timer = setTimeout(() => api.dispatch(logsChanged()), 50);
       });
       try {
-        for (;; await api.delay(intervalMs)) {
+        for (; ; await api.delay(intervalMs)) {
           api.dispatch(logsChanged()); // fs.watch が取りこぼしたときの保険
           api.dispatch(settleRequested({ at: Date.now() }));
         }

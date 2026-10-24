@@ -3,15 +3,29 @@
  *   <session>.jsonl      アクションを1行ずつ。並列に書く hook プロセスも追記するだけなのでロックは要らない
  *   <session>.snap.json  ある位置までを流した結果。ただのキャッシュなので、同時に書かれても同じ内容になる
  */
-import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, statSync, unlinkSync, watch as fsWatch, writeFileSync, appendFileSync } from "node:fs";
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  fstatSync,
+  watch as fsWatch,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { SessionAction } from "../modules/app/sessions/slice.ts";
 import type { Session } from "../types/session.ts";
 
 export const DIR =
-  process.env.AGENT_WS_STATE_DIR ??
-  join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "agent-ws", "sessions");
+  process.env.AGENT_WS_STATE_DIR ?? join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "agent-ws", "sessions");
 
 const safe = (s: string) => s.replace(/[^\w-]/g, "_");
 const logPath = (id: string) => join(DIR, `${safe(id)}.jsonl`);
@@ -49,7 +63,9 @@ export function read(id: string, from?: number): LogRead | null {
       const snap = JSON.parse(readFileSync(snapPath(id), "utf8")) as { offset: number; state: Session };
       base = snap.state;
       start = snap.offset;
-    } catch { /* 壊れていれば最初から */ }
+    } catch {
+      /* 壊れていれば最初から */
+    }
   }
   let fd: number;
   try {
@@ -63,13 +79,18 @@ export function read(id: string, from?: number): LogRead | null {
     readSync(fd, buf, 0, buf.length, start);
     // 書きかけの最終行は次回に回す
     const end = buf.lastIndexOf(0x0a) + 1;
-    const actions = buf.subarray(0, end).toString("utf8").split("\n").filter(Boolean).flatMap((l) => {
-      try {
-        return [JSON.parse(l) as SessionAction];
-      } catch {
-        return [];
-      }
-    });
+    const actions = buf
+      .subarray(0, end)
+      .toString("utf8")
+      .split("\n")
+      .filter(Boolean)
+      .flatMap((l) => {
+        try {
+          return [JSON.parse(l) as SessionAction];
+        } catch {
+          return [];
+        }
+      });
     return { base, actions, offset: start + end };
   } finally {
     closeSync(fd);
@@ -86,14 +107,18 @@ export function saveSnapshot(id: string, state: Session, offset: number): void {
   try {
     writeFileSync(tmp, JSON.stringify({ offset, state }));
     renameSync(tmp, snapPath(id));
-  } catch { /* キャッシュなので失敗してもよい */ }
+  } catch {
+    /* キャッシュなので失敗してもよい */
+  }
 }
 
 export function remove(id: string): void {
   for (const p of [logPath(id), snapPath(id)]) {
     try {
       unlinkSync(p);
-    } catch { /* 既に無い */ }
+    } catch {
+      /* 既に無い */
+    }
   }
 }
 

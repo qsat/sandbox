@@ -18,9 +18,15 @@ export const workspace = createSlice({
   name: "workspace",
   initialState,
   reducers: {
-    reposScanned: (st, a: PayloadAction<Repository[]>) => void (st.repos = a.payload),
-    processesScanned: (st, a: PayloadAction<ProcInfo[]>) => void (st.processes = a.payload),
-    dirtyScanned: (st, a: PayloadAction<Record<string, number | null>>) => void (st.dirty = a.payload),
+    reposScanned: (st, a: PayloadAction<Repository[]>) => {
+      st.repos = a.payload;
+    },
+    processesScanned: (st, a: PayloadAction<ProcInfo[]>) => {
+      st.processes = a.payload;
+    },
+    dirtyScanned: (st, a: PayloadAction<Record<string, number | null>>) => {
+      st.dirty = a.payload;
+    },
   },
 });
 export const { reposScanned, processesScanned, dirtyScanned } = workspace.actions;

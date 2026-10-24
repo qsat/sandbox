@@ -37,7 +37,9 @@ function scan(dir: string, depth: number): string[] {
   let entries: string[] = [];
   try {
     entries = readdirSync(dir);
-  } catch { /* 読めない */ }
+  } catch {
+    /* 読めない */
+  }
   return entries
     .filter((e) => !e.startsWith(".") && e !== "node_modules")
     .map((e) => join(dir, e))

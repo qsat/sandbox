@@ -22,7 +22,9 @@ function readCwds(): Map<Pid, string> {
     for (const d of readdirSync("/proc").filter((d) => /^\d+$/.test(d))) {
       try {
         cwds.set(Number(d), readlinkSync(`/proc/${d}/cwd`).replace(/ \(deleted\)$/, ""));
-      } catch { /* 権限なし・終了済み */ }
+      } catch {
+        /* 権限なし・終了済み */
+      }
     }
     return cwds;
   }
@@ -35,7 +37,9 @@ function readCwds(): Map<Pid, string> {
 }
 
 export function inspect(pid: Pid): { ppid: Pid; command: string } | null {
-  const m = run("ps", ["-o", "ppid=,command=", "-p", String(pid)])?.trim().match(/^(\d+)\s+(.*)$/);
+  const m = run("ps", ["-o", "ppid=,command=", "-p", String(pid)])
+    ?.trim()
+    .match(/^(\d+)\s+(.*)$/);
   return m ? { ppid: Number(m[1]), command: m[2] } : null;
 }
 

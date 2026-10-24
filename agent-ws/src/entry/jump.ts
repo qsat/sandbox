@@ -4,7 +4,7 @@ import { selectLastJump } from "../redux/modules/ui/navigation/selector.ts";
 import { jumpRequested } from "../redux/modules/ui/navigation/slice.ts";
 import { statusLineListeners } from "../redux/modules/ui/statusLine/listener.ts";
 import type { JumpTarget } from "../redux/types/navigation.ts";
-import { formatCells, type ColorMode } from "../ui/terminal.ts";
+import { type ColorMode, formatCells } from "../ui/terminal.ts";
 import { jumpMessage } from "../ui/view.ts";
 import { sessionStore } from "./store.ts";
 

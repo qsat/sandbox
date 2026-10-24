@@ -3,8 +3,7 @@
  */
 import type { RootState } from "../../../createStore.ts";
 import type { Session } from "../../../types/session.ts";
-import type { Proc, ProcInfo, Repository, Worktree } from "../../../types/workspace.ts";
-import type { Filter } from "../../../types/workspace.ts";
+import type { Filter, Proc, ProcInfo, Repository, Worktree } from "../../../types/workspace.ts";
 import { detectAgent } from "../../../utils/detectAgent.ts";
 import { isUnder } from "../../../utils/isUnder.ts";
 import { selectSessions } from "../sessions/selector.ts";
@@ -15,8 +14,7 @@ export function linkSessions(infos: ProcInfo[], sessions: Session[]): Proc[] {
   return infos.flatMap((p) => {
     if (!p.cwd) return [];
     const agent = detectAgent(p.command);
-    const session =
-      byPid.get(p.pid) ?? (agent === "claude" ? sessions.find((s) => !s.pid && s.cwd === p.cwd) : undefined) ?? null;
+    const session = byPid.get(p.pid) ?? (agent === "claude" ? sessions.find((s) => !s.pid && s.cwd === p.cwd) : undefined) ?? null;
     return [{ ...p, cwd: p.cwd, agent, session }];
   });
 }
@@ -36,9 +34,7 @@ export function attachProcesses(repos: Repository[], procs: Proc[]): Repository[
 export function selectRepos(repos: Repository[], f: Filter): Repository[] {
   const onlyAgents = (r: Repository): Repository => ({
     ...r,
-    worktrees: r.worktrees
-      .map((w) => ({ ...w, processes: w.processes.filter((p) => p.agent) }))
-      .filter((w) => w.processes.length),
+    worktrees: r.worktrees.map((w) => ({ ...w, processes: w.processes.filter((p) => p.agent) })).filter((w) => w.processes.length),
   });
   return repos
     .map((r) => (f.agentsOnly ? onlyAgents(r) : r))
@@ -49,7 +45,10 @@ export function selectRepos(repos: Repository[], f: Filter): Repository[] {
 /** 表示するツリー: 構成 × プロセス × セッション × 変更件数（selfPid は自分自身を一覧から除くため） */
 export function selectTree(st: RootState, filter: Filter, selfPid: number): Repository[] {
   const ws = st.app.workspace;
-  const procs = linkSessions(ws.processes.filter((p) => p.pid !== selfPid), selectSessions(st));
+  const procs = linkSessions(
+    ws.processes.filter((p) => p.pid !== selfPid),
+    selectSessions(st),
+  );
   return selectRepos(attachProcesses(ws.repos, procs), filter).map((r) => ({
     ...r,
     worktrees: r.worktrees.map((w) => ({ ...w, dirty: w.bare || w.prunable ? null : (ws.dirty[w.path] ?? null) })),

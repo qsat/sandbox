@@ -1,4 +1,4 @@
-import { addAppListener, type AppListener, type RootState } from "../../../createStore.ts";
+import { type AppListener, addAppListener, type RootState } from "../../../createStore.ts";
 import * as tmux from "../../../infra/tmux.ts";
 import { isSessionAction } from "../../app/sessions/slice.ts";
 import { selectStatusFlags } from "./selector.ts";

@@ -13,14 +13,15 @@ import type { Pid } from "../../../types/workspace.ts";
 // ---------------------------------------------------------------------
 // アクション（何が起きたか。すべて sessionId と発生時刻 at を持つ）
 // ---------------------------------------------------------------------
-type On<T = {}> = { sessionId: string; at: number } & T;
+type On<T = unknown> = { sessionId: string; at: number } & T;
 
 /** プロセス・場所が分かった（新しいセッションならここで生まれる） */
 export const attached = createAction<On<{ pid: Pid | null; cwd: string; transcript?: string }>>("session/attached");
 export const started = createAction<On<{ source?: string }>>("session/started");
 export const promptSubmitted = createAction<On>("session/promptSubmitted");
 /** 許可を求めた。question は答えを求める質問（AskUserQuestion など） */
-export const permissionRequested = createAction<On<{ agent?: AgentRef; summary: string; question: boolean }>>("session/permissionRequested");
+export const permissionRequested =
+  createAction<On<{ agent?: AgentRef; summary: string; question: boolean }>>("session/permissionRequested");
 export const toolUsed = createAction<On<{ agent?: AgentRef; tool: string }>>("session/toolUsed");
 /** 許可以外で人の入力を求めた（MCP の elicitation など） */
 export const notified = createAction<On<{ question: boolean; message?: string }>>("session/notified");
@@ -36,8 +37,19 @@ export const seen = createAction<On>("session/seen");
 export const ended = createAction<On>("session/ended");
 
 const sessionActions = [
-  attached, started, promptSubmitted, permissionRequested, toolUsed, notified, stopped, failed,
-  subagentStarted, subagentStopped, interrupted, seen, ended,
+  attached,
+  started,
+  promptSubmitted,
+  permissionRequested,
+  toolUsed,
+  notified,
+  stopped,
+  failed,
+  subagentStarted,
+  subagentStopped,
+  interrupted,
+  seen,
+  ended,
 ] as const;
 export type SessionAction = ReturnType<(typeof sessionActions)[number]>;
 /** ログに記録する対象のアクションか */
@@ -84,7 +96,8 @@ function setStatus(s: Session, status: SessionStatus, at: number, reason?: strin
 }
 
 function setSubagent(s: Session, agent: AgentRef, status: SubagentStatus, at: number, detail?: string): void {
-  const a = (s.subagents[agent.id] ??= { id: agent.id, type: agent.type, status, since: at });
+  s.subagents[agent.id] ??= { id: agent.id, type: agent.type, status, since: at };
+  const a = s.subagents[agent.id];
   if (a.status !== status) a.since = at;
   put(a, "status", status);
   if (detail !== undefined) put(a, "detail", detail);
@@ -101,7 +114,16 @@ export const sessionsReducer = createReducer({} as SessionsState, (b) => {
   b.addCase(attached, (st, { payload: p }) => {
     const s = st[p.sessionId];
     if (!s) {
-      st[p.sessionId] = { id: p.sessionId, pid: p.pid, cwd: p.cwd, transcript: p.transcript, status: "ready", since: p.at, unseen: false, subagents: {} };
+      st[p.sessionId] = {
+        id: p.sessionId,
+        pid: p.pid,
+        cwd: p.cwd,
+        transcript: p.transcript,
+        status: "ready",
+        since: p.at,
+        unseen: false,
+        subagents: {},
+      };
       return;
     }
     if (p.pid) put(s, "pid", p.pid);
@@ -115,17 +137,30 @@ export const sessionsReducer = createReducer({} as SessionsState, (b) => {
   });
 
   // 圧縮（compact）後の SessionStart はターンの途中でも来るので状態を変えない
-  on(started, (s, p) => p.source !== "compact" && (setStatus(s, "ready", p.at), put(s, "unseen", false)));
-  on(promptSubmitted, (s, p) => (setStatus(s, "running", p.at), put(s, "unseen", false)));
+  on(started, (s, p) => {
+    if (p.source === "compact") return;
+    setStatus(s, "ready", p.at);
+    put(s, "unseen", false);
+  });
+  on(promptSubmitted, (s, p) => {
+    setStatus(s, "running", p.at);
+    put(s, "unseen", false);
+  });
   on(permissionRequested, (s, p) =>
-    p.agent ? setSubagent(s, p.agent, "waiting", p.at, p.summary) : setStatus(s, p.question ? "asking" : "waiting", p.at, p.summary));
+    p.agent ? setSubagent(s, p.agent, "waiting", p.at, p.summary) : setStatus(s, p.question ? "asking" : "waiting", p.at, p.summary),
+  );
   on(toolUsed, (s, p) => (p.agent ? setSubagent(s, p.agent, "running", p.at, p.tool) : setStatus(s, "running", p.at)));
   on(notified, (s, p) => setStatus(s, p.question ? "asking" : "waiting", p.at, p.message));
   on(stopped, (s, p) => {
     setStatus(s, "ready", p.at, p.message);
     put(s, "unseen", !p.background);
     // バックグラウンドが残っていなければ、サブエージェントはすべて終わっている
-    if (!p.background) for (const a of Object.values(s.subagents)) if (a.status !== "done") (a.status = "done"), (a.since = p.at);
+    if (p.background) return;
+    for (const a of Object.values(s.subagents)) {
+      if (a.status === "done") continue;
+      a.status = "done";
+      a.since = p.at;
+    }
   });
   on(failed, (s, p) => setStatus(s, "error", p.at, p.error));
   on(subagentStarted, (s, p) => setSubagent(s, p.agent, "running", p.at));

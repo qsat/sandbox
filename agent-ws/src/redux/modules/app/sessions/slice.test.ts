@@ -5,10 +5,22 @@ import { noticeOf } from "../notification/selector.ts";
 import { attention } from "./selector.ts";
 import type { SessionAction, SessionsState } from "./slice.ts";
 import {
-  attached, interrupted, logReplayed, permissionRequested, promptSubmitted, seen, sessionsReducer, stopped, toolUsed,
+  attached,
+  interrupted,
+  logReplayed,
+  permissionRequested,
+  promptSubmitted,
+  seen,
+  sessionsReducer,
+  stopped,
+  toolUsed,
 } from "./slice.ts";
 
 const on = (at: number) => ({ sessionId: "s", at });
+const must = <T>(v: T | undefined): T => {
+  if (v === undefined) throw new Error("値がありません");
+  return v;
+};
 const init = sessionsReducer(undefined, { type: "init" });
 const run = (...actions: SessionAction[]) => actions.reduce<SessionsState>(sessionsReducer, init);
 const born = attached({ ...on(0), pid: 1, cwd: "/w" });
@@ -30,12 +42,13 @@ test("サブエージェントが2体許可を待つとき、片方が許可さ�
   const a = { id: "a", type: "Explore" };
   const b = { id: "b", type: "Explore" };
   const st = run(
-    born, promptSubmitted(on(1)),
+    born,
+    promptSubmitted(on(1)),
     permissionRequested({ ...on(2), agent: a, summary: "Bash: ls", question: false }),
     permissionRequested({ ...on(3), agent: b, summary: "Bash: pwd", question: false }),
     toolUsed({ ...on(4), agent: a, tool: "Bash" }),
   );
-  expect(attention(st.s!)).toMatchObject({ status: "waiting", subagent: { id: "b" } });
+  expect(attention(must(st.s))).toMatchObject({ status: "waiting", subagent: { id: "b" } });
 });
 
 test("完了は未確認になり、見るか次のプロンプトで消える。中断は未確認にしない", () => {
@@ -49,7 +62,7 @@ test("完了は未確認になり、見るか次のプロンプトで消える�
 
 test("ログの流し直しはスナップショットから続きを適用する", () => {
   const actions = [born, promptSubmitted(on(1))];
-  const base = run(...actions).s!;
+  const base = must(run(...actions).s);
   const replayed = sessionsReducer(init, logReplayed({ sessionId: "s", base, actions: [stopped({ ...on(2), background: false })] }));
   expect(replayed.s).toMatchObject({ status: "ready", unseen: true, since: 2 });
 });
@@ -59,5 +72,10 @@ test("noticeOf / selectStatusFlags: 通知とステータスラインの印", ()
   const done = sessionsReducer(running, stopped({ ...on(2), message: "終わり", background: false }));
   expect(noticeOf(running.s, done.s)).toEqual({ kind: "ready", reason: "終わり" });
   expect(noticeOf(undefined, run(born).s)).toBeNull(); // 起動直後は通知しない
-  expect(selectStatusFlags({ app: { sessions: done } } as RootState)).toEqual({ waiting: false, asking: false, unseen: true, error: false });
+  expect(selectStatusFlags({ app: { sessions: done } } as RootState)).toEqual({
+    waiting: false,
+    asking: false,
+    unseen: true,
+    error: false,
+  });
 });

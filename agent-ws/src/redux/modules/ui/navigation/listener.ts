@@ -1,4 +1,4 @@
-import { addAppListener, type AppListener } from "../../../createStore.ts";
+import { type AppListener, addAppListener } from "../../../createStore.ts";
 import * as proc from "../../../infra/proc.ts";
 import * as tmux from "../../../infra/tmux.ts";
 import type { JumpResult } from "../../../types/navigation.ts";

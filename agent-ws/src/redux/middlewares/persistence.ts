@@ -8,7 +8,7 @@ import * as eventLog from "../infra/eventLog.ts";
 import { selectSession } from "../modules/app/sessions/selector.ts";
 import { ended, isSessionAction } from "../modules/app/sessions/slice.ts";
 
-export const persistence: Middleware<{}, RootState> = (api) => (next) => (action) => {
+export const persistence: Middleware<unknown, RootState> = (api) => (next) => (action) => {
   if (!isSessionAction(action)) return next(action);
   const id = action.payload.sessionId;
   const before = selectSession(api.getState(), id);

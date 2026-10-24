@@ -13,10 +13,16 @@ export const navigation = createSlice({
   name: "navigation",
   initialState: { lastJump: null } as NavigationState,
   reducers: {
-    jumped: (st, a: PayloadAction<JumpResult>) => void (st.lastJump = a.payload),
+    jumped: (st, a: PayloadAction<JumpResult>) => {
+      st.lastJump = a.payload;
+    },
   },
   // 選択を動かしたら、前の移動の結果は出さない
-  extraReducers: (b) => b.addCase(cursorSet, (st) => void (st.lastJump = null)),
+  extraReducers: (b) => {
+    b.addCase(cursorSet, (st) => {
+      st.lastJump = null;
+    });
+  },
 });
 export const { jumped } = navigation.actions;
 

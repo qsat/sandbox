@@ -1,5 +1,5 @@
 import { sessionListeners } from "../redux/modules/app/sessions/listener.ts";
-import { sessionsRequested, seenInPaneRequested } from "../redux/modules/app/sessions/slice.ts";
+import { seenInPaneRequested, sessionsRequested } from "../redux/modules/app/sessions/slice.ts";
 import { statusLineListeners } from "../redux/modules/ui/statusLine/listener.ts";
 import { initStore } from "./store.ts";
 

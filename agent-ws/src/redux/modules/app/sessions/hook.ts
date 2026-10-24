@@ -6,7 +6,16 @@ import type { HookInput } from "../../../types/hook.ts";
 import { firstLine } from "../../../utils/firstLine.ts";
 import type { SessionAction } from "./slice.ts";
 import {
-  failed, notified, permissionRequested, promptSubmitted, started, stopped, subagentStarted, subagentStopped, toolUsed, ended,
+  ended,
+  failed,
+  notified,
+  permissionRequested,
+  promptSubmitted,
+  started,
+  stopped,
+  subagentStarted,
+  subagentStopped,
+  toolUsed,
 } from "./slice.ts";
 
 /** hook に登録するイベントと matcher。toActions が解釈するイベントと一致させる */
@@ -51,7 +60,13 @@ export function toActions(e: HookInput, at: number): SessionAction[] {
       if (e.notification_type === "permission_prompt") return [];
       return [notified({ ...on, question: e.notification_type === "elicitation_dialog", message: firstLine(e.message) })];
     case "Stop":
-      return [stopped({ ...on, message: firstLine(e.last_assistant_message), background: Boolean(e.background_tasks?.some((t) => t.status === "running")) })];
+      return [
+        stopped({
+          ...on,
+          message: firstLine(e.last_assistant_message),
+          background: Boolean(e.background_tasks?.some((t) => t.status === "running")),
+        }),
+      ];
     case "StopFailure":
       return [failed({ ...on, error: firstLine(e.error ?? e.message) })];
     case "SubagentStart":
@@ -86,8 +101,11 @@ export function interruptedSince(transcriptTail: string[], since: number): boole
     }
     if (entry.type !== "user" && entry.type !== "assistant") continue;
     const content = entry.message?.content;
-    return Date.parse(entry.timestamp ?? "") >= since && Array.isArray(content) &&
-      content.some((c) => c?.type === "text" && String(c.text).startsWith("[Request interrupted by user"));
+    return (
+      Date.parse(entry.timestamp ?? "") >= since &&
+      Array.isArray(content) &&
+      content.some((c) => c?.type === "text" && String(c.text).startsWith("[Request interrupted by user"))
+    );
   }
   return false;
 }

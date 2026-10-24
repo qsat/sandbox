@@ -3,7 +3,17 @@ import { lines, realPath, run } from "./shell.ts";
 
 // tmux は -F の出力中の制御文字（ロケールによっては非 ASCII も）を "_" に置き換えるので ASCII で区切る
 const SEP = "|~|";
-const FORMAT = ["pane_id", "pane_pid", "session_name", "window_index", "window_name", "pane_current_path", "pane_active", "window_active", "session_attached"]
+const FORMAT = [
+  "pane_id",
+  "pane_pid",
+  "session_name",
+  "window_index",
+  "window_name",
+  "pane_current_path",
+  "pane_active",
+  "window_active",
+  "session_attached",
+]
   .map((f) => `#{${f}}`)
   .join(SEP);
 

@@ -100,7 +100,9 @@ function worktreeNode(r: Repository, w: Worktree, o: ViewOptions): Node {
   // メインはリポジトリ名と同じなので場所は省く。ghq 配下なら相対名、外なら ~ 表記
   const where = o.roots.some((root) => isUnder(w.path, root))
     ? repoName(w.path, o.roots)
-    : isUnder(w.path, o.home) ? `~${w.path.slice(o.home.length)}` : w.path;
+    : isUnder(w.path, o.home)
+      ? `~${w.path.slice(o.home.length)}`
+      : w.path;
   return {
     cells: [
       cell(w.branch ?? `(detached ${w.head})`, "strong"),
@@ -124,7 +126,12 @@ function procNode(p: Proc, w: Worktree, title: string, now: number): Node {
   const target: JumpTarget = { title: `${title} pid ${p.pid}`, name: title, pid: p.pid, path: p.cwd };
   if (!p.agent) {
     const dir = p.cwd === w.path ? "" : `${p.cwd.slice(w.path.length + 1)}/ `;
-    return { cells: [cell(String(p.pid).padStart(7)), cell(p.elapsed.padStart(11), "dim"), cell(dir + p.command)], key, target, children: [] };
+    return {
+      cells: [cell(String(p.pid).padStart(7)), cell(p.elapsed.padStart(11), "dim"), cell(dir + p.command)],
+      key,
+      target,
+      children: [],
+    };
   }
   const s = p.session;
   // サブエージェントが許可を待っていれば本体も許可待ち（詳細はサブエージェントの行に出る）

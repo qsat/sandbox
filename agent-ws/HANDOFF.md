@@ -107,7 +107,9 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
       set -g focus-events on
       set-hook -g pane-focus-in 'run-shell -b "bun ~/path/agent-ws/dist/agent-ws.js seen #{pane_pid}"'
 
-- 実行環境は Bun。依存は @reduxjs/toolkit だけ（bundle に含まれる）。開発時は typescript と @types/bun も使う
+- 実行環境は Bun。依存は @reduxjs/toolkit だけ（bundle に含まれる）。開発時は typescript・@types/bun・@biomejs/biome も使う
+- フォーマットと lint は Biome（Rome の後継）。設定は biome.json（スペース2・行幅140・ダブルクォート・セミコロンあり・末尾カンマあり、lint は推奨ルール、import の並べ替えも Biome に任せる）。tsconfig でも未使用の変数・引数・import を検出する
+- スクリプト: `bun run check`（Biome の検査・型チェック・テストをまとめて。失敗すれば終了コードが 0 以外）、`bun run fix`（フォーマット・lint の自動修正・import の並べ替え）、`lint`・`format`・`typecheck`・`test`・`build`
 - Bun 固有の API は `Bun.spawnSync`（redux/infra/shell.ts）、`Bun.stdin`（entry/hook.ts）、`bun:test` だけで、残りは Bun が互換実装している node:* を使っている
 
 ## 検証状況
@@ -118,7 +120,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
   - subscribe: `watch --interval=60` でも、許可待ち・他プロセスが記録した中断が即座に反映される。claude の起動は1秒以内、終了は約1秒で一覧に反映される
   - ステータスラインは状態が変わったときに描き直される（status-interval=600 でも `#()` が再実行される）
   - hook 1回の処理は約36〜38ms（bundle 版。RTK 導入前は約32ms）。状態が変わらない PostToolUse はログに残らない
-- 済み: tsc（strict）が通る。単体テスト16件（`bun test`）が通る
+- 済み: tsc（strict）が通る。単体テスト16件（`bun test`）が通る。`bun run check` が通る
 - 未検証:
   - Notification の elicitation_dialog / agent_needs_input、StopFailure、PostToolUseFailure の実際の入力。確かめるときは `AGENT_WS_DUMP=<ファイル>` を付けて claude を起動すると hook の入力がそのまま追記される
   - バックグラウンドのサブエージェントの許可を拒否したときの本体側の状態

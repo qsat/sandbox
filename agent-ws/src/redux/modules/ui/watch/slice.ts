@@ -13,8 +13,12 @@ export const watchView = createSlice({
   name: "ui/watch",
   initialState: { cursor: null, top: 0 } as WatchViewState,
   reducers: {
-    cursorSet: (st, a: PayloadAction<string | null>) => void (st.cursor = a.payload),
-    scrolled: (st, a: PayloadAction<number>) => void (st.top = a.payload),
+    cursorSet: (st, a: PayloadAction<string | null>) => {
+      st.cursor = a.payload;
+    },
+    scrolled: (st, a: PayloadAction<number>) => {
+      st.top = a.payload;
+    },
   },
 });
 export const { cursorSet, scrolled } = watchView.actions;

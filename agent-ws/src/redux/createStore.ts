@@ -8,7 +8,14 @@
  * （status から tmux を再描画させる、hook 以外で通知するなど）があるので、ここでは登録しない。
  * thunk は使わない（I/O はすべて listener が受け持ち、結果をアクションで戻す）。
  */
-import { addListener, combineReducers, configureStore, createListenerMiddleware, type Dispatch, type UnknownAction } from "@reduxjs/toolkit";
+import {
+  addListener,
+  combineReducers,
+  configureStore,
+  createListenerMiddleware,
+  type Dispatch,
+  type UnknownAction,
+} from "@reduxjs/toolkit";
 import { persistence } from "./middlewares/persistence.ts";
 import { sessionsReducer } from "./modules/app/sessions/slice.ts";
 import { workspace } from "./modules/app/workspace/slice.ts";

@@ -2,7 +2,7 @@
  * ワークスペースのスキャン（git・プロセス）
  */
 import type { UnknownAction } from "@reduxjs/toolkit";
-import { addAppListener, type AppListener, type RootState } from "../../../createStore.ts";
+import { type AppListener, addAppListener, type RootState } from "../../../createStore.ts";
 import * as git from "../../../infra/git.ts";
 import * as proc from "../../../infra/proc.ts";
 import type { Repository } from "../../../types/workspace.ts";
@@ -10,9 +10,7 @@ import { repoName } from "../../../utils/repoName.ts";
 import { selectSessions } from "../sessions/selector.ts";
 import { forgotten, logReplayed } from "../sessions/slice.ts";
 import { selectTree } from "./selector.ts";
-import {
-  dirtyRequested, dirtyScanned, processesRequested, processesScanned, reposRequested, reposScanned, scanStarted,
-} from "./slice.ts";
+import { dirtyRequested, dirtyScanned, processesRequested, processesScanned, reposRequested, reposScanned, scanStarted } from "./slice.ts";
 
 /** セッションが増えた（pid がまだプロセス一覧に無い）・消えたら、interval を待たずにプロセスを取り直す */
 const needsRescan = (a: UnknownAction, st: RootState) =>
@@ -43,7 +41,9 @@ export const workspaceListeners = (): AppListener[] => [
     actionCreator: dirtyRequested,
     effect: ({ payload: { filter } }, api) => {
       const shown = selectTree(api.getState(), filter, process.pid).flatMap((r) => r.worktrees);
-      api.dispatch(dirtyScanned(Object.fromEntries(shown.filter((w) => !w.bare && !w.prunable).map((w) => [w.path, git.countDirty(w.path)]))));
+      api.dispatch(
+        dirtyScanned(Object.fromEntries(shown.filter((w) => !w.bare && !w.prunable).map((w) => [w.path, git.countDirty(w.path)]))),
+      );
     },
   }),
 
