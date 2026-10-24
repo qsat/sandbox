@@ -4,7 +4,6 @@
 import { createAction, createSlice, type PayloadAction } from "@reduxjs/toolkit";
 import type { Pid } from "../../../types/agent.ts";
 import type { VisitResult, VisitTarget } from "../../../types/visit.ts";
-import { rowSelected } from "../watch/slice.ts";
 
 export interface VisitState {
   last: VisitResult | null;
@@ -23,14 +22,8 @@ export const visit = createSlice({
       st.last = a.payload;
     },
   },
-  // 選択を動かしたら、前の移動の結果は出さない
-  extraReducers: (b) => {
-    b.addCase(rowSelected, (st) => {
-      st.last = null;
-    });
-  },
 });
 export const { destinationChosen, visited } = visit.actions;
 
-/** 人がそのペインにフォーカスした（どの reducer も扱わない合図。tmux の middleware が確認に変える）（tmux の pane-focus-in・移動の結果） */
+/** 人がそのペインにフォーカスした（tmux の pane-focus-in・移動の結果）。どの reducer も扱わない合図で、tmux の middleware が確認に変える */
 export const paneFocused = createAction<{ panePid: Pid; at: number }>("visit/paneFocused");

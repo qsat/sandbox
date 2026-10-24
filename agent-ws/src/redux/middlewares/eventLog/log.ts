@@ -3,6 +3,8 @@
  *   <agent>.jsonl      出来事を1行ずつ。並列に書く hook プロセスも追記するだけなのでロックは要らない
  *   <agent>.snap.json  ある位置までを流した結果。ただのキャッシュなので、同時に書かれても同じ内容になる
  */
+
+import { randomUUID } from "node:crypto";
 import {
   appendFileSync,
   closeSync,
@@ -93,7 +95,7 @@ export function openLog(dir: string) {
     },
 
     saveSnapshot(id: string, snapshot: Snapshot, offset: number): void {
-      const tmp = `${snapPath(id)}.${process.pid}.tmp`; // rename で置き換えて読み手に書きかけを見せない
+      const tmp = `${snapPath(id)}.${randomUUID()}.tmp`; // rename で置き換えて読み手に書きかけを見せない
       // キャッシュなので失敗してもよい
       attempt(() => {
         writeFileSync(tmp, JSON.stringify({ offset, ...snapshot }));

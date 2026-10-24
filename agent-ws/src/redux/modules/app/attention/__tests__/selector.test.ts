@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { type RootState, rootReducer } from "../../../../createStore.ts";
+import type { RootState } from "../../../../rootReducer.ts";
+import { rootReducer } from "../../../../rootReducer.ts";
 import type { AgentEvent } from "../../agents/slice.ts";
 import { agentAttached, inputRequested, toolUsed, turnFinished, turnInterrupted, turnStarted } from "../../agents/slice.ts";
 import { attentionOf, selectNotice, selectStatusFlags, selectUnseen } from "../selector.ts";

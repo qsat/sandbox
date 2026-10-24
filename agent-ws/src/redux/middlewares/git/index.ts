@@ -6,12 +6,13 @@
  * - dirty のとき: 表示する worktree の変更件数を持つ。表示する worktree が変わったとき・時間が経ったときに数え直す
  */
 import { createSelector } from "@reduxjs/toolkit";
-import type { AppMiddleware, RootState } from "../../createStore.ts";
+import type { AppMiddleware } from "../../createStore.ts";
 import { selectAgentProcesses } from "../../modules/app/agents/selector.ts";
 import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
 import { filterRepos, placeAgents } from "../../modules/app/workspace/selector.ts";
 import { dirtyScanned, reposScanned } from "../../modules/app/workspace/slice.ts";
 import { reloadPressed } from "../../modules/ui/watch/slice.ts";
+import type { RootState } from "../../rootReducer.ts";
 import type { Filter, Repository } from "../../types/workspace.ts";
 import { repoName } from "../../utils/repoName.ts";
 import { always, effects, on } from "../effects.ts";
@@ -28,13 +29,14 @@ const REPOS_EVERY = 15_000;
 
 /** ghq 管理下のリポジトリ（フラット展開の worktree が ghq 配下にあっても重複させない） */
 function scanRepoPaths(roots: string[], query?: string): Repository[] {
-  const byMain = new Map<string, Repository>();
-  for (const path of cli.listRepoPaths(roots, query)) {
-    const worktrees = cli.listWorktrees(path);
-    const main = worktrees[0]?.path;
-    if (main && !byMain.has(main)) byMain.set(main, { name: repoName(main, roots), path: main, worktrees });
-  }
-  return [...byMain.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const repos = cli
+    .listRepoPaths(roots, query)
+    .map((path) => cli.listWorktrees(path))
+    .filter((worktrees) => worktrees.length)
+    .map((worktrees) => ({ name: repoName(worktrees[0].path, roots), path: worktrees[0].path, worktrees }));
+  // メイン worktree のパスで束ねて、最初に見つかったものを残す
+  const byMain = Map.groupBy(repos, (r) => r.path);
+  return [...byMain.values()].map(([first]) => first).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** 表示する worktree（変更件数を数えるもの）。リポジトリ構成とエージェントの居場所から決まる */

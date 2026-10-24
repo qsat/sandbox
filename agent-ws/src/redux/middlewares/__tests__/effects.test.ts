@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createStore } from "../../createStore.ts";
-import { agentAttached, isAgentEvent, turnStarted } from "../../modules/app/agents/slice.ts";
+import { agentAttached, isLiveEvent, turnStarted } from "../../modules/app/agents/slice.ts";
 import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
 import { always, effects, on } from "../effects.ts";
 
@@ -11,7 +11,7 @@ test("当てはまる反応を上から順にすべて呼ぶ。反応は reducer
       effects((api) => [
         on(initialized, ({ payload }) => seen.push(`initialized ${payload.at} now=${api.getState().app.lifecycle.now}`)),
         on([initialized, ticked], (a, prev) => seen.push(`${a.type} prev=${prev.app.lifecycle.now}`)),
-        on(isAgentEvent, (a) => seen.push(`agent ${a.payload.agentId}`)),
+        on(isLiveEvent, (a) => seen.push(`agent ${a.payload.agentId}`)),
         always((a) => seen.push(`always ${a.type}`)),
       ]),
     ],

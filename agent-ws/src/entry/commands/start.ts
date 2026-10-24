@@ -6,8 +6,8 @@
 import { type AppMiddleware, type AppStore, createStore } from "../../redux/createStore.ts";
 import { eventLog } from "../../redux/middlewares/eventLog/index.ts";
 import { initialized } from "../../redux/modules/app/lifecycle/slice.ts";
-import type { AppSubscriber } from "../../redux/subscribers/observe.ts";
-import type { Context } from "../context.ts";
+import type { AppSubscriber } from "../../ui/subscribers/observe.ts";
+import type { Context } from "./types.ts";
 
 export interface StartOptions {
   follow?: boolean; // 他のプロセスが書いたログを取り込み続ける（watch）

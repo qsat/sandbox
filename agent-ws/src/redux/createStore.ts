@@ -7,39 +7,21 @@
  *                  （middlewares/effects.ts の on で「出来事 → 反応」の対応表として書く）
  *     log:         出来事の記録（eventLog）。reducer の直前に置く。effects が出来事の途中で出した出来事（表示中の完了の確認など）
  *                  より先に記録しないと、ログの順序が入れ替わり、流し直したときの状態が変わってしまう
- *     subscribers: 状態を人に見せる（ステータスライン・通知）。store.subscribe で、見ている部分が変わったときだけ動く。何も dispatch しない
+ *     subscribers: 状態を人に見せる（ui/subscribers のステータスライン・通知）。store.subscribe で、見ている部分が変わったときだけ動く。何も dispatch しない
  *
- * modules（slice・selector・listener）は I/O を知らない。どの middleware・購読者を組むかはコマンドごとに entry が決める
+ * 状態の形（rootReducer・RootState）は rootReducer.ts。modules（slice・selector）は I/O を知らない。どの middleware・購読者を組むかはコマンドごとに entry が決める
  * （status からステータスラインを描き直させない、通知は hook だけ、など）。thunk は使わない。
  */
 import {
   addListener,
-  combineReducers,
   configureStore,
   createListenerMiddleware,
   type Dispatch,
   type Middleware,
   type UnknownAction,
 } from "@reduxjs/toolkit";
-import { agents } from "./modules/app/agents/slice.ts";
-import { attention } from "./modules/app/attention/slice.ts";
-import { lifecycle } from "./modules/app/lifecycle/slice.ts";
-import { workspace } from "./modules/app/workspace/slice.ts";
-import { visit } from "./modules/ui/visit/slice.ts";
-import { watchView } from "./modules/ui/watch/slice.ts";
+import { type RootState, rootReducer } from "./rootReducer.ts";
 
-/** app: エージェント・人の対応・ワークスペース・いまの時刻 / ui: 画面の状態 */
-export const rootReducer = combineReducers({
-  app: combineReducers({
-    agents: agents.reducer,
-    attention: attention.reducer,
-    workspace: workspace.reducer,
-    lifecycle: lifecycle.reducer,
-  }),
-  ui: combineReducers({ visit: visit.reducer, watch: watchView.reducer }),
-});
-
-export type RootState = ReturnType<typeof rootReducer>;
 export type AppDispatch = Dispatch<UnknownAction>;
 export type AppMiddleware = Middleware<unknown, RootState, AppDispatch>;
 

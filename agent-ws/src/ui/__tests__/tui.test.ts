@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import type { Row } from "../view.ts";
-import { effectiveCursor, viewport } from "../watch.ts";
+import type { Row } from "../parts.ts";
+import { effectiveCursor, viewport } from "../tui.ts";
 
 const row = (key?: string, priority?: number): Row => ({ prefix: "", cells: [], key, priority });
 

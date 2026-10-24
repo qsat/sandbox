@@ -1,15 +1,19 @@
 import { expect, test } from "bun:test";
 import { createStore } from "../../../../createStore.ts";
 import { visited } from "../../visit/slice.ts";
-import { selectShouldClose } from "../selector.ts";
+import { selectShouldClose, selectShownVisit } from "../selector.ts";
 import { rowSelected, watchOpened } from "../slice.ts";
 
-test("行を選ぶと、前の移動の結果は消える", () => {
+test("行を選ぶと、前の移動の結果は画面に出さない（移動の結果そのものは visit に残る）", () => {
   const store = createStore();
   store.dispatch(visited({ kind: "notFound", title: "x" }));
-  expect(store.getState().ui.visit.last).toEqual({ kind: "notFound", title: "x" });
+  expect(selectShownVisit(store.getState())).toEqual({ kind: "notFound", title: "x" });
   store.dispatch(rowSelected("pid:1"));
-  expect(store.getState().ui).toEqual({ visit: { last: null }, watch: { cursor: "pid:1", popup: false } });
+  expect(selectShownVisit(store.getState())).toBeNull();
+  expect(store.getState().ui).toEqual({
+    visit: { last: { kind: "notFound", title: "x" } },
+    watch: { cursor: "pid:1", popup: false, showsVisit: false },
+  });
 });
 
 test("popup で開いていて、行き先へ移れたら閉じる", () => {

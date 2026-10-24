@@ -4,27 +4,27 @@
  */
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
-import type { Ghq } from "../redux/middlewares/git/git.ts";
-import type { NoticeKind } from "../redux/types/attention.ts";
+import type { Pid } from "../redux/types/agent.ts";
+import { isNoticeKind } from "../redux/types/attention.ts";
 import type { ColorMode, Display } from "../ui/terminal.ts";
+import type { Context } from "./commands/types.ts";
 
 type Env = Record<string, string | undefined>;
 
-export interface Context {
-  now: number; // コマンドが起動した時刻
-  stateDir: string; // ログの置き場所: AGENT_WS_STATE_DIR、なければ $XDG_STATE_HOME/agent-ws/agents
-  ghq: Ghq; // GHQ_ROOT とホーム
-  notify: NoticeKind[]; // 知らせる種類: AGENT_WS_NOTIFY（既定 waiting,asking,ready,error。空なら知らせない）
-  inTmux: boolean; // TMUX
-  dump?: string; // hook の入力をそのまま追記するファイル: AGENT_WS_DUMP（入力の形を確かめるとき用）
+/** このプロセスについて（境界で process から取る） */
+export interface Self {
+  pid: Pid;
+  ppid: Pid;
+  platform: string;
 }
 
-export function contextOf(env: Env, now: number, home = homedir()): Context {
+export function contextOf(env: Env, now: number, self: Self, home = homedir()): Context {
   return {
+    ...self,
     now,
     stateDir: env.AGENT_WS_STATE_DIR ?? join(env.XDG_STATE_HOME ?? join(home, ".local", "state"), "agent-ws", "agents"),
     ghq: { root: (env.GHQ_ROOT ?? "").split(delimiter).filter(Boolean), home },
-    notify: (env.AGENT_WS_NOTIFY ?? "waiting,asking,ready,error").split(",").filter(Boolean) as NoticeKind[],
+    notify: (env.AGENT_WS_NOTIFY ?? "waiting,asking,ready,error").split(",").filter(isNoticeKind),
     inTmux: Boolean(env.TMUX),
     dump: env.AGENT_WS_DUMP,
   };

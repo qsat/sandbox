@@ -7,6 +7,8 @@
  *
  * ステータスラインの描き直しは、状態を映すだけなので middleware ではなく購読者（subscribers/statusLine）が行う
  */
+
+import { realPath } from "../../../lib/run.ts";
 import type { AppMiddleware } from "../../createStore.ts";
 import { selectAgent, selectAgents } from "../../modules/app/agents/selector.ts";
 import { turnFinished } from "../../modules/app/agents/slice.ts";
@@ -20,7 +22,6 @@ import { findPane } from "../../utils/findPane.ts";
 import { isReplayed } from "../../utils/replayed.ts";
 import { type AppApi, effects, on } from "../effects.ts";
 import { psTable } from "../processes/proc.ts";
-import { realPath } from "../shared/shell.ts";
 import * as cli from "./tmux.ts";
 
 const parentOf = () => {
@@ -58,25 +59,22 @@ function visit(api: AppApi, target: VisitTarget, create: boolean, dryRun: boolea
 }
 
 export const tmux = (): AppMiddleware =>
-  effects((api) => {
-    return [
-      on(destinationChosen, ({ payload: p }) => api.dispatch(visited(visit(api, p.target, p.create, p.dryRun ?? false)))),
-      on(paneFocused, ({ payload: { panePid, at } }) => {
-        const st = api.getState();
-        const unseen = selectAgents(st).filter((a) => a.pid && selectUnseen(st, a.id));
-        if (!unseen.length) return; // フォーカスのたびに呼ばれるので、未確認が無ければ ps もしない
-        const up = parentOf();
-        for (const a of unseen) {
-          if ([...ancestry(a.pid, up)].includes(panePid)) api.dispatch(acknowledged({ agentId: a.id, at }));
-        }
-      }),
-      on(turnFinished, (action) => {
-        if (isReplayed(action)) return;
-        const { agentId, at } = action.payload;
-        const a = selectAgent(api.getState(), agentId);
-        if (!a?.pid || !selectUnseen(api.getState(), agentId)) return;
-        const pane = findPane({ title: "", name: "", pid: a.pid }, cli.listPanes(), parentOf());
-        if (pane?.active) api.dispatch(acknowledged({ agentId, at }));
-      }),
-    ];
-  });
+  effects((api) => [
+    on(destinationChosen, ({ payload: p }) => api.dispatch(visited(visit(api, p.target, p.create, p.dryRun ?? false)))),
+    on(paneFocused, ({ payload: { panePid, at } }) => {
+      const st = api.getState();
+      const unseen = selectAgents(st).filter((a) => a.pid && selectUnseen(st, a.id));
+      if (!unseen.length) return; // フォーカスのたびに呼ばれるので、未確認が無ければ ps もしない
+      const up = parentOf();
+      const inPane = unseen.filter((a) => ancestry(a.pid, up).some((pid) => pid === panePid));
+      for (const a of inPane) api.dispatch(acknowledged({ agentId: a.id, at }));
+    }),
+    on(turnFinished, (action) => {
+      if (isReplayed(action)) return;
+      const { agentId, at } = action.payload;
+      const a = selectAgent(api.getState(), agentId);
+      if (!a?.pid || !selectUnseen(api.getState(), agentId)) return;
+      const pane = findPane({ title: "", name: "", pid: a.pid }, cli.listPanes(), parentOf());
+      if (pane?.active) api.dispatch(acknowledged({ agentId, at }));
+    }),
+  ]);

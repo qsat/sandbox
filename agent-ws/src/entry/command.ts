@@ -3,9 +3,8 @@
  */
 import { parseArgs } from "node:util";
 import { attempt } from "../lib/attempt.ts";
-import type { Pid } from "../redux/types/agent.ts";
 import type { VisitTarget } from "../redux/types/visit.ts";
-import type { Filter } from "../redux/types/workspace.ts";
+import type { Command } from "./commands/types.ts";
 
 export const USAGE = `agent-ws — ghq 管理下のリポジトリ > worktree > エージェント を、応答状況つきで表示する
 
@@ -19,19 +18,6 @@ export const USAGE = `agent-ws — ghq 管理下のリポジトリ > worktree > 
 
 環境変数: AGENT_WS_NOTIFY（通知する状態。既定 waiting,asking,ready,error。空で通知しない）/ AGENT_WS_STATE_DIR / GHQ_ROOT
           AGENT_WS_DUMP（hook の入力をそのまま追記するファイル。入力の形を確かめるとき用）`;
-
-export type Command =
-  | { kind: "list"; query?: string; filter: Filter; json: boolean }
-  | { kind: "watch"; query?: string; filter: Filter; intervalMs: number; popup: boolean }
-  | { kind: "status"; tmux: boolean }
-  | { kind: "seen"; panePid: Pid }
-  | { kind: "jump"; target: VisitTarget; create: boolean; dryRun: boolean }
-  | { kind: "hook" }
-  | { kind: "hooksConfig" }
-  | { kind: "usage"; message: string }; // 引数が解釈できない
-
-/** その種類の Command */
-export type Of<K extends Command["kind"]> = Extract<Command, { kind: K }>;
 
 const OPTIONS = {
   all: { type: "boolean", default: false },

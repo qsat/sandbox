@@ -7,7 +7,7 @@
  */
 import { createSlice, isAnyOf, type PayloadAction } from "@reduxjs/toolkit";
 import type { Agent, AgentProcess, Pid, SubagentRef, SubagentStatus, TurnStatus } from "../../../types/agent.ts";
-import { isBlocked } from "./selector.ts";
+import { isBlocked } from "../../../utils/isBlocked.ts";
 
 type On<T = unknown> = { agentId: string; at: number } & T;
 
@@ -93,8 +93,7 @@ export const agents = createSlice({
       setTurn(a, "ready", p.at, p.message);
       // バックグラウンドが残っていなければ、サブエージェントはすべて終わっている
       if (p.background) return;
-      for (const s of Object.values(a.subagents)) {
-        if (s.status === "done") continue;
+      for (const s of Object.values(a.subagents).filter((s) => s.status !== "done")) {
         s.status = "done";
         s.since = p.at;
       }
@@ -142,8 +141,8 @@ export const {
   processesScanned: agentProcessesScanned,
 } = agents.actions;
 
-/** 記録される出来事 */
-const agentEvents = [
+/** 記録される出来事のうち、エージェントが生きている間のもの（agentEnded はログごと消すので追記しない） */
+const liveEvents = [
   agentAttached,
   agentStarted,
   turnStarted,
@@ -154,7 +153,6 @@ const agentEvents = [
   turnInterrupted,
   subagentStarted,
   subagentFinished,
-  agentEnded,
 ] as const;
-export type AgentEvent = ReturnType<(typeof agentEvents)[number]>;
-export const isAgentEvent = isAnyOf(...agentEvents);
+export type AgentEvent = ReturnType<(typeof liveEvents)[number]> | ReturnType<typeof agentEnded>;
+export const isLiveEvent = isAnyOf(...liveEvents);

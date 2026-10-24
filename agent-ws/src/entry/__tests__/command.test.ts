@@ -26,7 +26,9 @@ test("解釈できない引数は使い方を返す", () => {
 });
 
 test("環境変数はここでだけ読む: 既定値と、空の AGENT_WS_NOTIFY は知らせない", () => {
-  expect(contextOf({}, 1, "/h")).toEqual({
+  const self = { pid: 10, ppid: 9, platform: "linux" };
+  expect(contextOf({}, 1, self, "/h")).toEqual({
+    ...self,
     now: 1,
     stateDir: "/h/.local/state/agent-ws/agents",
     ghq: { root: [], home: "/h" },
@@ -34,10 +36,14 @@ test("環境変数はここでだけ読む: 既定値と、空の AGENT_WS_NOTIF
     inTmux: false,
     dump: undefined,
   });
-  expect(contextOf({ AGENT_WS_NOTIFY: "", TMUX: "/tmp/t,1,0", GHQ_ROOT: "/a:/b", XDG_STATE_HOME: "/s" }, 1, "/h")).toMatchObject({
+  expect(contextOf({ AGENT_WS_NOTIFY: "", TMUX: "/tmp/t,1,0", GHQ_ROOT: "/a:/b", XDG_STATE_HOME: "/s" }, 1, self, "/h")).toMatchObject({
     notify: [],
     inTmux: true,
     ghq: { root: ["/a", "/b"] },
     stateDir: "/s/agent-ws/agents",
   });
+});
+
+test("AGENT_WS_NOTIFY の知らない種類は無視する", () => {
+  expect(contextOf({ AGENT_WS_NOTIFY: "ready,nope" }, 1, { pid: 1, ppid: 1, platform: "linux" }, "/h").notify).toEqual(["ready"]);
 });

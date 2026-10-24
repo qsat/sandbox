@@ -17,7 +17,7 @@ const dir = mkdtempSync(join(tmpdir(), "agent-ws-test-"));
 const hook = (input: Record<string, unknown>, at: number) => hookReceived({ input: { session_id: "s1", cwd: dir, ...input }, at });
 
 test("hook の入力は middleware が出来事に変えてログに残し、別の Store がログから同じ状態を組み立てる", () => {
-  const store = createStore({ log: eventLog({ dir }), effects: [claude()] });
+  const store = createStore({ log: eventLog({ dir }), effects: [claude({ parent: process.ppid })] });
   store.dispatch(initialized({ at: 0 }));
   store.dispatch(hook({ hook_event_name: "SessionStart" }, 1));
   store.dispatch(hook({ hook_event_name: "UserPromptSubmit" }, 2));

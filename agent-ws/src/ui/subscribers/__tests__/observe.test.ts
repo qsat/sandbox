@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { createStore } from "../../createStore.ts";
-import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
-import { rowSelected } from "../../modules/ui/watch/slice.ts";
+import { createStore } from "../../../redux/createStore.ts";
+import { initialized, ticked } from "../../../redux/modules/app/lifecycle/slice.ts";
+import { rowSelected } from "../../../redux/modules/ui/watch/slice.ts";
 import { observe } from "../observe.ts";
 
 test("見ている部分が変わったときだけ、新旧の値で呼ぶ（購読した時点の値では呼ばない）", () => {

@@ -1,4 +1,4 @@
-import type { RootState } from "../../../createStore.ts";
+import type { RootState } from "../../../rootReducer.ts";
 
 export const selectLastVisit = (st: RootState) => st.ui.visit.last;
 

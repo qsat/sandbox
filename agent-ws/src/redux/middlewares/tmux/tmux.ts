@@ -1,5 +1,5 @@
+import { lines, realPath, run } from "../../../lib/run.ts";
 import type { Pane } from "../../types/visit.ts";
-import { lines, realPath, run } from "../shared/shell.ts";
 
 // tmux は -F の出力中の制御文字（ロケールによっては非 ASCII も）を "_" に置き換えるので ASCII で区切る
 const SEP = "|~|";
@@ -32,10 +32,3 @@ export const focusPane = (id: string) =>
 /** 新しいウィンドウを開いてそのペイン ID を返す */
 export const newWindow = (path: string, name: string) =>
   run("tmux", ["new-window", "-P", "-F", "#{pane_id}", "-c", path, "-n", name])?.trim() || null;
-
-/** 全クライアントのステータスラインを描き直す（status-interval を待たずに反映する） */
-export function refreshStatus(): void {
-  for (const client of lines(run("tmux", ["list-clients", "-F", "#{client_name}"]))) run("tmux", ["refresh-client", "-S", "-t", client]);
-}
-
-export const displayMessage = (text: string) => run("tmux", ["display-message", "-d", "5000", text]);

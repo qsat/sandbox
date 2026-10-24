@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readlinkSync } from "node:fs";
 import { attempt } from "../../../lib/attempt.ts";
+import { lines, run } from "../../../lib/run.ts";
 import type { Pid } from "../../types/agent.ts";
-import { lines, run } from "../shared/shell.ts";
 
 /** OS から見えるプロセス */
 export interface ProcInfo {

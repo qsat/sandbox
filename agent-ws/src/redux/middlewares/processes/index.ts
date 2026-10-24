@@ -11,7 +11,7 @@ import type { AppMiddleware } from "../../createStore.ts";
 import { selectAgentProcesses, selectAgents } from "../../modules/app/agents/selector.ts";
 import { agentAttached, agentEnded, agentForgotten, agentProcessesScanned } from "../../modules/app/agents/slice.ts";
 import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
-import type { AgentProcess } from "../../types/agent.ts";
+import type { AgentProcess, Pid } from "../../types/agent.ts";
 import { detectAgent } from "../../utils/detectAgent.ts";
 import { effects, on } from "../effects.ts";
 import * as proc from "./proc.ts";
@@ -20,17 +20,22 @@ import * as proc from "./proc.ts";
 const AFTER_END = 1_000;
 
 /** ps に見えるエージェントのプロセス（自分自身は除く） */
-function agentProcesses(): AgentProcess[] {
+function agentProcesses(self: Pid): AgentProcess[] {
   return proc.listProcesses().flatMap((p) => {
     const kind = detectAgent(p.command);
-    if (!kind || !p.cwd || p.pid === process.pid) return [];
+    if (!kind || !p.cwd || p.pid === self) return [];
     return [{ pid: p.pid, kind, cwd: p.cwd }];
   });
 }
 
-export const processes = (o: { list?: boolean } = {}): AppMiddleware =>
+export interface ProcessesOptions {
+  list?: boolean; // エージェントのプロセス一覧を持つ
+  self: Pid; // このプロセス（一覧から除く）
+}
+
+export const processes = (o: ProcessesOptions): AppMiddleware =>
   effects((api) => {
-    const scan = () => api.dispatch(agentProcessesScanned(agentProcesses()));
+    const scan = () => api.dispatch(agentProcessesScanned(agentProcesses(o.self)));
     // 出来事が続けて届いても、取り直しは1回にまとめる
     const rescan = debounce(scan, 0);
     const rescanAfterEnd = debounce(scan, AFTER_END);

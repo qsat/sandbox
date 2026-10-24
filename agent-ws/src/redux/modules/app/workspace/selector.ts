@@ -1,7 +1,8 @@
 /**
  * worktree とエージェントを結びつけて「リポジトリ > worktree > エージェント」のツリーにする
  */
-import type { RootState } from "../../../createStore.ts";
+
+import type { RootState } from "../../../rootReducer.ts";
 import type { Agent, AgentProcess } from "../../../types/agent.ts";
 import type { AgentAt, Filter, Repository, Worktree } from "../../../types/workspace.ts";
 import { isUnder } from "../../../utils/isUnder.ts";

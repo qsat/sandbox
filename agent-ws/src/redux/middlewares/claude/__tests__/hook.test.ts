@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import { scan } from "../../../../lib/scan.ts";
-import { type RootState, rootReducer } from "../../../createStore.ts";
 import { agentAttached } from "../../../modules/app/agents/slice.ts";
 import { attentionOf, selectNotice, selectUnseen } from "../../../modules/app/attention/selector.ts";
+import type { RootState } from "../../../rootReducer.ts";
+import { rootReducer } from "../../../rootReducer.ts";
 import { type HookInput, toEvents } from "../hook.ts";
 import { interruptedSince } from "../transcript.ts";
 

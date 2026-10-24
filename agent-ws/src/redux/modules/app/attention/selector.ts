@@ -1,7 +1,8 @@
-import type { RootState } from "../../../createStore.ts";
-import type { Agent } from "../../../types/agent.ts";
+import type { RootState } from "../../../rootReducer.ts";
+import type { Agent, TurnStatus } from "../../../types/agent.ts";
 import type { Attention, NoticeKind, StatusFlags } from "../../../types/attention.ts";
-import { isBlocked, selectAgent, selectAgents } from "../agents/selector.ts";
+import { isBlocked } from "../../../utils/isBlocked.ts";
+import { selectAgent, selectAgents } from "../agents/selector.ts";
 
 /** ターンの完了を、人がまだ見ていないか */
 export const selectUnseen = (st: RootState, agentId: string): boolean => st.app.attention[agentId]?.unseen ?? false;
@@ -26,6 +27,9 @@ export function selectStatusFlags(st: RootState): StatusFlags {
   };
 }
 
+/** 人に知らせる状況: 許可・質問待ち・エラー */
+const isAlert = (s: TurnStatus): s is "waiting" | "asking" | "error" => isBlocked(s) || s === "error";
+
 /** 知らせる遷移: 許可・質問待ち・エラーになった、またはターンが完了した（未確認になった） */
 export function selectNotice(prev: RootState, next: RootState, agentId: string): { kind: NoticeKind; reason?: string } | null {
   const before = selectAgent(prev, agentId);
@@ -33,7 +37,7 @@ export function selectNotice(prev: RootState, next: RootState, agentId: string):
   if (!after) return null;
   const a = before && attentionOf(before);
   const b = attentionOf(after);
-  if (b.status !== a?.status && (isBlocked(b.status) || b.status === "error")) return { kind: b.status as NoticeKind, reason: reasonOf(b) };
+  if (b.status !== a?.status && isAlert(b.status)) return { kind: b.status, reason: reasonOf(b) };
   if (!selectUnseen(next, agentId) || selectUnseen(prev, agentId)) return null;
   return { kind: "ready", reason: after.turn.reason };
 }

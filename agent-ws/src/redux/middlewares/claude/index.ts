@@ -7,15 +7,16 @@
  * hook の処理は、そのエージェントのこれまでの状態が Store にあることを前提にする（entry が先に initialized を出す）
  */
 import { createAction } from "@reduxjs/toolkit";
+import { realPath } from "../../../lib/run.ts";
 import type { AppMiddleware } from "../../createStore.ts";
-import { isBlocked, selectAgent, selectAgents } from "../../modules/app/agents/selector.ts";
+import { selectAgent, selectAgents } from "../../modules/app/agents/selector.ts";
 import { type AgentEvent, agentAttached, agentEnded, turnInterrupted } from "../../modules/app/agents/slice.ts";
 import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
 import type { Agent, Pid } from "../../types/agent.ts";
 import { detectAgent } from "../../utils/detectAgent.ts";
+import { isBlocked } from "../../utils/isBlocked.ts";
 import { effects, on } from "../effects.ts";
 import { inspect } from "../processes/proc.ts";
-import { realPath } from "../shared/shell.ts";
 import { type HookInput, toEvents } from "./hook.ts";
 import { interruptedSince, tailSince } from "./transcript.ts";
 
@@ -31,9 +32,9 @@ function* processAncestry(pid: Pid): Generator<{ pid: Pid; ppid: Pid; command: s
   yield* processAncestry(p.ppid);
 }
 
-/** hook の祖先プロセスを辿って claude 本体の pid を探す */
-const findAgentPid = (): Pid | null =>
-  processAncestry(process.ppid)
+/** hook の祖先プロセスを辿って claude 本体の pid を探す（parent: hook を呼んだプロセス） */
+const findAgentPid = (parent: Pid): Pid | null =>
+  processAncestry(parent)
     .take(6)
     .find((p) => detectAgent(p.command) === "claude")?.pid ?? null;
 
@@ -43,10 +44,10 @@ const cwdOf = (input: HookInput, known?: Agent) => {
 };
 
 /** 本体の pid と場所・会話ログが、まだ分かっていなければ結びつける（終わるだけの hook では結びつけない） */
-function attachment(input: HookInput, events: AgentEvent[], at: number, known?: Agent): AgentEvent[] {
+function attachment(input: HookInput, events: AgentEvent[], at: number, parent: Pid, known?: Agent): AgentEvent[] {
   if (events.every((e) => agentEnded.match(e))) return [];
   if (known?.pid && (known.transcript || !input.transcript_path)) return [];
-  const pid = known?.pid ?? findAgentPid();
+  const pid = known?.pid ?? findAgentPid(parent);
   return [agentAttached({ agentId: input.session_id, at, pid, cwd: cwdOf(input, known), transcript: input.transcript_path })];
 }
 
@@ -57,13 +58,17 @@ function wasInterrupted(a: Agent): boolean {
   return Boolean(tail && interruptedSince(tail, a.turn.since));
 }
 
-export const claude = (): AppMiddleware =>
+export interface ClaudeOptions {
+  parent: Pid; // このプロセスの親（hook なら、その祖先に claude 本体がいる）
+}
+
+export const claude = (o: ClaudeOptions): AppMiddleware =>
   effects((api) => [
     on(hookReceived, ({ payload: { input: raw, at } }) => {
       const input = raw as HookInput;
       const events = toEvents(input, at);
       const known = selectAgent(api.getState(), input.session_id);
-      for (const e of [...attachment(input, events, at, known), ...events]) api.dispatch(e);
+      for (const e of [...attachment(input, events, at, o.parent, known), ...events]) api.dispatch(e);
     }),
     on([initialized, ticked], ({ payload: { at } }) => {
       for (const a of selectAgents(api.getState()).filter(wasInterrupted)) api.dispatch(turnInterrupted({ agentId: a.id, at }));

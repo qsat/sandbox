@@ -12,7 +12,8 @@
  * - 当てはめる型は action creator（createSlice の actions・createAction）か、isAnyOf などの型ガード。反応の引数はその型に絞られる
  */
 import { type ActionMatchingAnyOf, isAnyOf, type MiddlewareAPI, type UnknownAction } from "@reduxjs/toolkit";
-import type { AppDispatch, AppMiddleware, RootState } from "../createStore.ts";
+import type { AppDispatch, AppMiddleware } from "../createStore.ts";
+import type { RootState } from "../rootReducer.ts";
 
 type Matcher = Parameters<typeof isAnyOf>[number];
 export type AppApi = MiddlewareAPI<AppDispatch, RootState>;

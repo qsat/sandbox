@@ -2,7 +2,7 @@
  * ターミナル出力: 表示モデル（Cell / Row）→ 文字列。色付けと表示幅の切り詰めだけを扱う
  */
 import { scan } from "../lib/scan.ts";
-import type { Cell, Row, Tone } from "./view.ts";
+import type { Cell, Row, Tone } from "./parts.ts";
 
 export type ColorMode = "none" | "ansi" | "tmux";
 

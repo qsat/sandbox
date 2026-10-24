@@ -10,10 +10,11 @@
  */
 import { isAnyOf } from "@reduxjs/toolkit";
 import { debounce } from "../../../lib/debounce.ts";
-import type { AppMiddleware, RootState } from "../../createStore.ts";
-import { agentEnded, agentForgotten, agentRestored, isAgentEvent } from "../../modules/app/agents/slice.ts";
+import type { AppMiddleware } from "../../createStore.ts";
+import { agentEnded, agentForgotten, agentRestored, isLiveEvent } from "../../modules/app/agents/slice.ts";
 import { acknowledged } from "../../modules/app/attention/slice.ts";
 import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
+import type { RootState } from "../../rootReducer.ts";
 import type { Agent } from "../../types/agent.ts";
 import { isReplayed, replayed } from "../../utils/replayed.ts";
 import { effects, on } from "../effects.ts";
@@ -24,7 +25,8 @@ const TTL = 24 * 60 * 60_000;
 /** スナップショットを取り直す、スナップショット以降の出来事の数 */
 const SNAPSHOT_EVERY = 200;
 
-const isRecorded = isAnyOf(isAgentEvent, acknowledged);
+/** ログに追記する出来事: エージェントが生きている間の出来事と、人の確認 */
+const isAppended = isAnyOf(isLiveEvent, acknowledged);
 
 /** pid の分からないエージェントは、プロセスで生死を確かめられないので、ログの更新が途絶えて期間が過ぎたら閉じる */
 const expired = (agent: Agent, mtimeMs: number, at: number) => !agent.pid && at - mtimeMs > TTL;
@@ -89,17 +91,17 @@ export const eventLog = (o: EventLogOptions): AppMiddleware =>
 
     return [
       // 状態を変えた出来事だけを記録する（流し直した出来事は記録済み）
-      on(isRecorded, (action, prev) => {
+      on(isAppended, (action, prev) => {
         if (isReplayed(action)) return;
         const id = action.payload.agentId;
-        if (agentEnded.match(action)) {
-          log.remove(id);
-          offsets.delete(id);
-          return;
-        }
         const [agent, attention] = recordOf(api.getState(), id);
         const [agentBefore, attentionBefore] = recordOf(prev, id);
         if (agent !== agentBefore || attention !== attentionBefore) log.append(id, action);
+      }),
+      // エージェントが終わったら、ログごと消す
+      on(agentEnded, ({ payload: { agentId } }) => {
+        log.remove(agentId);
+        offsets.delete(agentId);
       }),
       on(initialized, ({ payload: { at } }) => {
         for (const l of log.list()) load(l.id, l.mtimeMs, at);

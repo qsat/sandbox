@@ -6,18 +6,17 @@ import { processes } from "../../redux/middlewares/processes/index.ts";
 import { tmux } from "../../redux/middlewares/tmux/index.ts";
 import { destinationChosen } from "../../redux/modules/ui/visit/slice.ts";
 import { reloadPressed, rowSelected, watchOpened } from "../../redux/modules/ui/watch/slice.ts";
-import { statusLine } from "../../redux/subscribers/statusLine.ts";
 import type { VisitTarget } from "../../redux/types/visit.ts";
-import type { Of } from "../command.ts";
-import type { Context } from "../context.ts";
+import { statusLine } from "../../ui/subscribers/statusLine.ts";
 import { start } from "./start.ts";
+import type { Context, Of } from "./types.ts";
 
 /** 常駐表示: ログを追い続け、interval ごとにスキャンする */
 export function watch(c: Of<"watch">, ctx: Context): AppStore {
   const effects = [
-    processes({ list: true }),
+    processes({ list: true, self: ctx.pid }),
     git({ ghq: ctx.ghq, repos: { query: c.query }, dirty: c.filter }),
-    claude(),
+    claude({ parent: ctx.ppid }),
     tmux(),
     clock({ intervalMs: c.intervalMs }),
   ];

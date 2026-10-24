@@ -69,6 +69,8 @@ mock.module("../../redux/middlewares/tmux/tmux.ts", () => ({
     return true;
   },
   newWindow: () => null,
+}));
+mock.module("../../ui/subscribers/tmux.ts", () => ({
   refreshStatus: () => {
     world.refreshes++;
   },
@@ -80,8 +82,9 @@ mock.module("../../redux/middlewares/git/git.ts", () => ({
   listWorktrees: () => [worktree(REPO, "main", true), worktree(FEATURE, "feat", false)],
   countDirty: (path: string) => world.dirty[path] ?? 0,
   currentBranch: () => "feat",
+  locate: () => ({ repo: "github.com/acme/api", branch: "feat" }),
 }));
-mock.module("../../redux/subscribers/notifier/notify.ts", () => ({
+mock.module("../../ui/subscribers/notify.ts", () => ({
   notify: (title: string, body: string) => world.notices.push(`${title} ${body}`),
 }));
 
@@ -98,7 +101,7 @@ const { statusText } = await import("../../ui/status.ts");
 const { listText } = await import("../../ui/list.ts");
 const { jumpText } = await import("../../ui/jump.ts");
 const { selectArrived } = await import("../../redux/modules/ui/visit/selector.ts");
-const { selectShouldClose } = await import("../../redux/modules/ui/watch/selector.ts");
+const { selectShouldClose, selectShownVisit } = await import("../../redux/modules/ui/watch/selector.ts");
 const { selectUnseen } = await import("../../redux/modules/app/attention/selector.ts");
 const { destinationChosen } = await import("../../redux/modules/ui/visit/slice.ts");
 const { rowSelected } = await import("../../redux/modules/ui/watch/slice.ts");
@@ -112,7 +115,7 @@ const filter = { all: false, agentsOnly: false };
 
 /** 環境変数はログの置き場所だけ（通知はすべての種類）。いまの時刻はコマンドを動かすたびに取る */
 const dir = mkdtempSync(join(tmpdir(), "agent-ws-scenario-"));
-const ctx = () => contextOf({ AGENT_WS_STATE_DIR: dir }, Date.now(), "/home/u");
+const ctx = () => contextOf({ AGENT_WS_STATE_DIR: dir }, Date.now(), { pid: process.pid, ppid: AGENT_PID, platform: "linux" }, "/home/u");
 
 const status = () => statusText(statusStore(ctx()).getState(), "none");
 const list = () =>
@@ -328,7 +331,7 @@ describe("watch の画面", () => {
     expect(selectShouldClose(store.getState())).toBe(true);
     expect(selectUnseen(store.getState(), "s5")).toBe(false);
     store.dispatch(rowSelected("pid:1"));
-    expect(store.getState().ui.visit.last).toBeNull();
+    expect(selectShownVisit(store.getState())).toBeNull();
     receiveHook({ hook_event_name: "SessionEnd", session_id: "s5", cwd: FEATURE });
   });
 });

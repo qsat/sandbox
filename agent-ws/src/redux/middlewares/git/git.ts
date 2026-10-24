@@ -1,8 +1,9 @@
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { attempt } from "../../../lib/attempt.ts";
+import { lines, realPath, run } from "../../../lib/run.ts";
 import type { Worktree } from "../../types/workspace.ts";
-import { lines, realPath, run } from "../shared/shell.ts";
+import { repoName } from "../../utils/repoName.ts";
 
 /** ghq のルートを決めるもの（環境変数 GHQ_ROOT とホーム。entry が渡す） */
 export interface Ghq {
@@ -75,6 +76,14 @@ export function countDirty(path: string): number | null {
   const out = run("git", ["status", "--porcelain"], path);
   if (out === null) return null;
   return lines(out).length;
+}
+
+/** その場所のリポジトリ名（worktree ならメインの名前）と、いまのブランチ */
+export function locate(cwd: string, ghq: Ghq): { repo: string; branch?: string } {
+  const main = listWorktrees(cwd)[0]?.path;
+  const branch = currentBranch(cwd);
+  if (!main) return { repo: cwd, branch };
+  return { repo: repoName(main, ghqRoots(ghq)), branch };
 }
 
 export const currentBranch = (path: string) => run("git", ["branch", "--show-current"], path)?.trim() || undefined;

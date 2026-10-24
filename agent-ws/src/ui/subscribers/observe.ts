@@ -5,7 +5,8 @@
  * 何を映すかは状態だけで決まるので、どの出来事で変わったかは見ない。entry がログから状態を組み立て終えた後に購読させる
  */
 import { debounce } from "../../lib/debounce.ts";
-import type { AppStore, RootState } from "../createStore.ts";
+import type { AppStore } from "../../redux/createStore.ts";
+import type { RootState } from "../../redux/rootReducer.ts";
 
 export type AppSubscriber = (store: AppStore) => void;
 

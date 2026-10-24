@@ -10,7 +10,9 @@ export interface Attention {
   subagent?: Subagent; // サブエージェント由来のとき
 }
 
-export type NoticeKind = "waiting" | "asking" | "error" | "ready";
+export const NOTICE_KINDS = ["waiting", "asking", "error", "ready"] as const;
+export type NoticeKind = (typeof NOTICE_KINDS)[number];
+export const isNoticeKind = (s: string): s is NoticeKind => (NOTICE_KINDS as readonly string[]).includes(s);
 
 /** 人の注意が要る遷移の知らせ */
 export interface Notice {
