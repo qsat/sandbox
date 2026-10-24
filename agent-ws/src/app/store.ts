@@ -26,10 +26,10 @@ export type AppStartListening = TypedStartListening<RootState, AppDispatch>;
 const persistence: Middleware<{}, RootState> = (api) => (next) => (action) => {
   if (!isSessionAction(action)) return next(action);
   const id = action.payload.sessionId;
-  const before = api.getState().sessions.entities[id];
+  const before = api.getState().sessions[id];
   const result = next(action);
   if (ended.match(action)) eventLog.remove(id);
-  else if (api.getState().sessions.entities[id] !== before) eventLog.append(id, action);
+  else if (api.getState().sessions[id] !== before) eventLog.append(id, action);
   return result;
 };
 

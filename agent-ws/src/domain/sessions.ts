@@ -5,7 +5,7 @@
  * そのため reducer は純粋で、時刻もアクションの at だけを使う。状態が変わらないアクションは記録されない。
  * 本体が人を待っているか（attention）はサブエージェントから導けるので、保存せずに selector で求める。
  */
-import { createAction, createEntityAdapter, createReducer, isAnyOf, type EntityState, type PayloadActionCreator } from "@reduxjs/toolkit";
+import { createAction, createReducer, isAnyOf, type PayloadActionCreator } from "@reduxjs/toolkit";
 import type { Pid } from "./model.ts";
 
 /** ready: 入力待ち（起動直後・ターン完了） / waiting: 許可待ち / asking: 質問への回答待ち */
@@ -80,8 +80,8 @@ export const forgotten = createAction<{ sessionId: string }>("session/forgotten"
 // ---------------------------------------------------------------------
 // reducer
 // ---------------------------------------------------------------------
-const adapter = createEntityAdapter<Session>();
-export type SessionsState = EntityState<Session, string>;
+/** セッション ID → セッション */
+export type SessionsState = Record<string, Session>;
 
 /** 値が変わるときだけ書く（同じ値の代入も「変更」にしないため。変わらないアクションはログに残さない） */
 function put<T extends object, K extends keyof T>(o: T, k: K, v: T[K]): void {
@@ -103,27 +103,27 @@ function setSubagent(s: Session, agent: AgentRef, status: SubagentStatus, at: nu
   if (detail !== undefined) put(a, "detail", detail);
 }
 
-export const sessionsReducer = createReducer(adapter.getInitialState() as SessionsState, (b) => {
+export const sessionsReducer = createReducer({} as SessionsState, (b) => {
   /** 既知のセッションに対してだけ適用する（必ず attached が先に記録される） */
   const on = <P extends On>(action: PayloadActionCreator<P>, apply: (s: Session, p: P) => unknown) =>
     b.addCase(action, (st, { payload }) => {
-      const s = st.entities[payload.sessionId];
+      const s = st[payload.sessionId];
       if (s) apply(s, payload);
     });
 
   b.addCase(attached, (st, { payload: p }) => {
-    const s = st.entities[p.sessionId];
+    const s = st[p.sessionId];
     if (!s) {
-      adapter.addOne(st, { id: p.sessionId, pid: p.pid, cwd: p.cwd, transcript: p.transcript, status: "ready", since: p.at, unseen: false, subagents: {} });
+      st[p.sessionId] = { id: p.sessionId, pid: p.pid, cwd: p.cwd, transcript: p.transcript, status: "ready", since: p.at, unseen: false, subagents: {} };
       return;
     }
     if (p.pid) put(s, "pid", p.pid);
     if (p.transcript) put(s, "transcript", p.transcript);
   });
-  b.addCase(ended, (st, { payload }) => adapter.removeOne(st, payload.sessionId));
-  b.addCase(forgotten, (st, { payload }) => adapter.removeOne(st, payload.sessionId));
+  b.addCase(ended, (st, { payload }) => void delete st[payload.sessionId]);
+  b.addCase(forgotten, (st, { payload }) => void delete st[payload.sessionId]);
   b.addCase(logReplayed, (st, { payload }) => {
-    if (payload.base) adapter.setOne(st, structuredClone(payload.base)); // 凍結済みの状態が渡っても書き換えられるように
+    if (payload.base) st[payload.base.id] = structuredClone(payload.base); // 凍結済みの状態が渡っても書き換えられるように
     for (const a of payload.actions) sessionsReducer(st, a); // draft のまま各アクションを適用する
   });
 
@@ -154,7 +154,7 @@ export const sessionsReducer = createReducer(adapter.getInitialState() as Sessio
 // ---------------------------------------------------------------------
 // selector
 // ---------------------------------------------------------------------
-export const sessionSelectors = adapter.getSelectors();
+export const allSessions = (st: SessionsState) => Object.values(st);
 
 /** 人の操作を待っている状態 */
 export const isBlocked = (st: SessionStatus | undefined) => st === "waiting" || st === "asking";

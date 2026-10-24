@@ -27,7 +27,7 @@ import { hooksConfig } from "./src/app/claude.ts";
 import * as fx from "./src/app/effects.ts";
 import { createAppStore, type AppStore } from "./src/app/store.ts";
 import type { JumpTarget } from "./src/domain/model.ts";
-import { sessionSelectors, statusFlags } from "./src/domain/sessions.ts";
+import { allSessions, statusFlags } from "./src/domain/sessions.ts";
 import { selectTree } from "./src/domain/workspace.ts";
 import { ghqRoots } from "./src/infra/git.ts";
 import { notify } from "./src/infra/notify.ts";
@@ -65,7 +65,7 @@ function sessionStore(): AppStore {
 
 const tree = (store: AppStore, roots: string[], compact: boolean) => {
   const st = store.getState();
-  const repos = selectTree(st.workspace, sessionSelectors.selectAll(st.sessions), filter, process.pid);
+  const repos = selectTree(st.workspace, allSessions(st.sessions), filter, process.pid);
   return { repos, rows: treeRows(repos, { compact, roots, home: homedir(), now: Date.now() }) };
 };
 
@@ -102,7 +102,7 @@ switch (command) {
 
   case "status": {
     const st = sessionStore().getState();
-    console.log(formatCells(statusLine(statusFlags(sessionSelectors.selectAll(st.sessions))), opt.tmux ? "tmux" : color));
+    console.log(formatCells(statusLine(statusFlags(allSessions(st.sessions))), opt.tmux ? "tmux" : color));
     break;
   }
 

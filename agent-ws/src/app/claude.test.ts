@@ -10,9 +10,9 @@ async function replay(file: string) {
   let st: SessionsState = sessionsReducer(undefined, attached({ sessionId: "s1", at: 0, pid: 1, cwd: "/w/proj" }));
   return text.trim().split("\n").map((line, t) => {
     const e = JSON.parse(line) as HookInput;
-    const prev = st.entities.s1;
+    const prev = st.s1;
     for (const a of toActions(e, t + 1)) st = sessionsReducer(st, a);
-    const s = st.entities.s1;
+    const s = st.s1;
     const at = s && attention(s);
     const subs = Object.values(s?.subagents ?? {}).map((a) => `${a.type}:${a.status}`).join(",");
     return { event: e.hook_event_name, status: at?.status, reason: at?.reason, subs, unseen: s?.unseen, notice: noticeOf(prev, s)?.kind, changed: prev !== s };

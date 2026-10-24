@@ -6,7 +6,7 @@ import { createAction, type UnknownAction } from "@reduxjs/toolkit";
 import type { JumpResult, JumpTarget, Pid, Repository } from "../domain/model.ts";
 import { ancestry, detectAgent, findPane, repoName } from "../domain/model.ts";
 import {
-  attached, ended, forgotten, interrupted, isBlocked, isSessionAction, logReplayed, noticeOf, seen, sessionSelectors, statusFlags, stopped,
+  allSessions, attached, ended, forgotten, interrupted, isBlocked, isSessionAction, logReplayed, noticeOf, seen, statusFlags, stopped,
 } from "../domain/sessions.ts";
 import type { Filter } from "../domain/workspace.ts";
 import { dirtyScanned, processesScanned, reposScanned, selectTree } from "../domain/workspace.ts";
@@ -24,7 +24,7 @@ const SESSION_TTL = 24 * 60 * 60_000;
 /** スナップショットを取り直す、スナップショット以降のアクション数 */
 const SNAPSHOT_EVERY = 200;
 
-const allSessions = (st: RootState) => sessionSelectors.selectAll(st.sessions);
+const sessionsIn = (st: RootState) => allSessions(st.sessions);
 
 // ---------------------------------------------------------------------
 // セッション: ログの読み込み・掃除・hook
@@ -37,7 +37,7 @@ const loadLog = (id: string): AppThunk => (dispatch, getState) => {
   if (!r) return;
   dispatch(logReplayed({ sessionId: id, base: r.base, actions: r.actions }));
   offsets.set(id, r.offset);
-  const s = getState().sessions.entities[id];
+  const s = getState().sessions[id];
   if (s && r.actions.length >= SNAPSHOT_EVERY) eventLog.saveSnapshot(id, s, r.offset);
 };
 
@@ -70,7 +70,7 @@ export const followLogs = (): AppThunk => (dispatch) => {
 /** プロセスが消えたセッションを閉じ、hook の届かない中断を拾う */
 export const settleSessions = (now = Date.now()): AppThunk => (dispatch, getState) => {
   const touched = new Map(eventLog.list().map((l) => [l.id, l.mtimeMs]));
-  for (const s of allSessions(getState())) {
+  for (const s of sessionsIn(getState())) {
     const alive = s.pid ? proc.isAlive(s.pid) : now - (touched.get(s.id) ?? 0) < SESSION_TTL;
     if (!alive) {
       dispatch(ended({ sessionId: s.id, at: now }));
@@ -88,7 +88,7 @@ export const handleHook = (input: HookInput, now = Date.now()): AppThunk => (dis
   if (!actions.length) return;
   const id = input.session_id;
   dispatch(loadLog(id));
-  const s = getState().sessions.entities[id];
+  const s = getState().sessions[id];
   const onlyEnd = actions.every((a) => ended.match(a));
   if (!onlyEnd && (!s?.pid || (input.transcript_path && !s.transcript))) {
     const cwd = input.cwd ? realPath(input.cwd) : (s?.cwd ?? "");
@@ -127,7 +127,7 @@ export const scanProcesses = (): AppThunk => (dispatch) => dispatch(processesSca
 /** 変更件数は表示する worktree だけ数える */
 export const scanDirty = (filter: Filter): AppThunk => (dispatch, getState) => {
   const st = getState();
-  const shown = selectTree(st.workspace, allSessions(st), filter, process.pid).flatMap((r) => r.worktrees);
+  const shown = selectTree(st.workspace, sessionsIn(st), filter, process.pid).flatMap((r) => r.worktrees);
   dispatch(dirtyScanned(Object.fromEntries(shown.filter((w) => !w.bare && !w.prunable).map((w) => [w.path, git.countDirty(w.path)]))));
 };
 
@@ -141,7 +141,7 @@ const parentOf = () => {
 
 /** そのペインで完了したセッションを既読にする（tmux の pane-focus-in とポップアップからの移動） */
 export const markSeenInPane = (panePid: Pid, now = Date.now()): AppThunk => (dispatch, getState) => {
-  const unseen = allSessions(getState()).filter((s) => s.unseen && s.pid);
+  const unseen = sessionsIn(getState()).filter((s) => s.unseen && s.pid);
   if (!unseen.length) return; // フォーカスのたびに呼ばれるので、未確認が無ければ ps もしない
   const up = parentOf();
   for (const s of unseen) if ([...ancestry(s.pid, up)].includes(panePid)) dispatch(seen({ sessionId: s.id, at: now }));
@@ -174,8 +174,8 @@ export function registerListeners(startListening: AppStartListening, o: StoreOpt
     effect: (action, api) => {
       if (!o.onNotice || !isSessionAction(action)) return;
       const id = action.payload.sessionId;
-      const n = noticeOf(api.getOriginalState().sessions.entities[id], api.getState().sessions.entities[id]);
-      const s = api.getState().sessions.entities[id];
+      const n = noticeOf(api.getOriginalState().sessions[id], api.getState().sessions[id]);
+      const s = api.getState().sessions[id];
       if (!n || !s) return;
       const main = git.listWorktrees(s.cwd)[0]?.path;
       o.onNotice({ repo: main ? repoName(main, git.ghqRoots()) : s.cwd, branch: git.currentBranch(s.cwd), ...n });
@@ -186,7 +186,7 @@ export function registerListeners(startListening: AppStartListening, o: StoreOpt
   startListening({
     actionCreator: stopped,
     effect: (action, api) => {
-      const s = api.getState().sessions.entities[action.payload.sessionId];
+      const s = api.getState().sessions[action.payload.sessionId];
       if (!s?.unseen || !s.pid) return;
       const pane = findPane({ title: "", name: "", pid: s.pid }, tmux.listPanes(), parentOf());
       if (pane?.active) api.dispatch(seen({ sessionId: s.id, at: action.payload.at }));
@@ -194,7 +194,7 @@ export function registerListeners(startListening: AppStartListening, o: StoreOpt
   });
 
   // ステータスラインの印が変わったら、status-interval を待たずに描き直す
-  const flags = (st: RootState) => JSON.stringify(statusFlags(allSessions(st)));
+  const flags = (st: RootState) => JSON.stringify(statusFlags(sessionsIn(st)));
   startListening({
     predicate: (action, cur, prev) => isSessionAction(action) && flags(cur) !== flags(prev),
     effect: () => tmux.refreshStatus(),
@@ -211,7 +211,7 @@ export function registerListeners(startListening: AppStartListening, o: StoreOpt
       // セッションが増えた（pid がまだプロセス一覧に無い）・消えたら、interval を待たずにプロセスを取り直す
       const needsRescan = (a: UnknownAction, st: RootState) =>
         forgotten.match(a) ||
-        (logReplayed.match(a) && allSessions(st).some((s) => s.pid && !st.workspace.processes.some((p) => p.pid === s.pid)));
+        (logReplayed.match(a) && sessionsIn(st).some((s) => s.pid && !st.workspace.processes.some((p) => p.pid === s.pid)));
       api.fork(async (f) => {
         for (;;) {
           const [action] = await f.pause(api.take(needsRescan));
