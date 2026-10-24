@@ -14,11 +14,11 @@ import { selectUnseen } from "../../modules/app/attention/selector.ts";
 import { acknowledged } from "../../modules/app/attention/slice.ts";
 import { destinationChosen, paneFocused, visited } from "../../modules/ui/visit/slice.ts";
 import type { Pid } from "../../types/agent.ts";
-import type { VisitResult, VisitTarget } from "../../types/visit.ts";
+import type { Pane, VisitResult, VisitTarget } from "../../types/visit.ts";
 import { ancestry } from "../../utils/ancestry.ts";
 import { findPane } from "../../utils/findPane.ts";
 import { isReplayed } from "../../utils/replayed.ts";
-import { effects, on } from "../effects.ts";
+import { type AppApi, effects, on } from "../effects.ts";
 import { psTable } from "../processes/proc.ts";
 import { realPath } from "../shared/shell.ts";
 import * as cli from "./tmux.ts";
@@ -28,24 +28,39 @@ const parentOf = () => {
   return (pid: Pid) => ppid.get(pid);
 };
 
+/** パスは実体で探す（シンボリックリンク越しに開いたペインも見つける） */
+const resolved = (t: VisitTarget): VisitTarget => {
+  if (!t.path) return t;
+  return { ...t, path: realPath(t.path) };
+};
+
+/** 見つけたペインへ移る（dryRun なら探すだけ） */
+function goTo(api: AppApi, pane: Pane, t: VisitTarget, dryRun: boolean): VisitResult {
+  if (dryRun) return { kind: "found", pane };
+  if (!cli.focusPane(pane.id)) return { kind: "failed", title: t.title };
+  api.dispatch(paneFocused({ panePid: pane.pid, at: api.getState().app.lifecycle.now }));
+  return { kind: "focused", pane };
+}
+
+/** ペインが無ければ新しいウィンドウを開いて移る */
+function openWindow(path: string, t: VisitTarget): VisitResult {
+  const id = cli.newWindow(path, t.name);
+  if (!id || !cli.focusPane(id)) return { kind: "failed", title: t.title };
+  return { kind: "created", path };
+}
+
+function visit(api: AppApi, target: VisitTarget, create: boolean, dryRun: boolean): VisitResult {
+  const t = resolved(target);
+  const pane = findPane(t, cli.listPanes(), parentOf());
+  if (pane) return goTo(api, pane, t, dryRun);
+  if (!create || !t.path || dryRun) return { kind: "notFound", title: t.title };
+  return openWindow(t.path, t);
+}
+
 export const tmux = (): AppMiddleware =>
   effects((api) => {
-    const visit = (target: VisitTarget, create: boolean, dryRun: boolean): VisitResult => {
-      const t = target.path ? { ...target, path: realPath(target.path) } : target;
-      const pane = findPane(t, cli.listPanes(), parentOf());
-      if (pane && dryRun) return { kind: "found", pane };
-      if (pane) {
-        if (!cli.focusPane(pane.id)) return { kind: "failed", title: t.title };
-        api.dispatch(paneFocused({ panePid: pane.pid, at: api.getState().app.lifecycle.now }));
-        return { kind: "focused", pane };
-      }
-      if (!create || !t.path || dryRun) return { kind: "notFound", title: t.title };
-      const id = cli.newWindow(t.path, t.name);
-      return id && cli.focusPane(id) ? { kind: "created", path: t.path } : { kind: "failed", title: t.title };
-    };
-
     return [
-      on(destinationChosen, ({ payload: p }) => api.dispatch(visited(visit(p.target, p.create, p.dryRun ?? false)))),
+      on(destinationChosen, ({ payload: p }) => api.dispatch(visited(visit(api, p.target, p.create, p.dryRun ?? false)))),
       on(paneFocused, ({ payload: { panePid, at } }) => {
         const st = api.getState();
         const unseen = selectAgents(st).filter((a) => a.pid && selectUnseen(st, a.id));

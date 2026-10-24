@@ -5,6 +5,9 @@ import { displayMessage } from "../../middlewares/tmux/tmux.ts";
 export function notify(title: string, body: string): void {
   if (process.env.TMUX) displayMessage(`${title}  ${body}`);
   const q = (s: string) => JSON.stringify(s); // AppleScript の文字列リテラルとして安全
-  if (process.platform === "darwin") run("osascript", ["-e", `display notification ${q(body)} with title ${q(title)} sound name "Glass"`]);
-  else run("notify-send", ["-a", "agent-ws", title, body]);
+  if (process.platform === "darwin") {
+    run("osascript", ["-e", `display notification ${q(body)} with title ${q(title)} sound name "Glass"`]);
+    return;
+  }
+  run("notify-send", ["-a", "agent-ws", title, body]);
 }

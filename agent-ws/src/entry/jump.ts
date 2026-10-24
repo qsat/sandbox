@@ -14,11 +14,15 @@ export interface JumpOptions {
   color: ColorMode;
 }
 
+/** 数字なら pid、そうでなければパス（省くといまの場所） */
+function targetOf(arg?: string): VisitTarget {
+  if (arg && /^\d+$/.test(arg)) return { title: `pid ${arg}`, name: `pid ${arg}`, pid: Number(arg) };
+  return { title: arg ?? ".", name: arg ?? ".", path: arg ?? process.cwd() };
+}
+
 /** 人が行き先を選んだことを伝え、移動の結果（状態）を文字にする */
 export function jump(o: JumpOptions): { text: string; ok: boolean } {
-  const target: VisitTarget = /^\d+$/.test(o.arg ?? "")
-    ? { title: `pid ${o.arg}`, name: `pid ${o.arg}`, pid: Number(o.arg) }
-    : { title: o.arg ?? ".", name: o.arg ?? ".", path: o.arg ?? process.cwd() };
+  const target = targetOf(o.arg);
   const store = start([tmux()], { subscribers: [statusLine()] }); // 移動して確認したら印が変わる
   store.dispatch(destinationChosen({ target, create: o.create, dryRun: o.dryRun }));
   const r = selectLastVisit(store.getState()) ?? { kind: "failed", title: target.title };

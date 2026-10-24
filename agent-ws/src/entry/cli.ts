@@ -44,31 +44,40 @@ const { values: opt, positionals } = parseArgs({
     interval: { type: "string", default: "2" },
   },
 });
-const COMMANDS = ["list", "watch", "status", "seen", "jump", "hook", "hooks-config"];
-const [command, arg] = COMMANDS.includes(positionals[0] ?? "") ? positionals : ["list", ...positionals];
-const color: ColorMode = process.stdout.isTTY || process.env.FORCE_COLOR === "1" ? "ansi" : "none";
 const filter = { all: opt.all, agentsOnly: opt["agents-only"] };
 
-switch (command) {
-  case "list":
-    runList({ query: arg, filter, json: opt.json, color });
-    break;
-  case "watch":
-    runWatch({ query: arg, filter, intervalMs: Number(opt.interval) * 1000, popup: opt.popup, color });
-    break;
-  case "status":
-    runStatus({ color: opt.tmux ? "tmux" : color });
-    break;
-  case "seen":
-    if (/^\d+$/.test(arg ?? "")) runSeen(Number(arg));
-    break;
-  case "jump":
-    process.exitCode = runJump({ arg, create: opt.create, dryRun: opt["dry-run"], color }) ? 0 : 1;
-    break;
-  case "hook":
-    await runHook();
-    break;
-  case "hooks-config":
-    console.log(JSON.stringify(hooksConfig(process.execPath, realPath(process.argv[1])), null, 2));
-    break;
+function colorMode(): ColorMode {
+  if (process.stdout.isTTY || process.env.FORCE_COLOR === "1") return "ansi";
+  return "none";
 }
+const color = colorMode();
+
+/** ステータスラインに埋め込むときは tmux の書式で色を付ける */
+function statusColor(): ColorMode {
+  if (opt.tmux) return "tmux";
+  return color;
+}
+
+/** サブコマンド → 処理（arg はサブコマンドの次の引数） */
+const COMMANDS: Record<string, (arg?: string) => unknown> = {
+  list: (query) => runList({ query, filter, json: opt.json, color }),
+  watch: (query) => runWatch({ query, filter, intervalMs: Number(opt.interval) * 1000, popup: opt.popup, color }),
+  status: () => runStatus({ color: statusColor() }),
+  seen: (panePid) => {
+    if (/^\d+$/.test(panePid ?? "")) runSeen(Number(panePid));
+  },
+  jump: (arg) => {
+    if (!runJump({ arg, create: opt.create, dryRun: opt["dry-run"], color })) process.exitCode = 1;
+  },
+  hook: () => runHook(),
+  "hooks-config": () => console.log(JSON.stringify(hooksConfig(process.execPath, realPath(process.argv[1])), null, 2)),
+};
+
+/** サブコマンドが無ければ list（最初の引数は絞り込み） */
+async function main([first = "", second]: string[]): Promise<void> {
+  const command = COMMANDS[first];
+  if (!command) return void COMMANDS.list(first || undefined);
+  await command(second);
+}
+
+await main(positionals);

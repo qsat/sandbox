@@ -21,25 +21,30 @@ export function tailSince(path: string, since: number, bytes = 16_384): string[]
   }
 }
 
+interface Entry {
+  type?: string;
+  timestamp?: string;
+  message?: { content?: unknown };
+}
+
+/** 1行を読む（末尾を途中から読んだ1行目など、読めなければ undefined） */
+const parse = (line: string): Entry | undefined => {
+  try {
+    return JSON.parse(line);
+  } catch {
+    return undefined;
+  }
+};
+
+const isInterruption = (content: unknown) =>
+  Array.isArray(content) && content.some((c) => c?.type === "text" && String(c.text).startsWith("[Request interrupted by user"));
+
 /**
  * 中断も拒否も、会話ログに user の "[Request interrupted by user…]" が書かれる。
  * 末尾の発言がそれで、かつ since 以降の記録なら中断された（前のターンの中断は拾わない）
  */
 export function interruptedSince(transcriptTail: string[], since: number): boolean {
-  for (const line of transcriptTail.toReversed()) {
-    let entry: { type?: string; timestamp?: string; message?: { content?: unknown } };
-    try {
-      entry = JSON.parse(line);
-    } catch {
-      continue; // 末尾を途中から読んだ1行目など
-    }
-    if (entry.type !== "user" && entry.type !== "assistant") continue;
-    const content = entry.message?.content;
-    return (
-      Date.parse(entry.timestamp ?? "") >= since &&
-      Array.isArray(content) &&
-      content.some((c) => c?.type === "text" && String(c.text).startsWith("[Request interrupted by user"))
-    );
-  }
-  return false;
+  const last = transcriptTail.map(parse).findLast((e) => e?.type === "user" || e?.type === "assistant");
+  if (!last) return false;
+  return Date.parse(last.timestamp ?? "") >= since && isInterruption(last.message?.content);
 }

@@ -3,8 +3,8 @@
  */
 import { isBlocked, visibleSubagents } from "../redux/modules/app/agents/selector.ts";
 import { attentionOf } from "../redux/modules/app/attention/selector.ts";
-import type { Agent, Status, TurnStatus } from "../redux/types/agent.ts";
-import type { Notice, StatusFlags } from "../redux/types/attention.ts";
+import type { Agent, Status, Subagent, TurnStatus } from "../redux/types/agent.ts";
+import type { Attention, Notice, NoticeKind, StatusFlags } from "../redux/types/attention.ts";
 import type { VisitResult, VisitTarget } from "../redux/types/visit.ts";
 import type { AgentAt, Repository, Worktree } from "../redux/types/workspace.ts";
 import { isUnder } from "../redux/utils/isUnder.ts";
@@ -43,7 +43,7 @@ export interface ViewOptions {
 
 const cell = (text: string, tone: Tone = "plain"): Cell => ({ text, tone });
 /** 条件が真のときだけセルを入れる */
-const when = (cond: unknown, ...cells: Cell[]) => (cond ? cells : []);
+const when = (cond: unknown, ...cells: Cell[]) => cells.filter(() => Boolean(cond));
 const shortName = (name: string) => name.slice(name.lastIndexOf("/") + 1);
 
 // ---------------------------------------------------------------------
@@ -55,11 +55,17 @@ interface Node extends Omit<Row, "prefix"> {
 
 const toRow = ({ children: _, ...row }: Node, prefix: string): Row => ({ ...row, prefix });
 
+/** 罫線: 兄弟の最後かどうかで、その行の枝と、子の行の左に続く線が変わる */
+const branch = (last: boolean) => {
+  if (last) return { self: "└─ ", children: "   " };
+  return { self: "├─ ", children: "│  " };
+};
+
 /** 階層の深さを問わず、罫線つきの行に平らにする */
 function flatten(nodes: Node[], indent = ""): Row[] {
   return nodes.flatMap((n, i) => {
-    const last = i === nodes.length - 1;
-    return [toRow(n, indent + (last ? "└─ " : "├─ ")), ...flatten(n.children, indent + (last ? "   " : "│  "))];
+    const b = branch(i === nodes.length - 1);
+    return [toRow(n, indent + b.self), ...flatten(n.children, indent + b.children)];
   });
 }
 
@@ -94,12 +100,6 @@ function repoNode(r: Repository, o: ViewOptions): Node {
 function worktreeNode(r: Repository, w: Worktree, o: ViewOptions): Node {
   const name = w.branch ?? w.head;
   const title = `${shortName(r.name)} [${name}]`;
-  // メインはリポジトリ名と同じなので場所は省く。ghq 配下なら相対名、外なら ~ 表記
-  const where = o.roots.some((root) => isUnder(w.path, root))
-    ? repoName(w.path, o.roots)
-    : isUnder(w.path, o.home)
-      ? `~${w.path.slice(o.home.length)}`
-      : w.path;
   return {
     cells: [
       cell(w.branch ?? `(detached ${w.head})`, "strong"),
@@ -108,13 +108,28 @@ function worktreeNode(r: Repository, w: Worktree, o: ViewOptions): Node {
       ...when(w.bare, cell("bare")),
       ...when(w.locked, cell("locked")),
       ...when(w.prunable, cell("prunable", "warn")),
-      ...when(w.dirty !== null, w.dirty ? cell(`dirty:${w.dirty}`, "warn") : cell("clean", "ok")),
-      ...when(w.path !== r.path, cell(where, "dim")),
+      ...dirtyCells(w.dirty),
+      // メインはリポジトリ名と同じなので場所は省く
+      ...when(w.path !== r.path, cell(placeOf(w.path, o), "dim")),
     ],
     key: `wt:${w.path}`,
     target: { title, name, pid: w.agents[0]?.process.pid, path: w.path },
     children: w.agents.map((x) => agentNode(x, title, o.now)),
   };
+}
+
+/** worktree の場所: ghq 配下なら相対名、ホーム配下なら ~ 表記 */
+function placeOf(path: string, o: ViewOptions): string {
+  if (o.roots.some((root) => isUnder(path, root))) return repoName(path, o.roots);
+  if (isUnder(path, o.home)) return `~${path.slice(o.home.length)}`;
+  return path;
+}
+
+/** 変更件数（数えていなければ出さない） */
+function dirtyCells(dirty: number | null): Cell[] {
+  if (dirty === null) return [];
+  if (dirty === 0) return [cell("clean", "ok")];
+  return [cell(`dirty:${dirty}`, "warn")];
 }
 
 function agentNode({ process: p, agent: a, unseen }: AgentAt, title: string, now: number): Node {
@@ -124,27 +139,50 @@ function agentNode({ process: p, agent: a, unseen }: AgentAt, title: string, now
   return {
     cells: [
       cell(`[${p.kind}]`.padEnd(9), "agent"),
-      // 完了して未確認なら「完了」、見た後は「入力待ち」
-      ...(at ? statusCells(unseen ? "done" : at.status, now - at.since, unseen ? "ok" : at.status) : [cell("? 状態不明", "dim")]),
+      ...agentStatusCells(at, unseen, now),
       cell(`pid ${p.pid}`, "dim"),
       ...when(at?.reason, cell(at?.reason ?? "", "dim")),
     ],
     key: `pid:${p.pid}`,
     target,
-    priority: isBlocked(at?.status) ? 3 : unseen ? 2 : 1,
-    // サブエージェントは本体のプロセス内で動くので、行き先は本体と同じ
-    children: (a ? visibleSubagents(a, now) : []).map((s) => ({
-      cells: [
-        cell(`⤷ ${s.type}`.padEnd(15), s.status === "done" ? "dim" : "plain"),
-        ...statusCells(s.status, now - s.since),
-        ...when(s.detail, cell(s.detail ?? "", "dim")),
-      ],
-      key: `sub:${a?.id}:${s.id}`,
-      target,
-      children: [],
-    })),
+    priority: priorityOf(at, unseen),
+    children: subagentNodes(a, target, now),
   };
 }
+
+/** 完了して未確認なら「完了」、見た後は「入力待ち」。hook で状況が分からなければ不明 */
+function agentStatusCells(at: Attention | null, unseen: boolean, now: number): Cell[] {
+  if (!at) return [cell("? 状態不明", "dim")];
+  if (unseen) return statusCells("done", now - at.since, "ok");
+  return statusCells(at.status, now - at.since);
+}
+
+/** 最初に選ぶ行の優先度: 許可・質問待ち > 完了して未確認 > その他 */
+function priorityOf(at: Attention | null, unseen: boolean): number {
+  if (isBlocked(at?.status)) return 3;
+  if (unseen) return 2;
+  return 1;
+}
+
+/** サブエージェントは本体のプロセス内で動くので、行き先は本体と同じ */
+function subagentNodes(a: Agent | null, target: VisitTarget, now: number): Node[] {
+  if (!a) return [];
+  return visibleSubagents(a, now).map((s) => ({
+    cells: [
+      cell(`⤷ ${s.type}`.padEnd(15), subagentTone(s)),
+      ...statusCells(s.status, now - s.since),
+      ...when(s.detail, cell(s.detail ?? "", "dim")),
+    ],
+    key: `sub:${a.id}:${s.id}`,
+    target,
+    children: [],
+  }));
+}
+
+const subagentTone = (s: Subagent): Tone => {
+  if (s.status === "done") return "dim";
+  return "plain";
+};
 
 const statusCells = (st: Status, elapsedMs: number, tone: Tone = st) => [
   cell(`${STATUS[st].icon} ${STATUS[st].label}`, tone),
@@ -187,11 +225,14 @@ export const statusLine = (f: StatusFlags): Cell[] => [
   ...when(f.error, cell(STATUS.error.icon, "error")),
 ];
 
+/** 知らせの種類 → 見せる状況（完了の知らせは「完了」） */
+const NOTICE_STATUS: Record<NoticeKind, Status> = { waiting: "waiting", asking: "asking", error: "error", ready: "done" };
+
 export function notification({ repo, branch, kind, reason }: Notice): { title: string; body: string } {
-  const s = kind === "ready" ? STATUS.done : STATUS[kind];
+  const s = STATUS[NOTICE_STATUS[kind]];
   return {
-    title: `${shortName(repo)}${branch ? ` [${branch}]` : ""}`,
-    body: `${s.icon} ${s.label}${reason ? `: ${reason}` : ""}`,
+    title: [shortName(repo), branch && `[${branch}]`].filter(Boolean).join(" "),
+    body: [`${s.icon} ${s.label}`, reason].filter(Boolean).join(": "),
   };
 }
 

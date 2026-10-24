@@ -6,7 +6,6 @@
 import {
   appendFileSync,
   closeSync,
-  existsSync,
   fstatSync,
   watch as fsWatch,
   mkdirSync,
@@ -22,6 +21,7 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { UnknownAction } from "@reduxjs/toolkit";
+import { attempt } from "../../../lib/attempt.ts";
 import type { Agent } from "../../types/agent.ts";
 
 /** 既定の置き場所: $AGENT_WS_STATE_DIR、なければ $XDG_STATE_HOME/agent-ws/agents */
@@ -40,67 +40,53 @@ export interface LogRead {
   offset: number; // 読み終えた位置（バイト）
 }
 
+/** 読みはじめる位置: 指定が無ければスナップショットの位置（無いか壊れていれば最初）から */
+type Start = { snapshot?: Snapshot; start: number };
+
 export function openLog(dir: string) {
   const safe = (s: string) => s.replace(/[^\w-]/g, "_");
   const logPath = (id: string) => join(dir, `${safe(id)}.jsonl`);
   const snapPath = (id: string) => join(dir, `${safe(id)}.snap.json`);
 
+  const fromSnapshot = (id: string): Start => {
+    const snap = attempt(() => JSON.parse(readFileSync(snapPath(id), "utf8")) as Snapshot & { offset: number }, null);
+    if (!snap) return { start: 0 };
+    return { snapshot: { agent: snap.agent, attention: snap.attention }, start: snap.offset };
+  };
+  const startOf = (id: string, from?: number): Start => {
+    if (from === undefined) return fromSnapshot(id);
+    return { start: from };
+  };
+
+  /** start から読める出来事と、読み終えた位置（書きかけの最終行は次回に回す） */
+  const readFrom = (fd: number, start: number) => {
+    const buf = Buffer.alloc(Math.max(0, fstatSync(fd).size - start));
+    readSync(fd, buf, 0, buf.length, start);
+    const end = buf.lastIndexOf(0x0a) + 1;
+    const events = buf
+      .subarray(0, end)
+      .toString("utf8")
+      .split("\n")
+      .filter(Boolean)
+      .flatMap((l) => attempt(() => [JSON.parse(l) as UnknownAction], []));
+    return { events, offset: start + end };
+  };
+
   return {
     /** ログのあるエージェント（最終更新時刻つき） */
     list(): { id: string; mtimeMs: number }[] {
-      try {
-        return readdirSync(dir)
-          .filter((f) => f.endsWith(".jsonl"))
-          .flatMap((f) => {
-            try {
-              return [{ id: f.slice(0, -".jsonl".length), mtimeMs: statSync(join(dir, f)).mtimeMs }];
-            } catch {
-              return []; // 読む間に消えた
-            }
-          });
-      } catch {
-        return [];
-      }
+      return attempt(() => readdirSync(dir), [])
+        .filter((f) => f.endsWith(".jsonl"))
+        .flatMap((f) => attempt(() => [{ id: f.slice(0, -".jsonl".length), mtimeMs: statSync(join(dir, f)).mtimeMs }], [])); // 読む間に消えたものは除く
     },
 
     /** from を省くとスナップショットから、指定するとその位置から読む。ログが無ければ null */
     read(id: string, from?: number): LogRead | null {
-      let snapshot: Snapshot | undefined;
-      let start = from ?? 0;
-      if (from === undefined && existsSync(snapPath(id))) {
-        try {
-          const snap = JSON.parse(readFileSync(snapPath(id), "utf8")) as Snapshot & { offset: number };
-          snapshot = { agent: snap.agent, attention: snap.attention };
-          start = snap.offset;
-        } catch {
-          /* 壊れていれば最初から */
-        }
-      }
-      let fd: number;
+      const fd = attempt(() => openSync(logPath(id), "r"), null);
+      if (fd === null) return null;
+      const { snapshot, start } = startOf(id, from);
       try {
-        fd = openSync(logPath(id), "r");
-      } catch {
-        return null;
-      }
-      try {
-        const size = fstatSync(fd).size;
-        const buf = Buffer.alloc(Math.max(0, size - start));
-        readSync(fd, buf, 0, buf.length, start);
-        // 書きかけの最終行は次回に回す
-        const end = buf.lastIndexOf(0x0a) + 1;
-        const events = buf
-          .subarray(0, end)
-          .toString("utf8")
-          .split("\n")
-          .filter(Boolean)
-          .flatMap((l) => {
-            try {
-              return [JSON.parse(l) as UnknownAction];
-            } catch {
-              return [];
-            }
-          });
-        return { snapshot, events, offset: start + end };
+        return { snapshot, ...readFrom(fd, start) };
       } finally {
         closeSync(fd);
       }
@@ -113,22 +99,15 @@ export function openLog(dir: string) {
 
     saveSnapshot(id: string, snapshot: Snapshot, offset: number): void {
       const tmp = `${snapPath(id)}.${process.pid}.tmp`; // rename で置き換えて読み手に書きかけを見せない
-      try {
+      // キャッシュなので失敗してもよい
+      attempt(() => {
         writeFileSync(tmp, JSON.stringify({ offset, ...snapshot }));
         renameSync(tmp, snapPath(id));
-      } catch {
-        /* キャッシュなので失敗してもよい */
-      }
+      }, undefined);
     },
 
     remove(id: string): void {
-      for (const p of [logPath(id), snapPath(id)]) {
-        try {
-          unlinkSync(p);
-        } catch {
-          /* 既に無い */
-        }
-      }
+      for (const p of [logPath(id), snapPath(id)]) attempt(() => unlinkSync(p), undefined); // 既に無ければそれでよい
     },
 
     /** ログのディレクトリの変更を見張る。戻り値で止める */

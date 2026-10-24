@@ -4,7 +4,8 @@ import { realpathSync } from "node:fs";
 export function run(cmd: string, args: string[], cwd?: string): string | null {
   try {
     const r = Bun.spawnSync([cmd, ...args], { cwd, stdin: "ignore", stdout: "pipe", stderr: "ignore", timeout: 5000 });
-    return r.success ? r.stdout.toString() : null;
+    if (!r.success) return null;
+    return r.stdout.toString();
   } catch {
     return null; // コマンドが無い
   }

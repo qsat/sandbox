@@ -11,6 +11,7 @@ import { destinationChosen } from "../redux/modules/ui/visit/slice.ts";
 import { selectShouldClose, selectWatchView } from "../redux/modules/ui/watch/selector.ts";
 import { reloadPressed, rowSelected, watchOpened } from "../redux/modules/ui/watch/slice.ts";
 import { statusLine } from "../redux/subscribers/statusLine.ts";
+import type { VisitResult } from "../redux/types/visit.ts";
 import type { Filter } from "../redux/types/workspace.ts";
 import type { ColorMode } from "../ui/terminal.ts";
 import { treeRows, visitMessage } from "../ui/view.ts";
@@ -23,6 +24,11 @@ export interface WatchOptions {
   intervalMs: number;
   popup: boolean;
 }
+
+const messageOf = (last: VisitResult | null) => {
+  if (!last) return undefined;
+  return visitMessage(last);
+};
 
 /** watch の Store: ログを追い続け、interval ごとにスキャンする */
 export function watchStore(o: WatchOptions) {
@@ -47,7 +53,7 @@ export function runWatch(o: WatchOptions & { color: ColorMode }): void {
       return {
         cursor: selectWatchView(st).cursor,
         now: selectNow(st),
-        message: last ? visitMessage(last) : undefined,
+        message: messageOf(last),
         close: selectShouldClose(st),
       };
     },

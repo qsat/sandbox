@@ -4,5 +4,6 @@ export function firstLine(s: string | undefined, max = 80): string | undefined {
     ?.split("\n")
     .map((l) => l.trim())
     .find(Boolean);
-  return line && line.length > max ? `${line.slice(0, max - 1)}…` : line;
+  if (!line || line.length <= max) return line;
+  return `${line.slice(0, max - 1)}…`;
 }

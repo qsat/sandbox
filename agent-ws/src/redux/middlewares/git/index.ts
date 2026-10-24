@@ -48,35 +48,36 @@ const shownWorktrees = (filter: Filter) =>
 
 export const git = (o: GitOptions = {}): AppMiddleware =>
   effects((api) => {
-    const selectShown = o.dirty ? shownWorktrees(o.dirty) : () => [];
-    let counted: string | null = null; // 最後に数えたときの表示する worktree（中身で比べる）
-    let counts = 0;
+    const selectShown = shownWorktrees(o.dirty ?? { all: false, agentsOnly: false });
+    const now = () => api.getState().app.lifecycle.now;
 
     const scanRepos = (at: number) => {
       if (!o.repos) return;
       const roots = cli.ghqRoots();
       api.dispatch(reposScanned({ roots, repos: scanRepoPaths(roots, o.repos.query), at }));
     };
-    const countDirty = () => {
+    const countDirty = (at: number) => {
       if (!o.dirty) return;
       const shown = selectShown(api.getState());
-      counted = shown.join("\n");
-      counts++;
-      api.dispatch(dirtyScanned(Object.fromEntries(shown.map((p) => [p, cli.countDirty(p)]))));
+      api.dispatch(dirtyScanned({ dirty: Object.fromEntries(shown.map((p) => [p, cli.countDirty(p)])), at }));
+    };
+    /** 数えた worktree（状態にある）が、いま表示する worktree と違う */
+    const shownChanged = () => {
+      const st = api.getState();
+      return selectShown(st).join("\n") !== Object.keys(st.app.workspace.dirty).join("\n");
     };
 
     return [
-      on([initialized, reloadPressed], () => scanRepos(api.getState().app.lifecycle.now)),
+      on([initialized, reloadPressed], () => scanRepos(now())),
       on(ticked, ({ payload: { at } }) => {
-        const before = counts;
-        const last = api.getState().app.workspace.scannedAt;
-        if (last === null || at - last >= REPOS_EVERY) scanRepos(at);
-        // ファイルが変わっているかもしれないので、まだ数えていなければ数え直す
-        if (counts === before) countDirty();
+        const { scannedAt } = api.getState().app.workspace;
+        if (scannedAt === null || at - scannedAt >= REPOS_EVERY) scanRepos(at);
+        // ファイルが変わっているかもしれないので数え直す（リポジトリ構成が変わって数え直していれば、もう数えてある）
+        if (api.getState().app.workspace.countedAt !== at) countDirty(at);
       }),
       // 表示する worktree（リポジトリ構成・エージェントの居場所から決まる）が変わったら数え直す
       always(() => {
-        if (o.dirty && selectShown(api.getState()).join("\n") !== counted) countDirty();
+        if (o.dirty && shownChanged()) countDirty(now());
       }),
     ];
   });

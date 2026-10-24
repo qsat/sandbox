@@ -77,6 +77,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
         types/            ドメインの型（agent・attention・workspace・visit）
         utils/            純粋な関数を1関数1ファイルで（detectAgent・isUnder・repoName・firstLine・ancestry・findPane・replayed）
       ui/                 描画: view（行モデル）・terminal（色と幅）・watch（TUI。状態を読んで描くだけ。人の操作は出来事として伝える）
+      lib/                ドメインを知らない汎用の道具: attempt（失敗したら代わりの値）・scan（reduce の途中経過）・coalesce（続けて呼ばれても1回にまとめる）
 
 - modules（slice・selector・listener）は I/O を知らない。外部システムとのやりとりは middleware が吸収する。listener は I/O を伴わないつなぎが要るモジュールにだけ置く（今は無いが、仕組み（listener middleware・addAppListener・listen）は createStore に組んである）
 - アクションは「起きたこと」だけにする（セッターや特定の middleware への命令にしない）。entry が dispatch するのは起動した（initialized）ことと、外界・人の出来事（hookReceived・paneFocused・destinationChosen・rowSelected・reloadPressed）だけ。ログの読み込み・生死の確認・スキャンなどは、出来事を受けた middleware がそれぞれ判断して行う
@@ -145,6 +146,13 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 - 実行環境は Bun。依存は @reduxjs/toolkit だけ（bundle に含まれる）。開発時は typescript・@types/bun・@biomejs/biome も使う
 - テストは対象のモジュールがある場所の `__tests__/` に置く（テストデータも `__tests__/fixtures/`）。層は「テスト」の節
 - フォーマットと lint は Biome（Rome の後継）。設定は biome.json（スペース2・行幅140・ダブルクォート・セミコロンあり・末尾カンマあり、lint は推奨ルール、import の並べ替えも Biome に任せる）。tsconfig でも未使用の変数・引数・import を検出する
+- 実装も手続き的にしない。lint で次を禁止している（テストも同じ）
+  - 三項演算子（style/noTernary）: 分岐は早期 return の小さな関数か、対応表（Record）で書く
+  - else（lint/no-else.grit）: ガード節で早期 return する
+  - let（lint/no-let.grit）: const と式で書く（ループは map・filter・find・reduce・再帰、try/catch の結果は lib/attempt、途中経過は lib/scan）。
+    呼び出しをまたいで状態を持つしかないものだけ、理由を書いて `// biome-ignore lint/plugin/no-let: 理由` で許す（今は lib/coalesce・subscribers/observe・E2E のクライアントの3か所）
+  - 引数への再代入（style/noParameterAssign）、認知的複雑度 10 を超える関数（complexity/noExcessiveCognitiveComplexity）
+  - 独自ルールは Biome の GritQL プラグイン（lint/*.grit。biome.json の plugins）
 - スクリプト: `bun run check`（Biome の検査・型チェック・テストをまとめて。失敗すれば終了コードが 0 以外）、`bun run fix`（フォーマット・lint の自動修正・import の並べ替え）、`e2e`（端末込みの E2E）、`smoke`（本物の Claude Code でのスモークテスト）、`lint`・`format`・`typecheck`・`test`・`build`
 - Bun 固有の API は `Bun.spawnSync`（redux/middlewares/shared/shell.ts）、`Bun.stdin`（entry/hook.ts）、`bun:test` だけで、残りは Bun が互換実装している node:* を使っている
 

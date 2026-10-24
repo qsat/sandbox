@@ -57,7 +57,8 @@ mock.module("../../redux/middlewares/processes/proc.ts", () => ({
   listProcesses: () => world.procs.map((p) => ({ ...p, elapsed: "00:01" })),
   inspect: (pid: number) => {
     const p = world.procs.find((x) => x.pid === pid);
-    return p ? { ppid: p.ppid, command: p.command } : null;
+    if (!p) return null;
+    return { ppid: p.ppid, command: p.command };
   },
   isAlive: (pid: number) => world.procs.some((x) => x.pid === pid),
 }));

@@ -56,15 +56,27 @@ async function fire(record: Input): Promise<void> {
 
 const byEvent = (name: string) => recorded.filter((r) => r.hook_event_name === name).slice(0, 1);
 
-for (const r of byEvent("SessionStart")) await fire(r);
-let done = 0;
-process.stdout.write("> ");
-for await (const line of console) {
+/** 記録を順に流す（hook は1つずつ終わるのを待つ。本物も同じイベントの hook を待ってから進む） */
+async function fireAll(records: Input[]): Promise<void> {
+  for (const r of records) await fire(r);
+}
+
+const input = console[Symbol.asyncIterator]();
+
+/** 端末から1行読んで流す。n は何行目か */
+async function serve(n: number): Promise<void> {
+  process.stdout.write("> ");
+  const { value: line, done } = await input.next();
+  if (done) return;
   const words = line.trim().split(/\s+/).filter(Boolean);
   if (words[0] === "exit") {
-    for (const r of byEvent("SessionEnd")) await fire(r);
+    await fireAll(byEvent("SessionEnd"));
     process.exit(0);
   }
-  for (const i of words.map(Number)) await fire(recorded[i]);
-  process.stdout.write(`[ok ${++done}]\n> `);
+  await fireAll(words.map((i) => recorded[Number(i)]));
+  process.stdout.write(`[ok ${n}]\n`);
+  return serve(n + 1);
 }
+
+await fireAll(byEvent("SessionStart"));
+await serve(1);

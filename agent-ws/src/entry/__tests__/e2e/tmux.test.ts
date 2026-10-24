@@ -7,21 +7,11 @@
  * 重いので既定では動かさない: `bun run e2e`（AGENT_WS_E2E=1）。tmux・script・git が無ければ飛ばす
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Subprocess } from "bun";
+import { attempt } from "../../../lib/attempt.ts";
 
 const TOOLS = ["tmux", "script", "git", "ps", "sh"];
 const enabled = process.env.AGENT_WS_E2E === "1" && TOOLS.every((t) => Bun.which(t));
@@ -31,14 +21,43 @@ const CLI = join(PROJECT, "src/entry/cli.ts");
 const INPUTS = join(PROJECT, "src/redux/middlewares/claude/__tests__/fixtures/claude-code-2.1.309-turns.jsonl");
 const TIMEOUT = 20_000;
 
-let root = "";
-let env: Record<string, string> = {};
-let client: Subprocess<"pipe", "pipe", "ignore"> | null = null;
-let screen = ""; // 接続したクライアントの端末に出た文字（エスケープシーケンスを含む）
-
+/** 作業ディレクトリ（動かすときだけ beforeAll で作る） */
+const root = join(realpathSync(tmpdir()), `agent-ws-e2e-${process.pid}`);
 const path = (...p: string[]) => join(root, ...p);
 const repo = () => path("ghq/github.com/acme/api");
 const feature = () => path("ghq/github.com/acme/api-feat");
+const screenLog = path("screen.log"); // 接続したクライアントの端末に出た文字（エスケープシーケンスを含む）
+
+/** 人の端末の代わりに接続したクライアント。ポップアップへのキーはここから打つ（tmux の send-keys -K はポップアップに届かない） */
+// biome-ignore lint/plugin/no-let: beforeAll で接続し、テストからキーを打つ
+let client: Subprocess<"pipe", "ignore", "ignore"> | undefined;
+const type = (keys: string) => {
+  client?.stdin.write(keys);
+  client?.stdin.flush();
+};
+
+const utf8Lang = () => {
+  if (process.env.LANG?.includes("UTF-8")) return process.env.LANG;
+  return "C.UTF-8";
+};
+
+const env: Record<string, string> = {
+  PATH: [...new Set([path("bin"), dirname(process.execPath), ...TOOLS.map((t) => dirname(Bun.which(t) ?? "/usr/bin"))])].join(":"),
+  HOME: path("home"),
+  LANG: utf8Lang(),
+  TERM: "xterm-256color",
+  TMUX_TMPDIR: root,
+  GHQ_ROOT: path("ghq"),
+  AGENT_WS_STATE_DIR: path("state"),
+  CLAUDE_CONFIG_DIR: path("claude"),
+  FAKE_CLAUDE_INPUTS: INPUTS,
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_AUTHOR_NAME: "e2e",
+  GIT_AUTHOR_EMAIL: "e2e@example.com",
+  GIT_COMMITTER_NAME: "e2e",
+  GIT_COMMITTER_EMAIL: "e2e@example.com",
+};
 
 function sh(cmd: string[], cwd = root): string {
   const r = Bun.spawnSync(cmd, { cwd, env, stdout: "pipe", stderr: "pipe" });
@@ -49,19 +68,21 @@ const tmux = (...args: string[]) => sh([Bun.which("tmux") ?? "tmux", ...args]).t
 const agentWs = (...args: string[]) => sh([path("bin/agent-ws"), ...args]);
 const status = () => agentWs("status").trim();
 const list = () => agentWs("list");
-const notices = () => (existsSync(path("notices")) ? readFileSync(path("notices"), "utf8") : "");
+const notices = () => attempt(() => readFileSync(path("notices"), "utf8"), "");
+const screen = () => attempt(() => readFileSync(screenLog, "utf8"), "");
+const clientName = () => tmux("list-clients", "-F", "#{client_name}");
 const activeWindow = () => tmux("display-message", "-p", "-t", "main", "#{window_index}");
 const capture = (target: string) => tmux("capture-pane", "-p", "-t", target);
 
 /** 条件が成り立つまで待つ。成り立たなければ最後に見た値を添えて失敗する */
-async function until<T>(what: string, read: () => T, ok: (v: T) => boolean, ms = 8000): Promise<T> {
-  const end = Date.now() + ms;
-  for (;;) {
-    const v = read();
-    if (ok(v)) return v;
-    if (Date.now() > end) throw new Error(`${what} にならない（最後の値: ${JSON.stringify(v)}）`);
-    await Bun.sleep(50);
-  }
+const until = <T>(what: string, read: () => T, ok: (v: T) => boolean, ms = 8000): Promise<T> => poll(what, read, ok, Date.now() + ms);
+
+async function poll<T>(what: string, read: () => T, ok: (v: T) => boolean, deadline: number): Promise<T> {
+  const v = read();
+  if (ok(v)) return v;
+  if (Date.now() > deadline) throw new Error(`${what} にならない（最後の値: ${JSON.stringify(v)}）`);
+  await Bun.sleep(50);
+  return poll(what, read, ok, deadline);
 }
 
 /** 偽の claude に1行送り、流し終えるまで待つ */
@@ -81,9 +102,10 @@ const CSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[A-Za-z]`, "g"); //
 
 /** ステータスラインに出ている印（status-right を "SR[…]" で囲んで、クライアントの端末に最後に描かれた中身を読む） */
 function statusLine(): string {
-  const plain = screen.replace(CSI, "");
+  const plain = screen().replace(CSI, "");
   const i = plain.lastIndexOf("SR[");
-  return i < 0 ? "(未描画)" : plain.slice(i + 3, plain.indexOf("]", i));
+  if (i < 0) return "(未描画)";
+  return plain.slice(i + 3, plain.indexOf("]", i));
 }
 
 /** エージェントのプロセス（list --json から） */
@@ -97,28 +119,16 @@ const script = (file: string, body: string) => {
   chmodSync(file, 0o755);
 };
 
+/** 人の端末の代わりに script でクライアントを接続する（端末に出た文字は screenLog に残る） */
+function attachCommand(): string[] {
+  const attach = "stty cols 160 rows 40; exec tmux -u attach -t main";
+  if (process.platform === "darwin") return ["script", "-qF", screenLog, "sh", "-c", attach];
+  return ["script", "-qfc", attach, screenLog];
+}
+
 beforeAll(async () => {
   if (!enabled) return;
-  root = realpathSync(mkdtempSync(join(tmpdir(), "agent-ws-e2e-")));
   for (const d of ["bin", "home", "state", "claude", "ghq/github.com/acme"]) mkdirSync(path(d), { recursive: true });
-  const dirs = new Set([path("bin"), dirname(process.execPath), ...TOOLS.map((t) => dirname(Bun.which(t) ?? "/usr/bin"))]);
-  env = {
-    PATH: [...dirs].join(":"),
-    HOME: path("home"),
-    LANG: process.env.LANG?.includes("UTF-8") ? process.env.LANG : "C.UTF-8",
-    TERM: "xterm-256color",
-    TMUX_TMPDIR: root,
-    GHQ_ROOT: path("ghq"),
-    AGENT_WS_STATE_DIR: path("state"),
-    CLAUDE_CONFIG_DIR: path("claude"),
-    FAKE_CLAUDE_INPUTS: INPUTS,
-    GIT_CONFIG_GLOBAL: "/dev/null",
-    GIT_CONFIG_NOSYSTEM: "1",
-    GIT_AUTHOR_NAME: "e2e",
-    GIT_AUTHOR_EMAIL: "e2e@example.com",
-    GIT_COMMITTER_NAME: "e2e",
-    GIT_COMMITTER_EMAIL: "e2e@example.com",
-  };
 
   // コマンド: agent-ws（このリポジトリのソース）・偽の claude・通知の記録・ghq は無いことにする（GHQ_ROOT を見る）
   script(path("bin/agent-ws"), `exec "${process.execPath}" "${CLI}" "$@"`);
@@ -146,26 +156,17 @@ beforeAll(async () => {
   tmux("new-window", "-d", "-t", "main:1", "-n", "feat", "-c", feature());
   tmux("new-window", "-d", "-t", "main:2", "-n", "watch", "-c", root, "agent-ws watch --interval=60");
 
-  // 人の端末の代わりに script でクライアントを接続する
-  const attach = "stty cols 160 rows 40; exec tmux -u attach -t main";
-  const cmd = process.platform === "darwin" ? ["script", "-q", "/dev/null", "sh", "-c", attach] : ["script", "-qfc", attach, "/dev/null"];
-  client = Bun.spawn(cmd, { cwd: root, env, stdin: "pipe", stdout: "pipe", stderr: "ignore" });
-  (async () => {
-    const decoder = new TextDecoder();
-    for await (const chunk of client.stdout) screen += decoder.decode(chunk, { stream: true });
-  })();
-  await until(
-    "クライアントが接続する",
-    () => tmux("list-clients", "-F", "#{client_name}"),
-    (s) => s.length > 0,
-  );
+  // tmux サーバを止めればクライアントも script も終わる
+  client = Bun.spawn(attachCommand(), { cwd: root, env, stdin: "pipe", stdout: "ignore", stderr: "ignore" });
+  await until("クライアントが接続する", clientName, (s) => s.length > 0);
 }, TIMEOUT);
 
-afterAll(() => {
+afterAll(async () => {
   if (!enabled) return;
   if (process.env.AGENT_WS_E2E_KEEP) return console.log(`残した（tmux も動いたまま）: TMUX_TMPDIR=${root}`);
-  client?.kill();
   Bun.spawnSync([Bun.which("tmux") ?? "tmux", "kill-server"], { env });
+  await Promise.race([client?.exited, Bun.sleep(2000)]);
+  client?.kill("SIGKILL");
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -235,20 +236,18 @@ describe.skipIf(!enabled)("tmux の中で使う", () => {
       tmux("select-window", "-t", "main:0");
       await feed("main:1", "8 9");
       expect(status()).toBe("⏳");
-      const clientName = tmux("list-clients", "-F", "#{client_name}");
-      const mark = screen.length;
+      const mark = screen().length;
       // display-popup はポップアップが閉じるまで戻らない
       const popup = Bun.spawn(
-        [Bun.which("tmux") ?? "tmux", "display-popup", "-c", clientName, "-E", "-w", "120", "-h", "20", "agent-ws watch --popup"],
+        [Bun.which("tmux") ?? "tmux", "display-popup", "-c", clientName(), "-E", "-w", "120", "-h", "20", "agent-ws watch --popup"],
         { env },
       );
       await until(
         "ポップアップが描かれる",
-        () => screen.slice(mark),
+        () => screen().slice(mark),
         (s) => s.includes("Enter:移動") && s.includes("許可待ち"),
       );
-      client?.stdin.write("\r");
-      client?.stdin.flush();
+      type("\r");
       await until("claude のウィンドウへ移る", activeWindow, (w) => w === "1");
       expect(await Promise.race([popup.exited, Bun.sleep(5000).then(() => "開いたまま")])).toBe(0);
     },

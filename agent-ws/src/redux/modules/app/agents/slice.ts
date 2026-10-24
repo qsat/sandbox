@@ -19,8 +19,11 @@ export interface AgentsState {
 /** 値が変わるときだけ書く（同じ値の代入も「変更」にしないため。変わらない出来事はログに残さない） */
 function put<T extends object, K extends keyof T>(o: T, k: K, v: T[K]): void {
   if (o[k] === v) return;
-  if (v === undefined) delete o[k];
-  else o[k] = v;
+  if (v === undefined) {
+    delete o[k];
+    return;
+  }
+  o[k] = v;
 }
 
 function setTurn(a: Agent, status: TurnStatus, at: number, reason?: string): void {
@@ -36,6 +39,9 @@ function setSubagent(a: Agent, ref: SubagentRef, status: SubagentStatus, at: num
   put(s, "status", status);
   if (detail !== undefined) put(s, "detail", detail);
 }
+
+/** 人に求めた入力 → 本体のターンの状況 */
+const WAITING_FOR = { permission: "waiting", question: "asking" } as const satisfies Record<string, TurnStatus>;
 
 /** 既知のエージェントに対してだけ適用する case reducer（必ず agentAttached が先に記録される） */
 const toAgent =
@@ -74,13 +80,13 @@ export const agents = createSlice({
     started: toAgent<On<{ source?: string }>>((a, p) => p.source !== "compact" && setTurn(a, "ready", p.at)),
     turnStarted: toAgent<On>((a, p) => setTurn(a, "running", p.at)),
     /** 人の入力を求めた（permission: 許可 / question: 質問への回答）。subagent からのこともある */
-    inputRequested: toAgent<On<{ subagent?: SubagentRef; kind: "permission" | "question"; summary?: string }>>((a, p) => {
-      if (p.subagent) setSubagent(a, p.subagent, "waiting", p.at, p.summary);
-      else setTurn(a, p.kind === "question" ? "asking" : "waiting", p.at, p.summary);
+    inputRequested: toAgent<On<{ subagent?: SubagentRef; kind: keyof typeof WAITING_FOR; summary?: string }>>((a, p) => {
+      if (p.subagent) return setSubagent(a, p.subagent, "waiting", p.at, p.summary);
+      setTurn(a, WAITING_FOR[p.kind], p.at, p.summary);
     }),
     toolUsed: toAgent<On<{ subagent?: SubagentRef; tool: string }>>((a, p) => {
-      if (p.subagent) setSubagent(a, p.subagent, "running", p.at, p.tool);
-      else setTurn(a, "running", p.at);
+      if (p.subagent) return setSubagent(a, p.subagent, "running", p.at, p.tool);
+      setTurn(a, "running", p.at);
     }),
     /** ターンが終わった。background: バックグラウンドのサブエージェントが残っている（終われば自動で再開する） */
     turnFinished: toAgent<On<{ message?: string; background: boolean }>>((a, p) => {

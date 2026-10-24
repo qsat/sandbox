@@ -10,21 +10,23 @@ import type { Repository } from "../../../types/workspace.ts";
 export interface WorkspaceState {
   roots: string[]; // ghq のルート（リポジトリ名の基準）
   repos: Repository[]; // worktree 構成（agents と dirty は空）
-  dirty: Record<string, number | null>; // worktree のパス → 変更ファイル数
+  dirty: Record<string, number | null>; // 数えた worktree のパス → 変更ファイル数
   scannedAt: number | null; // リポジトリ構成を最後に取った時刻
+  countedAt: number | null; // 変更件数を最後に数えた時刻
 }
 
 export const workspace = createSlice({
   name: "workspace",
-  initialState: { roots: [], repos: [], dirty: {}, scannedAt: null } as WorkspaceState,
+  initialState: { roots: [], repos: [], dirty: {}, scannedAt: null, countedAt: null } as WorkspaceState,
   reducers: {
     reposScanned: (st, a: PayloadAction<{ roots: string[]; repos: Repository[]; at: number }>) => {
       st.roots = a.payload.roots;
       st.repos = a.payload.repos;
       st.scannedAt = a.payload.at;
     },
-    dirtyScanned: (st, a: PayloadAction<Record<string, number | null>>) => {
-      st.dirty = a.payload;
+    dirtyScanned: (st, a: PayloadAction<{ dirty: Record<string, number | null>; at: number }>) => {
+      st.dirty = a.payload.dirty;
+      st.countedAt = a.payload.at;
     },
   },
 });

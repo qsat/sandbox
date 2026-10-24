@@ -1,6 +1,7 @@
 /**
  * ターミナル出力: 表示モデル（Cell / Row）→ 文字列。色付けと表示幅の切り詰めだけを扱う
  */
+import { scan } from "../lib/scan.ts";
 import type { Cell, Row, Tone } from "./view.ts";
 
 export type ColorMode = "none" | "ansi" | "tmux";
@@ -39,34 +40,39 @@ export function paint(text: string, tone: Tone, mode: ColorMode): string {
   return text;
 }
 
+/** 2つ目以降のセルは間を空ける */
+const spaced = (c: Cell, i: number): Cell => {
+  if (i === 0) return c;
+  return { ...c, text: GAP + c.text };
+};
+
 /** 1行に整形し、表示幅を超えたら切り詰める */
 export function formatRow(row: Row, width: number, mode: ColorMode): string {
-  let room = width - textWidth(row.prefix);
-  let out = row.prefix;
-  for (const [i, c] of row.cells.entries()) {
-    const text = (i ? GAP : "") + c.text;
-    const w = textWidth(text);
-    if (w > room) return `${out}${paint(truncate(text, room - 1), c.tone, mode)}…`;
-    out += paint(text, c.tone, mode);
-    room -= w;
-  }
-  return out;
+  const cells = row.cells.map(spaced);
+  const room = width - textWidth(row.prefix);
+  const ends = cumulative(cells.map((c) => textWidth(c.text))); // 各セルの右端
+  const over = ends.findIndex((end) => end > room);
+  const painted = (cs: Cell[]) => cs.map((c) => paint(c.text, c.tone, mode)).join("");
+  if (over < 0) return row.prefix + painted(cells);
+  const cut = cells[over];
+  const rest = room - (ends[over - 1] ?? 0) - 1; // 「…」の分を残す
+  return `${row.prefix}${painted(cells.slice(0, over))}${paint(truncate(cut.text, rest), cut.tone, mode)}…`;
 }
 
 export const formatCells = (cells: Cell[], mode: ColorMode) => cells.map((c) => paint(c.text, c.tone, mode)).join(" ");
 
 // 全角・絵文字は2桁（厳密な East Asian Width ではなく実用上の近似）
-const WIDE = /[ᄀ-ᅟ⌚⌛⏩-⏳⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]|[\u{1f300}-\u{1faff}]/u;
-const charWidth = (ch: string) => (WIDE.test(ch) ? 2 : 1);
+const WIDE =
+  /[\u1100-\u115F\u231A\u231B\u23E9-\u23F3\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]|[\u{1f300}-\u{1faff}]/u;
+const charWidth = (ch: string) => 1 + Number(WIDE.test(ch));
 const textWidth = (s: string) => [...s].reduce((n, ch) => n + charWidth(ch), 0);
 
+/** 累積和（先頭からそこまでの合計） */
+const cumulative = (xs: number[]) => scan(xs, (sum, x) => sum + x, 0);
+
+/** 表示幅 width に収まるところまで */
 function truncate(s: string, width: number): string {
-  let out = "";
-  let used = 0;
-  for (const ch of s) {
-    if (used + charWidth(ch) > width) break;
-    out += ch;
-    used += charWidth(ch);
-  }
-  return out;
+  const chars = [...s];
+  const fits = cumulative(chars.map(charWidth)).filter((end) => end <= width).length;
+  return chars.slice(0, fits).join("");
 }

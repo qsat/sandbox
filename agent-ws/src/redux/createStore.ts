@@ -59,7 +59,7 @@ export function createStore({ log, effects = [] }: StoreParts = {}) {
     middleware: (defaults) =>
       defaults({ thunk: false, serializableCheck: false, immutableCheck: false })
         .prepend(createListenerMiddleware().middleware)
-        .concat(...effects, ...(log ? [log] : [])),
+        .concat(...effects, ...[log].filter((m) => m !== undefined)),
   });
 }
 

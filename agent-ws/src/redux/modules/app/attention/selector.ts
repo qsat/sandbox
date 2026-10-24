@@ -10,7 +10,8 @@ export const selectUnseen = (st: RootState, agentId: string): boolean => st.app.
 export function attentionOf(a: Agent): Attention {
   if (isBlocked(a.turn.status) || a.turn.status === "error") return a.turn;
   const sub = Object.values(a.subagents).find((s) => s.status === "waiting");
-  return sub ? { status: "waiting", since: sub.since, subagent: sub } : a.turn;
+  if (!sub) return a.turn;
+  return { status: "waiting", since: sub.since, subagent: sub };
 }
 
 /** ステータスラインの印 */
@@ -32,8 +33,13 @@ export function selectNotice(prev: RootState, next: RootState, agentId: string):
   if (!after) return null;
   const a = before && attentionOf(before);
   const b = attentionOf(after);
-  if (b.status !== a?.status && (isBlocked(b.status) || b.status === "error")) {
-    return { kind: b.status as NoticeKind, reason: b.subagent ? `[${b.subagent.type}] ${b.subagent.detail ?? ""}` : b.reason };
-  }
-  return selectUnseen(next, agentId) && !selectUnseen(prev, agentId) ? { kind: "ready", reason: after.turn.reason } : null;
+  if (b.status !== a?.status && (isBlocked(b.status) || b.status === "error")) return { kind: b.status as NoticeKind, reason: reasonOf(b) };
+  if (!selectUnseen(next, agentId) || selectUnseen(prev, agentId)) return null;
+  return { kind: "ready", reason: after.turn.reason };
+}
+
+/** 知らせる理由: サブエージェント由来なら、どのサブエージェントの何か */
+function reasonOf(x: Attention): string | undefined {
+  if (!x.subagent) return x.reason;
+  return `[${x.subagent.type}] ${x.subagent.detail ?? ""}`;
 }

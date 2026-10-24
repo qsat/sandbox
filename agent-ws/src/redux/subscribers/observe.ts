@@ -15,6 +15,7 @@ export function observe<T>(
   onChange: (next: T, prev: T) => void,
   equal: (a: T, b: T) => boolean = Object.is,
 ): () => void {
+  // biome-ignore lint/plugin/no-let: 前回の値と比べるには、通知をまたいで持つしかない
   let prev = select(store.getState());
   return store.subscribe(() => {
     const next = select(store.getState());

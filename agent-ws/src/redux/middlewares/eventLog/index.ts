@@ -9,13 +9,15 @@
  * createStore の log として、reducer の直前に組む（他の middleware が途中で出した出来事より先に記録するため）
  */
 import { isAnyOf } from "@reduxjs/toolkit";
+import { coalesce } from "../../../lib/coalesce.ts";
 import type { AppMiddleware, RootState } from "../../createStore.ts";
 import { agentEnded, agentForgotten, agentRestored, isAgentEvent } from "../../modules/app/agents/slice.ts";
 import { acknowledged } from "../../modules/app/attention/slice.ts";
 import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
+import type { Agent } from "../../types/agent.ts";
 import { isReplayed, replayed } from "../../utils/replayed.ts";
 import { effects, on } from "../effects.ts";
-import { defaultDir, openLog } from "./log.ts";
+import { defaultDir, type LogRead, openLog } from "./log.ts";
 
 /** pid が分からないエージェントを、ログの更新が途絶えてから保持する期間 */
 const TTL = 24 * 60 * 60_000;
@@ -23,6 +25,9 @@ const TTL = 24 * 60 * 60_000;
 const SNAPSHOT_EVERY = 200;
 
 const isRecorded = isAnyOf(isAgentEvent, acknowledged);
+
+/** pid の分からないエージェントは、プロセスで生死を確かめられないので、ログの更新が途絶えて期間が過ぎたら閉じる */
+const expired = (agent: Agent, mtimeMs: number, at: number) => !agent.pid && at - mtimeMs > TTL;
 
 /** 記録の単位: そのエージェントの状態と確認の状況（どちらかが変われば記録する） */
 const recordOf = (st: RootState, id: string) => [st.app.agents.byId[id], st.app.attention[id]] as const;
@@ -36,42 +41,51 @@ export const eventLog = (o: EventLogOptions = {}): AppMiddleware =>
   effects((api) => {
     const log = openLog(o.dir ?? defaultDir());
     const offsets = new Map<string, number>(); // このプロセスが読み終えた位置。見張りでは差分だけ流す
-    let stopWatching: (() => void) | undefined;
+
+    /** 読んだ分を、記録済みの目印を付けて流す */
+    const replay = (id: string, r: LogRead) => {
+      if (r.snapshot) api.dispatch(replayed(agentRestored(r.snapshot)));
+      for (const e of r.events) api.dispatch(replayed(e));
+      offsets.set(id, r.offset);
+    };
+
+    /** 読み込んだ後の手入れ: 長くなったログはスナップショットを取り直し、pid の分からないエージェントは期限で閉じる */
+    const tidy = (id: string, r: LogRead, mtimeMs: number, at: number) => {
+      const [agent, attention] = recordOf(api.getState(), id);
+      if (!agent || !attention) return;
+      if (r.events.length >= SNAPSHOT_EVERY) log.saveSnapshot(id, { agent, attention }, r.offset);
+      if (expired(agent, mtimeMs, at)) api.dispatch(agentEnded({ agentId: id, at }));
+    };
 
     /** at: いまの時刻（期限切れの判断に使う） */
     const load = (id: string, mtimeMs: number, at: number) => {
       const r = log.read(id);
       if (!r) return;
-      if (r.snapshot) api.dispatch(replayed(agentRestored(r.snapshot)));
-      for (const e of r.events) api.dispatch(replayed(e));
-      offsets.set(id, r.offset);
-      const st = api.getState();
-      const [agent, attention] = recordOf(st, id);
-      if (agent && attention && r.events.length >= SNAPSHOT_EVERY) log.saveSnapshot(id, { agent, attention }, r.offset);
-      // pid の分からないエージェントは、プロセスで生死を確かめられないので期限で閉じる
-      if (agent && !agent.pid && at - mtimeMs > TTL) api.dispatch(agentEnded({ agentId: id, at }));
+      replay(id, r);
+      tidy(id, r, mtimeMs, at);
     };
 
+    /** まだ読んでいないログは全部、読んだログは続きだけ取り込む */
+    const catchUp = (id: string, mtimeMs: number) => {
+      const from = offsets.get(id);
+      if (from === undefined) return load(id, mtimeMs, api.getState().app.lifecycle.now);
+      const r = log.read(id, from);
+      if (r?.events.length) replay(id, r);
+    };
+
+    const forget = (id: string) => {
+      offsets.delete(id);
+      api.dispatch(agentForgotten({ agentId: id }));
+    };
+
+    /** 他のプロセスが書いた分を取り込む。消えたログのエージェントは忘れる */
     const follow = () => {
       const present = log.list();
-      for (const { id, mtimeMs } of present) {
-        const from = offsets.get(id);
-        if (from === undefined) {
-          load(id, mtimeMs, api.getState().app.lifecycle.now);
-          continue;
-        }
-        const r = log.read(id, from);
-        if (!r?.events.length) continue;
-        for (const e of r.events) api.dispatch(replayed(e));
-        offsets.set(id, r.offset);
-      }
+      for (const l of present) catchUp(l.id, l.mtimeMs);
       const ids = new Set(present.map((l) => l.id));
-      for (const id of offsets.keys()) {
-        if (ids.has(id)) continue;
-        offsets.delete(id);
-        api.dispatch(agentForgotten({ agentId: id }));
-      }
+      for (const id of [...offsets.keys()].filter((id) => !ids.has(id))) forget(id);
     };
+    const followSoon = coalesce(follow); // 連続した追記はまとめて取り込む
 
     return [
       // 状態を変えた出来事だけを記録する（流し直した出来事は記録済み）
@@ -89,12 +103,7 @@ export const eventLog = (o: EventLogOptions = {}): AppMiddleware =>
       }),
       on(initialized, ({ payload: { at } }) => {
         for (const l of log.list()) load(l.id, l.mtimeMs, at);
-        if (!o.follow || stopWatching) return;
-        let timer: Timer | undefined;
-        stopWatching = log.watch(() => {
-          clearTimeout(timer); // 連続した追記はまとめて取り込む
-          timer = setTimeout(follow, 50);
-        });
+        if (o.follow) log.watch(() => followSoon(50));
       }),
       on(ticked, () => {
         if (o.follow) follow(); // 見張りが取りこぼしたときの保険

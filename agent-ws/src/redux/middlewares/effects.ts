@@ -15,6 +15,7 @@ import { type ActionMatchingAnyOf, isAnyOf, type MiddlewareAPI, type UnknownActi
 import type { AppDispatch, AppMiddleware, RootState } from "../createStore.ts";
 
 type Matcher = Parameters<typeof isAnyOf>[number];
+export type AppApi = MiddlewareAPI<AppDispatch, RootState>;
 type React<A> = (action: A, prev: RootState) => void;
 
 /** 1つの出来事に対する反応（当てはまらなければ何もしない） */
@@ -24,7 +25,7 @@ export type Reaction = (action: unknown, prev: RootState) => void;
 export function on<M extends Matcher>(matcher: M, react: React<ActionMatchingAnyOf<[M]>>): Reaction;
 export function on<M extends Matcher[]>(matchers: [...M], react: React<ActionMatchingAnyOf<M>>): Reaction;
 export function on(matchers: Matcher | Matcher[], react: React<never>): Reaction {
-  const match = isAnyOf(...(Array.isArray(matchers) ? matchers : [matchers]));
+  const match = isAnyOf(...[matchers].flat());
   return (action, prev) => {
     if (match(action)) react(action as never, prev);
   };
@@ -38,7 +39,7 @@ export const always =
 
 /** 反応の並びから middleware を作る。setup は Store ごとに1回呼ばれる（middleware ごとの状態はその中に持つ） */
 export const effects =
-  (setup: (api: MiddlewareAPI<AppDispatch, RootState>) => Reaction[]): AppMiddleware =>
+  (setup: (api: AppApi) => Reaction[]): AppMiddleware =>
   (api) => {
     const reactions = setup(api);
     return (next) => (action) => {
