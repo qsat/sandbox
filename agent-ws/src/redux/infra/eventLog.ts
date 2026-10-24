@@ -6,7 +6,8 @@
 import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, statSync, unlinkSync, watch as fsWatch, writeFileSync, appendFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { Session, SessionAction } from "../modules/app/sessions/slice.ts";
+import type { SessionAction } from "../modules/app/sessions/slice.ts";
+import type { Session } from "../types/session.ts";
 
 export const DIR =
   process.env.AGENT_WS_STATE_DIR ??

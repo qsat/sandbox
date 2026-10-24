@@ -3,7 +3,7 @@
  * 選択中の行・スクロール位置は呼び出し側の状態（Store の ui.watch）にあり、ここは読んで描くのと、変更を頼むだけ。
  * 何を表示するか・どう移動するかも関数で受け取る（このモジュールは I/O の中身を知らない）
  */
-import type { JumpTarget } from "../redux/modules/ui/navigation/slice.ts";
+import type { JumpTarget } from "../redux/types/navigation.ts";
 import type { ColorMode } from "./terminal.ts";
 import { formatRow, paint } from "./terminal.ts";
 import type { Cell, Row } from "./view.ts";

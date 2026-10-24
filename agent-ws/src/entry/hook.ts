@@ -1,5 +1,5 @@
 import { appendFileSync } from "node:fs";
-import type { HookInput } from "../redux/modules/app/sessions/hook.ts";
+import type { HookInput } from "../redux/types/hook.ts";
 import { notify } from "../redux/infra/notify.ts";
 import { notificationListeners } from "../redux/modules/app/notification/listener.ts";
 import { sessionListeners } from "../redux/modules/app/sessions/listener.ts";

@@ -7,6 +7,7 @@ import {
   failed, notified, permissionRequested, promptSubmitted, started, stopped, subagentStarted, subagentStopped, toolUsed, ended,
 } from "./slice.ts";
 import { firstLine } from "../../../utils/firstLine.ts";
+import type { HookInput } from "../../../types/hook.ts";
 
 /** hook に登録するイベントと matcher。toActions が解釈するイベントと一致させる */
 export const HOOK_EVENTS: Record<string, string | null> = {
@@ -22,24 +23,6 @@ export const HOOK_EVENTS: Record<string, string | null> = {
   SubagentStop: null,
   SessionEnd: null,
 };
-
-/** hook の入力（使うフィールドだけ） */
-export interface HookInput {
-  hook_event_name: string;
-  session_id: string;
-  cwd?: string;
-  transcript_path?: string;
-  source?: string; // SessionStart: startup / resume / clear / compact
-  agent_id?: string; // サブエージェント内で発火したとき
-  agent_type?: string; // 内部用のエージェント（入力候補の先読みなど）では空か無い
-  tool_name?: string;
-  tool_input?: Record<string, unknown>;
-  notification_type?: string;
-  message?: string;
-  last_assistant_message?: string;
-  background_tasks?: { status: string }[]; // Stop 時点のバックグラウンドのサブエージェントなど
-  error?: string;
-}
 
 /** 質問としてユーザーに答えを求めるツール（許可待ちと同じ PermissionRequest で届く） */
 const QUESTION_TOOLS = new Set(["AskUserQuestion"]);

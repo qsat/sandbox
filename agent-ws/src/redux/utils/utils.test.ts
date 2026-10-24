@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { Pane } from "../modules/ui/navigation/slice.ts";
+import type { Pane } from "../types/navigation.ts";
 import { detectAgent } from "./detectAgent.ts";
 import { findPane } from "./findPane.ts";
 import { repoName } from "./repoName.ts";

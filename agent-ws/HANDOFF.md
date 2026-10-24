@@ -23,7 +23,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 
 ## 構成（Redux Toolkit・re-ducks。依存は矢印の向きだけ）
     src/entry/*（初期化）─┬→ src/redux/createStore.ts ─→ src/redux/modules/{app,ui}/{slug}/{slice,selector,listener}.ts
-                         │                                  └→ src/redux/utils/*（純粋な関数）・src/redux/infra/*（I/O）
+                         │                                  └→ src/redux/types/*（型）・src/redux/utils/*（純粋な関数）・src/redux/infra/*（I/O）
                          └→ src/ui/*（描画）
 
     entry ─ dispatch(意図) ─→ middleware ─┬→ listener     意図に反応して I/O し、結果を事実のアクションで戻す
@@ -40,18 +40,20 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
           app/
             sessions/      セッション集約（本体＋サブエージェント）。ログの読み込み・取り込み・掃除・hook・既読化。
                            hook.ts は Claude Code の入力 → アクションの境界（fixtures/ に実データ）
-            workspace/     リポジトリ構成・プロセス・変更件数とそのスキャン。ツリーを組み立てる selector。Repository などの型
+            workspace/     リポジトリ構成・プロセス・変更件数とそのスキャン。ツリーを組み立てる selector
             notification/  通知する遷移（selector）と通知（listener）。状態は持たない
             polling/       watch コマンドの定期スキャンとログの変化の取り込み。状態は持たない
           ui/
-            navigation/    ペインへの移動と、その結果（jumped）。Pane / JumpTarget などの型
+            navigation/    ペインへの移動と、その結果（jumped）
             watch/         watch の画面の状態（選択中の行・スクロール位置）。選択を動かすと移動の結果は消える
             statusLine/    ステータスラインの印（selector）と tmux の再描画（listener）。状態は持たない
+        types/           ドメインの型（session・workspace・navigation・notice・statusLine・hook）
         utils/           純粋な関数を1関数1ファイルで（detectAgent・isUnder・repoName・firstLine・ancestry・findPane）
         infra/           eventLog（アクションログとスナップショット）・git・proc・tmux・notify・shell・transcript
       ui/                描画: view（行モデル）・terminal（色と幅）・watch（TUI。状態は Store の ui.watch を読み、変更は dispatch を頼む）
 
-- 各モジュールの slice.ts は事実のアクション・reducer・型に加えて、意図のアクション（〜Requested など）を持つ。listener.ts は `addAppListener` のアクションの配列を返す。状態に触れるときは selector を通す
+- ドメインの型は redux/types/ に置く。reducer の state の形（SessionsState・WorkspaceState・NavigationState・WatchViewState）と、action creator から導く型（SessionAction）は reducer と一体なので各モジュールの slice.ts に置く。Store から導く型（RootState・AppDispatch など）は createStore.ts
+- 各モジュールの slice.ts は事実のアクション・reducer に加えて、意図のアクション（〜Requested など）を持つ。listener.ts は `addAppListener` のアクションの配列を返す。状態に触れるときは selector を通す
 - thunk は使わない（thunk middleware も外している）。I/O を伴う手続きは「意図のアクション → listener → 事実のアクション」で表す。結果を返す必要がある移動は `jumped` で Store（ui.navigation）に記録し、呼び出し側が読む
 - createStore はファクトリで、reducer と middleware は全コマンド共通。listener はコマンドによって要らない・困るもの（status から tmux を再描画させると status がまた呼ばれる、hook 以外での通知など）があるので、entry が要るモジュールの分だけ store 初期化のときに `addAppListener` で登録する
 - listener の処理は await を含まない限り dispatch の中で同期的に終わる。entry は dispatch の直後に状態を読むのでこれに頼っている（redux/createStore.test.ts で確かめている）

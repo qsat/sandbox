@@ -1,7 +1,7 @@
 /**
  * ワークスペースのスキャン（git・プロセス）
  */
-import type { Repository } from "./slice.ts";
+import type { Repository } from "../../../types/workspace.ts";
 import { repoName } from "../../../utils/repoName.ts";
 import * as git from "../../../infra/git.ts";
 import * as proc from "../../../infra/proc.ts";

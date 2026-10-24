@@ -1,5 +1,5 @@
-import type { JumpResult } from "./slice.ts";
-import type { Pid } from "../../app/workspace/slice.ts";
+import type { JumpResult } from "../../../types/navigation.ts";
+import type { Pid } from "../../../types/workspace.ts";
 import { findPane } from "../../../utils/findPane.ts";
 import * as proc from "../../../infra/proc.ts";
 import * as tmux from "../../../infra/tmux.ts";

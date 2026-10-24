@@ -1,13 +1,6 @@
 import type { RootState } from "../../../createStore.ts";
 import { attention, selectSessions } from "../../app/sessions/selector.ts";
-
-/** ステータスラインに出す印（対応が要るものの有無だけ） */
-export interface StatusFlags {
-  waiting: boolean;
-  asking: boolean;
-  unseen: boolean;
-  error: boolean;
-}
+import type { StatusFlags } from "../../../types/statusLine.ts";
 
 export function selectStatusFlags(st: RootState): StatusFlags {
   const sessions = selectSessions(st);

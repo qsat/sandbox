@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readlinkSync } from "node:fs";
-import type { Pid, ProcInfo } from "../modules/app/workspace/slice.ts";
+import type { Pid, ProcInfo } from "../types/workspace.ts";
 import { lines, run } from "./shell.ts";
 
 /** ps の一覧（cwd なし。親子関係を辿るだけならこれで足りる） */

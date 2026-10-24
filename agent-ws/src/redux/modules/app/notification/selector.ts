@@ -1,15 +1,7 @@
-import { isBlocked, type Session } from "../sessions/slice.ts";
+import { isBlocked } from "../sessions/slice.ts";
+import type { Session } from "../../../types/session.ts";
 import { attention } from "../sessions/selector.ts";
-
-export type NoticeKind = "waiting" | "asking" | "error" | "ready";
-
-/** 人の注意が要る遷移の通知内容 */
-export interface Notice {
-  repo: string;
-  branch?: string;
-  kind: NoticeKind;
-  reason?: string;
-}
+import type { NoticeKind } from "../../../types/notice.ts";
 
 /** 通知する遷移: 許可・質問待ち・エラーになった、またはターンが完了した（バックグラウンドが残る完了・中断は除く） */
 export function noticeOf(prev: Session | undefined, next: Session | undefined): { kind: NoticeKind; reason?: string } | null {

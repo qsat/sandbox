@@ -1,4 +1,4 @@
-import type { Notice } from "./selector.ts";
+import type { Notice } from "../../../types/notice.ts";
 import * as git from "../../../infra/git.ts";
 import { repoName } from "../../../utils/repoName.ts";
 import { addAppListener, type AppListener } from "../../../createStore.ts";

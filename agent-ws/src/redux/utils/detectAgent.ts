@@ -1,4 +1,4 @@
-import type { AgentKind } from "../modules/app/workspace/slice.ts";
+import type { AgentKind } from "../types/workspace.ts";
 
 const AGENTS: [AgentKind, RegExp][] = [
   ["claude", /^claude$|@anthropic-ai\/claude-code|\/claude\/versions\//],

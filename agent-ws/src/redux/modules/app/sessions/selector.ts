@@ -1,17 +1,9 @@
 import type { RootState } from "../../../createStore.ts";
-import type { Session, SessionStatus, Subagent } from "./slice.ts";
+import type { Attention, Session } from "../../../types/session.ts";
 import { isBlocked } from "./slice.ts";
 
 export const selectSessions = (st: RootState): Session[] => Object.values(st.app.sessions);
 export const selectSession = (st: RootState, id: string): Session | undefined => st.app.sessions[id];
-
-/** 本体として見せる状態。本体が待っていなくても、サブエージェントが許可を待っていれば許可待ち */
-export interface Attention {
-  status: SessionStatus;
-  reason?: string;
-  since: number;
-  subagent?: Subagent; // サブエージェント由来のとき
-}
 
 export function attention(s: Session): Attention {
   if (isBlocked(s.status) || s.status === "error") return s;

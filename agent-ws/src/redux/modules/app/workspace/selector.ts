@@ -1,13 +1,13 @@
 /**
  * セッションと合わせて「リポジトリ > worktree > プロセス」のツリーにする
  */
-import type { Proc, ProcInfo, Repository, Worktree } from "./slice.ts";
+import type { Proc, ProcInfo, Repository, Worktree } from "../../../types/workspace.ts";
 import { detectAgent } from "../../../utils/detectAgent.ts";
 import { isUnder } from "../../../utils/isUnder.ts";
 import type { RootState } from "../../../createStore.ts";
 import { selectSessions } from "../sessions/selector.ts";
-import type { Session } from "../sessions/slice.ts";
-import type { Filter } from "./slice.ts";
+import type { Session } from "../../../types/session.ts";
+import type { Filter } from "../../../types/workspace.ts";
 
 /** プロセスにエージェント種別とセッションを結びつける（pid 優先、不明なら cwd） */
 export function linkSessions(infos: ProcInfo[], sessions: Session[]): Proc[] {

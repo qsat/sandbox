@@ -2,7 +2,7 @@
  * セッションの副作用: ログの読み込み・取り込み・掃除、hook の受け付け、既読化
  */
 import { interruptedSince, toActions } from "./hook.ts";
-import type { Pid } from "../workspace/slice.ts";
+import type { Pid } from "../../../types/workspace.ts";
 import { ancestry } from "../../../utils/ancestry.ts";
 import { detectAgent } from "../../../utils/detectAgent.ts";
 import { findPane } from "../../../utils/findPane.ts";
