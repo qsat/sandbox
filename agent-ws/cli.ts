@@ -14,15 +14,21 @@
  *           AGENT_WS_DUMP（hook の入力をそのまま追記するファイル。入力の形を確かめるとき用）
  *
  * 構成（依存は矢印の向きだけ）:
- *   cli.ts ─┬→ app.ts ─┬→ domain.ts   型と純粋なルール
- *           │          └→ infra/*     git・プロセス・状態ファイル・tmux
- *           └→ ui/*  ───→ domain.ts   行モデル（view）・色（terminal）・対話（watch）
+ *   cli.ts ─┬→ app/store   ─┬→ domain/*   集約・スライス・selector（純粋）
+ *           │   app/effects ├→ infra/*    ログ・git・プロセス・tmux
+ *           │   app/claude  ┘             （claude は Claude Code の入力をアクションに変える境界）
+ *           └→ ui/*  ──────────→ domain/*  行モデル（view）・色（terminal）・対話（watch）
  */
 import { appendFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { parseArgs } from "node:util";
-import * as app from "./src/app.ts";
-import type { HookEvent, JumpTarget } from "./src/domain.ts";
+import type { HookInput } from "./src/app/claude.ts";
+import { hooksConfig } from "./src/app/claude.ts";
+import * as fx from "./src/app/effects.ts";
+import { createAppStore, type AppStore } from "./src/app/store.ts";
+import type { JumpTarget } from "./src/domain/model.ts";
+import { sessionSelectors, statusFlags } from "./src/domain/sessions.ts";
+import { selectTree } from "./src/domain/workspace.ts";
 import { ghqRoots } from "./src/infra/git.ts";
 import { notify } from "./src/infra/notify.ts";
 import { realPath } from "./src/infra/shell.ts";
@@ -48,56 +54,67 @@ const COMMANDS = ["list", "watch", "status", "seen", "jump", "hook", "hooks-conf
 const [command, arg] = COMMANDS.includes(positionals[0] ?? "") ? positionals : ["list", ...positionals];
 const color: ColorMode = process.stdout.isTTY || process.env.FORCE_COLOR === "1" ? "ansi" : "none";
 const filter = { all: opt.all, agentsOnly: opt["agents-only"] };
-const viewOptions = (roots: string[], compact: boolean) => ({ compact, roots, home: homedir(), now: Date.now() });
+
+/** ログから組み立てたセッションを持つ Store */
+function sessionStore(): AppStore {
+  const store = createAppStore();
+  store.dispatch(fx.loadSessions());
+  store.dispatch(fx.settleSessions());
+  return store;
+}
+
+const tree = (store: AppStore, roots: string[], compact: boolean) => {
+  const st = store.getState();
+  const repos = selectTree(st.workspace, sessionSelectors.selectAll(st.sessions), filter, process.pid);
+  return { repos, rows: treeRows(repos, { compact, roots, home: homedir(), now: Date.now() }) };
+};
 
 switch (command) {
   case "list": {
     const roots = ghqRoots();
-    const repos = app.snapshot(app.loadRepositories(roots, arg), filter);
+    const store = sessionStore();
+    store.dispatch(fx.scanRepos(roots, arg));
+    store.dispatch(fx.scanProcesses());
+    store.dispatch(fx.scanDirty(filter));
+    const { repos, rows } = tree(store, roots, false);
     if (opt.json) console.log(JSON.stringify(repos, null, 2));
-    else for (const row of treeRows(repos, viewOptions(roots, false))) console.log(formatRow(row, process.stdout.columns ?? 160, color));
+    else for (const row of rows) console.log(formatRow(row, process.stdout.columns ?? 160, color));
     break;
   }
 
   case "watch": {
     const roots = ghqRoots();
-    let repos = app.loadRepositories(roots, arg);
-    let loadedAt = Date.now();
-    const reload = () => {
-      repos = app.loadRepositories(roots, arg);
-      loadedAt = Date.now();
-    };
+    const store = sessionStore();
     runWatch({
-      // リポジトリ構成は 15 秒ごと、プロセスと状態は毎回取り直す
-      rows: () => {
-        if (Date.now() - loadedAt > 15_000) reload();
-        return treeRows(app.snapshot(repos, filter), viewOptions(roots, true));
-      },
+      rows: () => tree(store, roots, true).rows,
+      subscribe: (onChange) => void store.subscribe(onChange),
       jump: (target) => {
-        const r = app.jump(target, { create: true });
+        const r = store.dispatch(fx.jumpTo(target, { create: true }));
         return { ok: r.kind === "focused" || r.kind === "created", message: jumpMessage(r) };
       },
-      reload,
-      intervalMs: Number(opt.interval) * 1000,
+      reload: () => store.dispatch(fx.scanRepos(roots, arg)),
       exitOnJump: opt.popup,
       color,
     });
+    store.dispatch(fx.watchStarted({ roots, query: arg, filter, intervalMs: Number(opt.interval) * 1000 }));
     break;
   }
 
-  case "status":
-    console.log(formatCells(statusLine(app.loadSessions()), opt.tmux ? "tmux" : color));
+  case "status": {
+    const st = sessionStore().getState();
+    console.log(formatCells(statusLine(statusFlags(sessionSelectors.selectAll(st.sessions))), opt.tmux ? "tmux" : color));
     break;
+  }
 
   case "seen":
-    if (/^\d+$/.test(arg ?? "")) app.markSeen(Number(arg));
+    if (/^\d+$/.test(arg ?? "")) createAppStore().dispatch((d) => (d(fx.loadSessions()), d(fx.markSeenInPane(Number(arg)))));
     break;
 
   case "jump": {
     const target: JumpTarget = /^\d+$/.test(arg ?? "")
       ? { title: `pid ${arg}`, name: `pid ${arg}`, pid: Number(arg) }
       : { title: arg ?? ".", name: arg ?? ".", path: realPath(arg ?? process.cwd()) };
-    const r = app.jump(target, { create: opt.create, dryRun: opt["dry-run"] });
+    const r = sessionStore().dispatch(fx.jumpTo(target, { create: opt.create, dryRun: opt["dry-run"] }));
     console.log(formatCells([jumpMessage(r)], color));
     process.exitCode = r.kind === "notFound" || r.kind === "failed" ? 1 : 0;
     break;
@@ -109,17 +126,20 @@ switch (command) {
       const input = await Bun.stdin.text();
       // 入力の確認用: 受け取った JSON をそのまま1行ずつ追記する
       if (process.env.AGENT_WS_DUMP) appendFileSync(process.env.AGENT_WS_DUMP, `${input.replace(/\n/g, " ")}\n`);
-      const notice = app.handleHook(JSON.parse(input || "{}") as HookEvent);
       const notifyOn = (process.env.AGENT_WS_NOTIFY ?? "waiting,asking,ready,error").split(",");
-      if (notice && notifyOn.includes(notice.session.status)) {
-        const { title, body } = notification(notice);
-        notify(title, body);
-      }
+      const store = createAppStore({
+        onNotice: (n) => {
+          if (!notifyOn.includes(n.kind)) return;
+          const { title, body } = notification(n);
+          notify(title, body);
+        },
+      });
+      store.dispatch(fx.handleHook(JSON.parse(input || "{}") as HookInput));
     } catch { /* 無視 */ }
     break;
   }
 
   case "hooks-config":
-    console.log(JSON.stringify(app.hooksConfig(realPath(process.argv[1])), null, 2));
+    console.log(JSON.stringify(hooksConfig(process.execPath, realPath(process.argv[1])), null, 2));
     break;
 }

@@ -3,14 +3,18 @@
   "private": true,
   "type": "module",
   "bin": {
-    "agent-ws": "./cli.ts"
+    "agent-ws": "./dist/agent-ws.js"
   },
   "scripts": {
+    "build": "bun build cli.ts --target=bun --outfile=dist/agent-ws.js --minify-syntax --minify-whitespace --define 'process.env.NODE_ENV=\"production\"'",
     "test": "bun test",
     "typecheck": "tsc"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": ">=5.8"
+  },
+  "dependencies": {
+    "@reduxjs/toolkit": "^2.13.0"
   }
 }

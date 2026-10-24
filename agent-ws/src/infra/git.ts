@@ -1,7 +1,7 @@
 import { readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
-import type { Worktree } from "../domain.ts";
+import type { Worktree } from "../domain/model.ts";
 import { lines, realPath, run } from "./shell.ts";
 
 /** ghq のルート（ghq コマンド → GHQ_ROOT → git config ghq.root → ~/ghq） */

@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readlinkSync } from "node:fs";
-import type { Pid, ProcInfo } from "../domain.ts";
+import type { Pid, ProcInfo } from "../domain/model.ts";
 import { lines, run } from "./shell.ts";
 
 /** ps の一覧（cwd なし。親子関係を辿るだけならこれで足りる） */

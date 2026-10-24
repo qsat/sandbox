@@ -1,14 +1,11 @@
 import { expect, test } from "bun:test";
-import type { Session } from "../domain.ts";
 import { formatCells } from "./terminal.ts";
 import { statusLine } from "./view.ts";
 
-const session = (over: Partial<Session>): Session =>
-  ({ id: "s", pid: 1, cwd: "/w", status: "running", since: 0, updated: 0, subagents: [], ...over });
-
 test("statusLine: 対応が要るものの有無だけを出し、何も無ければ空", () => {
-  const line = (...ss: Partial<Session>[]) => formatCells(statusLine(ss.map(session)), "none");
-  expect(line({ status: "running" }, { status: "ready" })).toBe("");
-  expect(line({ status: "waiting" }, { status: "waiting" }, { status: "ready", unseen: true })).toBe("⏳ ✓");
-  expect(line({ status: "asking" }, { status: "error" })).toBe("❓ ✗");
+  const line = (f: Partial<Parameters<typeof statusLine>[0]>) =>
+    formatCells(statusLine({ waiting: false, asking: false, unseen: false, error: false, ...f }), "none");
+  expect(line({})).toBe("");
+  expect(line({ waiting: true, unseen: true })).toBe("⏳ ✓");
+  expect(line({ asking: true, error: true })).toBe("❓ ✗");
 });

@@ -1,8 +1,10 @@
 /**
  * 表示モデル: ドメイン → 行（Row）。何を・どんな意味で見せるかだけ決め、色や装飾はしない
  */
-import type { JumpResult, JumpTarget, Notice, Proc, Repository, Session, SessionStatus, Status, Worktree } from "../domain.ts";
-import { isBlocked, isUnder, repoName } from "../domain.ts";
+import type { JumpResult, JumpTarget, Notice, Proc, Repository, Worktree } from "../domain/model.ts";
+import { isUnder, repoName } from "../domain/model.ts";
+import type { Session, SessionStatus, Status, StatusFlags } from "../domain/sessions.ts";
+import { attention, isBlocked, visibleSubagents } from "../domain/sessions.ts";
 
 /** 意味としてのトーン。実際の色は terminal.ts が決める */
 export type Tone = "plain" | "strong" | "dim" | "title" | "agent" | "ok" | "warn" | Status;
@@ -72,7 +74,7 @@ export function treeRows(repos: Repository[], o: ViewOptions): Row[] {
 
 function repoNode(r: Repository, o: ViewOptions): Node {
   const agents = r.worktrees.flatMap((w) => w.processes.filter((p) => p.agent));
-  const count = (st: SessionStatus) => agents.filter((p) => p.session?.status === st).length;
+  const count = (st: SessionStatus) => agents.filter((p) => p.session && attention(p.session).status === st).length;
   return {
     cells: [
       cell(r.name, "title"),
@@ -120,25 +122,27 @@ function procNode(p: Proc, w: Worktree, title: string, now: number): Node {
     return { cells: [cell(String(p.pid).padStart(7)), cell(p.elapsed.padStart(11), "dim"), cell(dir + p.command)], key, target, children: [] };
   }
   const s = p.session;
+  // サブエージェントが許可を待っていれば本体も許可待ち（詳細はサブエージェントの行に出る）
+  const at = s && attention(s);
   return {
     cells: [
       cell(`[${p.agent}]`.padEnd(9), "agent"),
       // 完了して未確認なら「完了」、見た後は「入力待ち」
-      ...(s ? statusCells(s.unseen ? "done" : s.status, now - s.since, s.unseen ? "ok" : s.status) : [cell("? 状態不明", "dim")]),
+      ...(s && at ? statusCells(s.unseen ? "done" : at.status, now - at.since, s.unseen ? "ok" : at.status) : [cell("? 状態不明", "dim")]),
       cell(`pid ${p.pid}`, "dim"),
-      ...when(s?.reason, cell(s?.reason ?? "", "dim")),
+      ...when(at?.reason, cell(at?.reason ?? "", "dim")),
     ],
     key,
     target,
-    priority: isBlocked(s?.status) ? 3 : s?.unseen ? 2 : 1,
+    priority: isBlocked(at?.status) ? 3 : s?.unseen ? 2 : 1,
     // サブエージェントは本体プロセス内で動くので、移動先は本体と同じ
-    children: (s?.subagents ?? []).map((a) => ({
+    children: (s ? visibleSubagents(s, now) : []).map((a) => ({
       cells: [
         cell(`⤷ ${a.type}`.padEnd(15), a.status === "done" ? "dim" : "plain"),
         ...statusCells(a.status, now - a.since),
         ...when(a.detail, cell(a.detail ?? "", "dim")),
       ],
-      key: `sub:${a.sessionId}:${a.id}`,
+      key: `sub:${s?.id}:${a.id}`,
       target,
       children: [],
     })),
@@ -168,10 +172,10 @@ function summaryRow(repos: Repository[]): Row {
 /** 状態ごとの件数（一覧のフッター） */
 function statusCounts(sessions: Session[]): Cell[] {
   const order: SessionStatus[] = ["waiting", "asking", "error", "ready", "running"];
-  const subs = sessions.flatMap((s) => s.subagents).filter((a) => a.status !== "done").length;
+  const subs = sessions.flatMap((s) => Object.values(s.subagents)).filter((a) => a.status !== "done").length;
   return [
     ...order.flatMap((st) => {
-      const n = sessions.filter((s) => s.status === st).length;
+      const n = sessions.filter((s) => attention(s).status === st).length;
       return when(n, cell(`${STATUS[st].icon}${n} ${STATUS[st].label}`, st));
     }),
     ...when(subs, cell(`⤷${subs} サブエージェント稼働`, "running")),
@@ -179,18 +183,18 @@ function statusCounts(sessions: Session[]): Cell[] {
 }
 
 /** ステータスライン: 人の対応が要るものの有無だけ（中身はポップアップで見る） */
-export const statusLine = (sessions: Session[]): Cell[] => [
-  ...when(sessions.some((s) => s.status === "waiting"), cell(STATUS.waiting.icon, "waiting")),
-  ...when(sessions.some((s) => s.status === "asking"), cell(STATUS.asking.icon, "asking")),
-  ...when(sessions.some((s) => s.unseen), cell(STATUS.done.icon, "ok")),
-  ...when(sessions.some((s) => s.status === "error"), cell(STATUS.error.icon, "error")),
+export const statusLine = (f: StatusFlags): Cell[] => [
+  ...when(f.waiting, cell(STATUS.waiting.icon, "waiting")),
+  ...when(f.asking, cell(STATUS.asking.icon, "asking")),
+  ...when(f.unseen, cell(STATUS.done.icon, "ok")),
+  ...when(f.error, cell(STATUS.error.icon, "error")),
 ];
 
-export function notification({ repo, branch, session }: Notice): { title: string; body: string } {
-  const s = STATUS[session.status];
+export function notification({ repo, branch, kind, reason }: Notice): { title: string; body: string } {
+  const s = kind === "ready" ? STATUS.done : STATUS[kind];
   return {
     title: `${shortName(repo)}${branch ? ` [${branch}]` : ""}`,
-    body: `${s.icon} ${s.label}${session.reason ? `: ${session.reason}` : ""}`,
+    body: `${s.icon} ${s.label}${reason ? `: ${reason}` : ""}`,
   };
 }
 

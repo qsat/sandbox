@@ -1,17 +1,17 @@
 /**
- * 常駐表示: 行を定期的に描き直し、j/k で選択、Enter で移動する
+ * 常駐表示: 状態が変わるたびに描き直し、j/k で選択、Enter で移動する
  * 何を表示するか・どう移動するかは呼び出し側から関数で受け取る（このモジュールは I/O の中身を知らない）
  */
-import type { JumpTarget } from "../domain.ts";
+import type { JumpTarget } from "../domain/model.ts";
 import type { ColorMode } from "./terminal.ts";
 import { formatRow, paint } from "./terminal.ts";
 import type { Cell, Row } from "./view.ts";
 
 export interface WatchOptions {
   rows: () => Row[];
+  subscribe: (onChange: () => void) => void; // 表示する状態が変わったら呼ばれる
   jump: (t: JumpTarget) => { ok: boolean; message: Cell };
   reload: () => void; // r キー: リポジトリ構成から読み直す
-  intervalMs: number;
   exitOnJump: boolean; // display-popup 内で使うとき、移動したら閉じる
   color: ColorMode;
 }
@@ -93,6 +93,8 @@ export function runWatch(o: WatchOptions): void {
     process.stdin.setEncoding("utf8");
     process.stdin.on("data", (key: string) => keys[key]?.());
   }
+  // 変化が続いても描画は 1 フレームにまとめる
+  let pending: Timer | undefined;
+  o.subscribe(() => (pending ??= setTimeout(() => ((pending = undefined), refresh()), 30)));
   refresh();
-  setInterval(refresh, o.intervalMs);
 }

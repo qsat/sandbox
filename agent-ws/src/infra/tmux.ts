@@ -1,4 +1,4 @@
-import type { Pane } from "../domain.ts";
+import type { Pane } from "../domain/model.ts";
 import { lines, realPath, run } from "./shell.ts";
 
 // tmux は -F の出力中の制御文字（ロケールによっては非 ASCII も）を "_" に置き換えるので ASCII で区切る
