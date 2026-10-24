@@ -124,7 +124,7 @@ function hooks(inputs: string[], agentId: string, transcript: string) {
 
 /** 録った会話ログを、いまの時刻で書き出す（Esc・拒否は hook が発火せず、会話ログにだけ残る） */
 /** 会話ログを、直前の hook より後に書かれたものとして置く（ファイルの時刻は数 ms 単位と粗いので、書いた時刻は明示する） */
-/** ステータスラインは出来事の連鎖が終わってから描き直すので、それを待つ */
+/** ステータスライン・通知は出来事の連鎖が終わってから出すので、それを待つ */
 const settle = () => Bun.sleep(1);
 
 async function writeTranscript(path: string, fixture: string) {
@@ -175,9 +175,10 @@ describe("1つのセッションの流れ", async () => {
     expect(jump({ arg: String(AGENT_PID), create: false, dryRun: true, color: "none" })).toMatchObject({ ok: true, text: "main:1 (w) %1" });
   });
 
-  test("別のペインを見ている間に完了すると ✓ と通知。そのペインにフォーカスすると確認済みになる", () => {
+  test("別のペインを見ている間に完了すると ✓ と通知。そのペインにフォーカスすると確認済みになる", async () => {
     const before = world.notices.length;
     feed(1, 2);
+    await settle();
     expect(status()).toBe("✓");
     expect(agentLine()).toContain("✓ 完了");
     expect(world.notices.slice(before)).toEqual(["api [feat] ✓ 完了: 2"]);
@@ -186,9 +187,10 @@ describe("1つのセッションの流れ", async () => {
     expect(agentLine()).toContain("✓ 入力待ち");
   });
 
-  test("許可待ちは ⏳ と内容を出して知らせる。許可されれば実行中に戻る", () => {
+  test("許可待ちは ⏳ と内容を出して知らせる。許可されれば実行中に戻る", async () => {
     const before = world.notices.length;
     feed(3, 4);
+    await settle();
     expect(status()).toBe("⏳");
     expect(agentLine()).toContain("⏳ 許可待ち");
     expect(agentLine()).toContain("Bash: echo a > approve.txt");
@@ -197,13 +199,15 @@ describe("1つのセッションの流れ", async () => {
     expect(agentLine()).toContain("● 実行中");
   });
 
-  test("いま見ているペインで完了したら ✓ を出さない（ステータスラインも描き直さない。内部用のエージェントは数えない）", async () => {
+  test("いま見ているペインで完了したら ✓ を出さない（ステータスラインも描き直さず、知らせもしない。内部用のエージェントは数えない）", async () => {
     look("%1");
-    await settle(); // それまでの描き直しを済ませてから数える
+    await settle(); // それまでの描き直し・通知を済ませてから数える
     const refreshes = world.refreshes;
+    const notices = world.notices.length;
     feed(6, 7);
     await settle();
     expect(world.refreshes).toBe(refreshes); // 完了して確認済みになる間の ✓ は映さない
+    expect(world.notices.length).toBe(notices); // 見ているので知らせない
     expect(status()).toBe("");
     expect(agentLine()).toContain("✓ 入力待ち");
     expect(list()).not.toContain("⤷");

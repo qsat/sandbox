@@ -1,5 +1,6 @@
 /**
  * 通知: 人の注意が要る遷移（許可・質問待ち・エラーになった、完了して未確認になった）を知らせる（デスクトップ通知と tmux のメッセージ）
+ * 出来事の連鎖が終わってから比べる。表示中のペインで完了したときは、連鎖の中で確認済みになるので知らせない
  */
 import type { RootState } from "../../createStore.ts";
 import * as git from "../../middlewares/git/git.ts";
@@ -42,4 +43,5 @@ export const notifier =
           notify(title, body);
         }
       },
+      { settle: true },
     );

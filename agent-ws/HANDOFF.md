@@ -20,7 +20,7 @@ AI エージェント（主に Claude Code）を複数の git worktree で並行
 
 ターンの状況は ready（入力待ち）/ running（実行中）/ waiting（許可待ち）/ asking（質問待ち）/ error（エラー）の5つ。サブエージェントは running / waiting / done。
 ターンが完了して人がまだ見ていないものは「未確認」で、一覧では「✓ 完了」と出る。次のプロンプト・そのペインへのフォーカス・ポップアップからの移動で確認したことになる。
-waiting・asking・ready・error への遷移で通知する（tmux の display-message と、osascript または notify-send）。通知する状態は `AGENT_WS_NOTIFY` で絞れる。
+waiting・asking・ready・error への遷移で通知する（tmux の display-message と、osascript または notify-send）。表示中のペインで完了したときは、見ているので知らせない。通知する状態は `AGENT_WS_NOTIFY` で絞れる。
 
 ## 用語
 | 用語 | 意味 |
@@ -113,7 +113,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 - コマンドごとの違いは middleware のオプションで表す。たとえば status は processes() だけでプロセス一覧もリポジトリも調べない（生死の確認だけ）、list と watch は processes({ list: true })・git({ repos, dirty })、watch だけ eventLog({ follow: true }) と clock を組む
 - hook も起動時に全エージェントのログを読む（エージェント10体でも1回あたり +3ms 程度）。claude の middleware は、そのエージェントのこれまでの状態が Store にある前提で hook を処理する
 - tmux のステータスラインは、印が変わったときだけ statusLine の購読者が `tmux refresh-client -S` で描き直す（`#()` も再実行される。tmux 3.4 で確認）。
-  比べるのは出来事の連鎖が終わってから（observe の settle。待ち時間 0 でまとめる）。連鎖は同期的に進むので、途中の状態（表示中のペインで完了して確認済みになる間の ✓）は映さない。watch では、他のプロセスが記録した変化を取り込んだときも描き直す
+  比べるのは出来事の連鎖が終わってから（observe の settle。lib/coalesce で待ち時間 0 でまとめる）。連鎖は同期的に進むので、途中の状態（表示中のペインで完了して確認済みになる間の ✓）は映さない。通知も同じwatch では、他のプロセスが記録した変化を取り込んだときも描き直す
 
 ### Claude Code の hook
 - hook は全イベント共通の1コマンドにし、何が起きたかは `hook_event_name` で判断する。登録するイベントは redux/middlewares/claude/hook.ts の `HOOK_EVENTS`（SessionStart, UserPromptSubmit, PermissionRequest, PostToolUse, PostToolUseFailure, Notification, Stop, StopFailure, SubagentStart, SubagentStop, SessionEnd）
