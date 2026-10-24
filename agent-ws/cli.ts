@@ -14,9 +14,9 @@
  *           AGENT_WS_DUMP（hook の入力をそのまま追記するファイル。入力の形を確かめるとき用）
  *
  * 構成（依存は矢印の向きだけ）:
- *   cli.ts ─┬→ app/store   ─┬→ domain/*   集約・スライス・selector（純粋）
- *           │   app/effects ├→ infra/*    ログ・git・プロセス・tmux
- *           │   app/claude  ┘             （claude は Claude Code の入力をアクションに変える境界）
+ *   cli.ts ─┬→ app/intents（意図のアクション）・app/store
+ *           │     app/effects（listener）─┬→ domain/*   集約・スライス・selector（純粋）
+ *           │     app/claude（境界）──────┴→ infra/*    ログ・git・プロセス・tmux
  *           └→ ui/*  ──────────→ domain/*  行モデル（view）・色（terminal）・対話（watch）
  */
 import { appendFileSync } from "node:fs";
@@ -24,9 +24,9 @@ import { homedir } from "node:os";
 import { parseArgs } from "node:util";
 import type { HookInput } from "./src/app/claude.ts";
 import { hooksConfig } from "./src/app/claude.ts";
-import * as fx from "./src/app/effects.ts";
+import * as intent from "./src/app/intents.ts";
 import { createAppStore, type AppStore } from "./src/app/store.ts";
-import type { JumpTarget } from "./src/domain/model.ts";
+import type { JumpResult, JumpTarget } from "./src/domain/model.ts";
 import { allSessions, statusFlags } from "./src/domain/sessions.ts";
 import { selectTree } from "./src/domain/workspace.ts";
 import { ghqRoots } from "./src/infra/git.ts";
@@ -58,9 +58,15 @@ const filter = { all: opt.all, agentsOnly: opt["agents-only"] };
 /** ログから組み立てたセッションを持つ Store */
 function sessionStore(): AppStore {
   const store = createAppStore();
-  store.dispatch(fx.loadSessions());
-  store.dispatch(fx.settleSessions());
+  store.dispatch(intent.sessionsRequested());
+  store.dispatch(intent.settleRequested({ at: Date.now() }));
   return store;
+}
+
+/** 移動を頼み、結果を Store から読む（listener は dispatch の中で終わる） */
+function jump(store: AppStore, target: JumpTarget, o: { create: boolean; dryRun?: boolean }): JumpResult {
+  store.dispatch(intent.jumpRequested({ target, ...o }));
+  return store.getState().navigation.lastJump ?? { kind: "failed", title: target.title };
 }
 
 const tree = (store: AppStore, roots: string[], compact: boolean) => {
@@ -73,9 +79,9 @@ switch (command) {
   case "list": {
     const roots = ghqRoots();
     const store = sessionStore();
-    store.dispatch(fx.scanRepos(roots, arg));
-    store.dispatch(fx.scanProcesses());
-    store.dispatch(fx.scanDirty(filter));
+    store.dispatch(intent.reposRequested({ roots, query: arg }));
+    store.dispatch(intent.processesRequested());
+    store.dispatch(intent.dirtyRequested({ filter }));
     const { repos, rows } = tree(store, roots, false);
     if (opt.json) console.log(JSON.stringify(repos, null, 2));
     else for (const row of rows) console.log(formatRow(row, process.stdout.columns ?? 160, color));
@@ -89,14 +95,14 @@ switch (command) {
       rows: () => tree(store, roots, true).rows,
       subscribe: (onChange) => void store.subscribe(onChange),
       jump: (target) => {
-        const r = store.dispatch(fx.jumpTo(target, { create: true }));
+        const r = jump(store, target, { create: true });
         return { ok: r.kind === "focused" || r.kind === "created", message: jumpMessage(r) };
       },
-      reload: () => store.dispatch(fx.scanRepos(roots, arg)),
+      reload: () => store.dispatch(intent.reposRequested({ roots, query: arg })),
       exitOnJump: opt.popup,
       color,
     });
-    store.dispatch(fx.watchStarted({ roots, query: arg, filter, intervalMs: Number(opt.interval) * 1000 }));
+    store.dispatch(intent.watchStarted({ roots, query: arg, filter, intervalMs: Number(opt.interval) * 1000 }));
     break;
   }
 
@@ -107,14 +113,18 @@ switch (command) {
   }
 
   case "seen":
-    if (/^\d+$/.test(arg ?? "")) createAppStore().dispatch((d) => (d(fx.loadSessions()), d(fx.markSeenInPane(Number(arg)))));
+    if (/^\d+$/.test(arg ?? "")) {
+      const store = createAppStore();
+      store.dispatch(intent.sessionsRequested());
+      store.dispatch(intent.seenInPaneRequested({ panePid: Number(arg), at: Date.now() }));
+    }
     break;
 
   case "jump": {
     const target: JumpTarget = /^\d+$/.test(arg ?? "")
       ? { title: `pid ${arg}`, name: `pid ${arg}`, pid: Number(arg) }
       : { title: arg ?? ".", name: arg ?? ".", path: realPath(arg ?? process.cwd()) };
-    const r = sessionStore().dispatch(fx.jumpTo(target, { create: opt.create, dryRun: opt["dry-run"] }));
+    const r = jump(sessionStore(), target, { create: opt.create, dryRun: opt["dry-run"] });
     console.log(formatCells([jumpMessage(r)], color));
     process.exitCode = r.kind === "notFound" || r.kind === "failed" ? 1 : 0;
     break;
@@ -134,7 +144,7 @@ switch (command) {
           notify(title, body);
         },
       });
-      store.dispatch(fx.handleHook(JSON.parse(input || "{}") as HookInput));
+      store.dispatch(intent.hookReceived({ input: JSON.parse(input || "{}") as HookInput, at: Date.now() }));
     } catch { /* 無視 */ }
     break;
   }

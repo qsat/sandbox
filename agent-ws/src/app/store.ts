@@ -1,14 +1,13 @@
 /**
  * Store: セッション（ログから組み立てる）とワークスペース（スキャン結果）
  *
- *   dispatch ─→ middleware ─┬→ thunk（スキャン・hook の処理など、I/O を伴う手続き）
- *                           ├→ listener（通知・ステータスラインの再描画・watch の定期スキャン）
+ *   dispatch ─→ middleware ─┬→ listener（意図に反応した I/O・通知・ステータスラインの再描画・watch の定期スキャン）
  *                           └→ 永続化（セッションのアクションを、状態が変わったときだけログに追記）
+ *   thunk は使わない（I/O はすべて listener が受け持ち、結果をアクションで戻す）
  */
-import {
-  configureStore, createListenerMiddleware, type Middleware, type ThunkAction, type ThunkDispatch, type TypedStartListening, type UnknownAction,
-} from "@reduxjs/toolkit";
+import { configureStore, createListenerMiddleware, type Dispatch, type Middleware, type TypedStartListening, type UnknownAction } from "@reduxjs/toolkit";
 import type { Notice } from "../domain/model.ts";
+import { navigation, type NavigationState } from "../domain/navigation.ts";
 import { ended, isSessionAction, sessionsReducer, type SessionsState } from "../domain/sessions.ts";
 import { workspace, type WorkspaceState } from "../domain/workspace.ts";
 import * as eventLog from "../infra/eventLog.ts";
@@ -17,9 +16,9 @@ import { registerListeners } from "./effects.ts";
 export interface RootState {
   sessions: SessionsState;
   workspace: WorkspaceState;
+  navigation: NavigationState;
 }
-export type AppDispatch = ThunkDispatch<RootState, unknown, UnknownAction>;
-export type AppThunk<R = void> = ThunkAction<R, RootState, unknown, UnknownAction>;
+export type AppDispatch = Dispatch<UnknownAction>;
 export type AppStartListening = TypedStartListening<RootState, AppDispatch>;
 
 /** セッションのアクションをログに残す。状態が変わらないものは残さない（流し直しても同じなので） */
@@ -40,9 +39,10 @@ export interface StoreOptions {
 export function createAppStore(o: StoreOptions = {}) {
   const listener = createListenerMiddleware();
   const store = configureStore({
-    reducer: { sessions: sessionsReducer, workspace: workspace.reducer },
+    reducer: { sessions: sessionsReducer, workspace: workspace.reducer, navigation: navigation.reducer },
     // 状態もアクションも素の JSON なので、開発時の検査は省く（hook の起動を軽くする）
-    middleware: (defaults) => defaults({ serializableCheck: false, immutableCheck: false }).prepend(listener.middleware).concat(persistence),
+    middleware: (defaults) =>
+      defaults({ thunk: false, serializableCheck: false, immutableCheck: false }).prepend(listener.middleware).concat(persistence),
   });
   registerListeners(listener.startListening as AppStartListening, o);
   return store;

@@ -22,20 +22,25 @@ AI エージェント（主に Claude Code）を複数の git worktree で並行
 waiting・asking・ready・error への遷移で通知する（tmux の display-message と、osascript または notify-send）。通知する状態は `AGENT_WS_NOTIFY` で絞れる。
 
 ## 構成（Redux Toolkit。依存は矢印の向きだけ）
-    cli.ts ─┬→ src/app/store   ─┬→ src/domain/*   集約・スライス・selector（純粋。単体テストあり）
-            │   src/app/effects ├→ src/infra/*    ログ・git・proc・tmux・notify・shell
-            │   src/app/claude  ┘                （claude は Claude Code の入力をアクションに変える境界）
-            └→ src/ui/*  ─────────→ src/domain/*   view（行モデル）・terminal（色と幅）・watch（対話）
+    cli.ts ─┬→ src/app/intents（意図のアクション）・src/app/store
+            │     src/app/effects（listener）─┬→ src/domain/*   集約・スライス・selector（純粋。単体テストあり）
+            │     src/app/claude（境界）──────┴→ src/infra/*    ログ・git・proc・tmux・notify・shell
+            └→ src/ui/*  ─────────────────────→ src/domain/*   view（行モデル）・terminal（色と幅）・watch（対話）
 
-    dispatch ─→ middleware ─┬→ thunk     スキャン・hook の処理・ログの読み込みなど I/O を伴う手続き
-                            ├→ listener  通知・ステータスラインの再描画・表示中の完了の既読化・watch の定期スキャン
-                            └→ 永続化    セッションのアクションを、状態が変わったときだけログに追記
+    CLI・UI ─ dispatch(意図) ─→ middleware ─┬→ listener  意図に反応して I/O し、結果を事実のアクションで戻す。
+                                            │            通知・ステータスラインの再描画・表示中の完了の既読化・watch の定期スキャンも
+                                            └→ 永続化    セッションのアクションを、状態が変わったときだけログに追記
+
+- thunk は使わない（thunk middleware も外している）。I/O を伴う手続きは「意図のアクション（〜Requested）→ listener → 事実のアクション」で表す。結果を返す必要がある移動は `jumped` で Store（navigation）に記録し、呼び出し側が読む
+- listener の処理は await を含まない限り dispatch の中で同期的に終わる。CLI は dispatch の直後に状態を読むのでこれに頼っている（app/store.test.ts で確かめている）
 
 - `domain/sessions.ts`: セッション集約（本体＋サブエージェント）。アクション（attached / started / promptSubmitted / permissionRequested / toolUsed / notified / stopped / failed / subagentStarted / subagentStopped / interrupted / seen / ended）、reducer、selector（attention・noticeOf・statusFlags・visibleSubagents）
 - `domain/workspace.ts`: リポジトリ構成・プロセス一覧・変更件数のスライスと、ツリーを組み立てる selector（selectTree）
 - `domain/model.ts`: 型とエージェント判定（detectAgent）、移動先ペインの特定（findPane）
 - `app/claude.ts`: hook の入力 → アクション（toActions）、会話ログからの中断検出（interruptedSince）、hooks 設定
-- `app/effects.ts`: thunk（loadSessions / followLogs / settleSessions / handleHook / scanRepos / scanProcesses / scanDirty / markSeenInPane / jumpTo）と listener
+- `app/intents.ts`: 意図のアクション（sessionsRequested / logsChanged / settleRequested / hookReceived / reposRequested / processesRequested / dirtyRequested / seenInPaneRequested / jumpRequested / watchStarted）
+- `app/effects.ts`: listener（意図への反応と、事実・状態の変化への反応）
+- `domain/navigation.ts`: 直近の移動の結果（jumped）
 - `app/store.ts`: configureStore と永続化 middleware
 - `infra/eventLog.ts`: セッションごとのアクションログとスナップショット
 - `ui/view.ts`: ドメインを `Row`/`Cell` に変換する。色ではなく意味のトーン（ok / warn / waiting など）を持つ。罫線ツリーは汎用の flatten で描く。最初に選ぶ行は `priority` で示す
@@ -101,7 +106,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
   - subscribe: `watch --interval=60` でも、許可待ち・他プロセスが記録した中断が即座に反映される。claude の起動は1秒以内、終了は約1秒で一覧に反映される
   - ステータスラインは状態が変わったときに描き直される（status-interval=600 でも `#()` が再実行される）
   - hook 1回の処理は約38ms（bundle 版。RTK 導入前は約32ms）。状態が変わらない PostToolUse はログに残らない
-- 済み: tsc（strict）が通る。単体テスト12件（`bun test`）が通る
+- 済み: tsc（strict）が通る。単体テスト14件（`bun test`）が通る
 - 未検証:
   - Notification の elicitation_dialog / agent_needs_input、StopFailure、PostToolUseFailure の実際の入力。確かめるときは `AGENT_WS_DUMP=<ファイル>` を付けて claude を起動すると hook の入力がそのまま追記される
   - バックグラウンドのサブエージェントの許可を拒否したときの本体側の状態
@@ -114,7 +119,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 - 中断の検出は会話ログを見に行ったときだけ（list / status / seen、watch の interval ごと）。watch の interval を長くすると反映が遅れる（tmux の status が先に検出してログに記録すれば、watch にはすぐ反映される）
 
 ## 保留中の論点
-1. コード量: コメント・空行を除いて 1309 行（Redux 化の前は 1008 行）。増えた主な理由は、ログとスナップショット、thunk / listener への整理、ワークスペースのスライス。減らすなら機能を削る。候補は、エージェント以外のプロセス表示、--json、ghq が無い環境向けの走査、claude と codex 以外の判定
+1. コード量: コメント・空行を除いて 1376 行（Redux 化の前は 1008 行）。増えた主な理由は、ログとスナップショット、意図のアクションと listener への整理、ワークスペースのスライス。減らすなら機能を削る。候補は、エージェント以外のプロセス表示、--json、ghq が無い環境向けの走査、claude と codex 以外の判定
 2. 子プロセスを ppid でエージェントの下にネストする案（リポジトリ > worktree > エージェント > 子プロセス）。提案したが未回答
 3. ペインが無い worktree の新しいウィンドウを今いるセッションに作っている。リポジトリ名のセッションに作るかどうか
 4. 中断の検出も subscribe にする案: running / 待ちのセッションの会話ログを fs.watch で見張れば、interval を待たずに中断を拾える
