@@ -18,15 +18,10 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import type { UnknownAction } from "@reduxjs/toolkit";
 import { attempt } from "../../../lib/attempt.ts";
 import type { Agent } from "../../types/agent.ts";
-
-/** 既定の置き場所: $AGENT_WS_STATE_DIR、なければ $XDG_STATE_HOME/agent-ws/agents */
-export const defaultDir = () =>
-  process.env.AGENT_WS_STATE_DIR ?? join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "agent-ws", "agents");
 
 /** スナップショット: ある位置までを流した、エージェントと確認の状況 */
 export interface Snapshot {

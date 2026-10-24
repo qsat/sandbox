@@ -12,23 +12,25 @@ import { type AppSubscriber, observe } from "../observe.ts";
 import { notify } from "./notify.ts";
 
 export interface NotifierOptions {
+  ghq: git.Ghq; // リポジトリ名の基準
+  inTmux: boolean; // tmux の中なら tmux のメッセージも出す
   kinds: NoticeKind[]; // 知らせる種類
   format: (n: Notice) => { title: string; body: string }; // 文面は表示側が決める
 }
 
 /** 知らせるときのリポジトリ名（worktree ならメインの名前） */
-const repoOf = (cwd: string) => {
+const repoOf = (cwd: string, ghq: git.Ghq) => {
   const main = git.listWorktrees(cwd)[0]?.path;
   if (!main) return cwd;
-  return repoName(main, git.ghqRoots());
+  return repoName(main, git.ghqRoots(ghq));
 };
 
 /** 1つ前の状態から変わって、知らせるべきもの */
-const noticesOf = (next: RootState, prev: RootState, kinds: NoticeKind[]): Notice[] =>
+const noticesOf = (next: RootState, prev: RootState, o: NotifierOptions): Notice[] =>
   selectAgents(next).flatMap((a) => {
     const n = selectNotice(prev, next, a.id);
-    if (!n || !kinds.includes(n.kind)) return [];
-    return [{ repo: repoOf(a.cwd), branch: git.currentBranch(a.cwd), ...n }];
+    if (!n || !o.kinds.includes(n.kind)) return [];
+    return [{ repo: repoOf(a.cwd, o.ghq), branch: git.currentBranch(a.cwd), ...n }];
   });
 
 export const notifier =
@@ -38,9 +40,9 @@ export const notifier =
       store,
       (st) => st,
       (next, prev) => {
-        for (const n of noticesOf(next, prev, o.kinds)) {
+        for (const n of noticesOf(next, prev, o)) {
           const { title, body } = o.format(n);
-          notify(title, body);
+          notify(title, body, o.inTmux);
         }
       },
       { settle: true },

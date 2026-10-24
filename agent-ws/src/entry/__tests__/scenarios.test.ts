@@ -85,16 +85,19 @@ mock.module("../../redux/subscribers/notifier/notify.ts", () => ({
   notify: (title: string, body: string) => world.notices.push(`${title} ${body}`),
 }));
 
-// ログの置き場所は Store を作るときに決まるので、entry を読み込む前に一時ディレクトリへ向ける
-const dir = mkdtempSync(join(tmpdir(), "agent-ws-scenario-"));
-process.env.AGENT_WS_STATE_DIR = dir;
-delete process.env.AGENT_WS_NOTIFY;
-const { receiveHook } = await import("../hook.ts");
-const { statusText } = await import("../status.ts");
-const { listText } = await import("../list.ts");
-const { runSeen } = await import("../seen.ts");
-const { jump } = await import("../jump.ts");
-const { watchStore } = await import("../watch.ts");
+// 差し替えた外部システムを使わせるため、コマンドは差し替えた後に読み込む
+const { hook } = await import("../commands/hook.ts");
+const { status: statusStore } = await import("../commands/status.ts");
+const { list: listStore } = await import("../commands/list.ts");
+const { seen } = await import("../commands/seen.ts");
+const { jump } = await import("../commands/jump.ts");
+const { watch } = await import("../commands/watch.ts");
+const { parseCommand } = await import("../command.ts");
+const { contextOf } = await import("../context.ts");
+const { statusText } = await import("../../ui/status.ts");
+const { listText } = await import("../../ui/list.ts");
+const { jumpText } = await import("../../ui/jump.ts");
+const { selectArrived } = await import("../../redux/modules/ui/visit/selector.ts");
 const { selectShouldClose } = await import("../../redux/modules/ui/watch/selector.ts");
 const { selectUnseen } = await import("../../redux/modules/app/attention/selector.ts");
 const { destinationChosen } = await import("../../redux/modules/ui/visit/slice.ts");
@@ -107,8 +110,26 @@ const FIXTURES = new URL("../../redux/middlewares/claude/__tests__/fixtures/", i
 const read = async (name: string) => (await Bun.file(new URL(name, FIXTURES)).text()).trim().split("\n");
 const filter = { all: false, agentsOnly: false };
 
-const status = () => statusText("none");
-const list = () => listText({ filter, json: false, color: "none", width: 200 });
+/** 環境変数はログの置き場所だけ（通知はすべての種類）。いまの時刻はコマンドを動かすたびに取る */
+const dir = mkdtempSync(join(tmpdir(), "agent-ws-scenario-"));
+const ctx = () => contextOf({ AGENT_WS_STATE_DIR: dir }, Date.now(), "/home/u");
+
+const status = () => statusText(statusStore(ctx()).getState(), "none");
+const list = () =>
+  listText(
+    listStore({ kind: "list", filter, json: false }, ctx()).getState(),
+    { filter, json: false },
+    { color: "none", width: 200, home: "/home/u" },
+  );
+const runSeen = (panePid: number) => seen({ kind: "seen", panePid }, ctx());
+const receiveHook = (input: unknown) => hook(input, ctx());
+/** jump のコマンドラインを解釈して動かし、出力と、行き先に着いたかを返す */
+function runJump(argv: string[]) {
+  const c = parseCommand(["jump", ...argv], FEATURE);
+  if (c.kind !== "jump") throw new Error(`jump として解釈されない: ${c.kind}`);
+  const st = jump(c, ctx()).getState();
+  return { text: jumpText(st, c.target, "none"), ok: selectArrived(st) };
+}
 /** エージェント（claude）の行 */
 const agentLine = () =>
   list()
@@ -122,11 +143,13 @@ function hooks(inputs: string[], agentId: string, transcript: string) {
   }
 }
 
-/** 録った会話ログを、いまの時刻で書き出す（Esc・拒否は hook が発火せず、会話ログにだけ残る） */
-/** 会話ログを、直前の hook より後に書かれたものとして置く（ファイルの時刻は数 ms 単位と粗いので、書いた時刻は明示する） */
 /** ステータスライン・通知は出来事の連鎖が終わってから出すので、それを待つ */
 const settle = () => Bun.sleep(1);
 
+/**
+ * 録った会話ログを、直前の hook より後に書かれたものとして置く（Esc・拒否は hook が発火せず、会話ログにだけ残る）。
+ * ファイルの時刻は数 ms 単位と粗いので、書いた時刻は明示する
+ */
 async function writeTranscript(path: string, fixture: string) {
   const at = new Date(Date.now() + 1);
   const lines = (await read(fixture)).map((l) => JSON.stringify({ ...JSON.parse(l), timestamp: at.toISOString() }));
@@ -172,7 +195,7 @@ describe("1つのセッションの流れ", async () => {
     expect(status()).toBe("");
     expect(agentLine()).toContain("✓ 入力待ち");
     expect(agentLine()).toContain(`pid ${AGENT_PID}`);
-    expect(jump({ arg: String(AGENT_PID), create: false, dryRun: true, color: "none" })).toMatchObject({ ok: true, text: "main:1 (w) %1" });
+    expect(runJump([String(AGENT_PID), "--dry-run"])).toEqual({ ok: true, text: "main:1 (w) %1" });
   });
 
   test("別のペインを見ている間に完了すると ✓ と通知。そのペインにフォーカスすると確認済みになる", async () => {
@@ -298,7 +321,7 @@ describe("watch の画面", () => {
     receiveHook({ hook_event_name: "SessionStart", session_id: "s5", cwd: FEATURE });
     receiveHook({ hook_event_name: "UserPromptSubmit", session_id: "s5", cwd: FEATURE });
     receiveHook({ hook_event_name: "Stop", session_id: "s5", cwd: FEATURE, last_assistant_message: "終わり" });
-    const store = watchStore({ filter, intervalMs: 3_600_000, popup: true });
+    const store = watch({ kind: "watch", filter, intervalMs: 3_600_000, popup: true }, ctx());
     expect(selectUnseen(store.getState(), "s5")).toBe(true);
     store.dispatch(destinationChosen({ target: { title: "x", name: "x", pid: AGENT_PID }, create: false }));
     expect(world.panes.find((p) => p.active)?.id).toBe("%1");

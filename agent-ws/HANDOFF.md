@@ -35,19 +35,25 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 「session」は Claude Code の用語として、claude の middleware の中（`session_id` など）だけで使う。
 
 ## 構成（Redux Toolkit・re-ducks。依存は矢印の向きだけ）
-    src/entry/*（コマンドごとに middleware を選んで Store を作る）
-       ├→ src/redux/middlewares/*（外部システムとのやりとり。I/O の実装もそれぞれの隣に置く）
+    src/entry/cli.ts（プロセスの境界: 引数・環境変数・標準入出力・終了コード・いまの時刻）
+       ├→ src/entry/commands/*（コマンドごとに middleware・購読者を選んで Store を作り、出来事を伝える。結果は状態で返す）
+       │     ├→ src/redux/middlewares/*（外部システムとのやりとり。I/O の実装もそれぞれの隣に置く）
+       │     ├→ src/redux/subscribers/*（状態を人に見せる）
        │     └→ src/redux/modules/{app,ui}/*（ドメイン: slice・selector・listener。I/O を知らない）
        │           └→ src/redux/types/*（型）・src/redux/utils/*（純粋な関数）
-       └→ src/ui/*（描画）
+       └→ src/ui/*（表示: 状態 → 文字・画面）
 
     dispatch ─→ listener ─→ effects（claude・processes・git・tmux・clock）─→ log（eventLog）─→ reducer ─→ subscribers（statusLine・notifier）
 
     State: { app: { agents, attention, workspace, lifecycle }, ui: { visit, watch } }
 
     src/
-      entry/          cli.ts（引数の解析と振り分け）・コマンドごとの組み立て（list / watch / status / seen / jump / hook）・store.ts。
-                      組み立ては、テストから呼べる関数（listText・statusText・jump・receiveHook・watchStore）と、入出力をつなぐ run* に分けている
+      entry/          ① プロセスの境界と ② コマンド
+        cli.ts        引数・環境変数・標準入力を読み、Command を match で実行し、標準出力と終了コードに書く
+        context.ts    環境変数といまの時刻（Context）・端末（Display）。ここより内側は process.env も Date.now() も見ない（clock を除く）
+        command.ts    コマンドライン → Command（判別共用体）。引数の解釈はここだけ
+        commands/     コマンドごとに middleware・購読者を選んで Store を作り、出来事を伝える（list・status・seen・jump・hook・watch）。
+                      どれも (Command, Context) → Store の形で、文字にはしない。start.ts が Store を作って起動する
       redux/
         createStore.ts  Store のファクトリ。createStore({ log, effects })。rootReducer・addAppListener・listen
         modules/
@@ -76,7 +82,8 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
           notifier/       知らせる遷移でのデスクトップ通知と tmux のメッセージ（notify.ts）。文面は entry から受け取る
         types/            ドメインの型（agent・attention・workspace・visit）
         utils/            純粋な関数を1関数1ファイルで（detectAgent・isUnder・repoName・firstLine・ancestry・findPane・replayed）
-      ui/                 描画: view（行モデル）・terminal（色と幅）・watch（TUI。状態を読んで描くだけ。人の操作は出来事として伝える）
+      ui/                 表示: 状態 → 文字・画面。list・status・jump・watchView（コマンドごとの表示）、view（行モデル）・terminal（色と幅）・
+                          watch（TUI。状態を読んで描くだけ。人の操作は受け取った関数で伝える）
       lib/                ドメインを知らない汎用の道具: attempt（失敗したら代わりの値）・scan（reduce の途中経過）・debounce（続けて呼ばれたら、途絶えてから1回だけ実行）・
                           match（kind によるパターンマッチ）
 
@@ -87,7 +94,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
   - どの reducer も扱わない合図（hookReceived・paneFocused・reloadPressed。middleware だけが反応する）は createAction のまま。状態を変えない reducer を作らないため
 - middleware と購読者の分担: 出来事に反応して外界とやりとりし、結果を出来事として戻すものは middleware。状態だけで決まり、人に見せるだけのもの（ステータスライン・通知・watch の画面）は store.subscribe の購読者。購読者は entry がログから状態を組み立て終えた後に購読させるので、流し直しでは動かない（middleware のような「流し直した出来事か」の判断が要らない）
 - 手続きにしない: 「依頼して返事を受け取る」形（dispatch した直後に結果を読んで戻り値にする）にしない。人の操作は出来事として伝えるだけで、結果は状態の変化として受け取る（移動の結果は ui.visit、popup を閉じるかは selectShouldClose）。描画は状態を読むだけで書き換えない（選択中として出す行・スクロール位置は描画のたびに導く）。middleware は手順の台本にせず、関心ごとに出来事や状態の変化へ反応する（変更件数は表示する worktree が変わったら数え直す、リポジトリを取り直す時期は状態の時刻で決める）
-- 時刻は出来事からだけ受け取る（initialized・ticked・hookReceived などの at）。いまの時刻は app.lifecycle.now にあり、描画も middleware もそれを使う。外界から時刻を取るのは entry と clock だけ
+- 時刻は出来事からだけ受け取る（initialized・ticked・hookReceived などの at）。いまの時刻は app.lifecycle.now にあり、描画も middleware もそれを使う。外界から時刻を取るのは entry の境界（cli.ts → Context）と clock だけ。環境変数も entry の境界でだけ読み、オプションとして middleware・購読者に渡す
 - thunk は使わない（thunk middleware も外している）
 - middleware は同期的に動くので、dispatch から戻った時点で I/O まで終わっている。entry はこれに頼って dispatch の直後に状態を読む
 - どの middleware・購読者を組むかはコマンドごとに entry が決める。たとえば status は statusLine を購読させない（ステータスラインから呼ばれるので、描き直させると自分がまた呼ばれる）、通知（notifier）は hook だけ
@@ -157,7 +164,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
   - 引数への再代入（style/noParameterAssign）、認知的複雑度 10 を超える関数（complexity/noExcessiveCognitiveComplexity）
   - 独自ルールは Biome の GritQL プラグイン（lint/*.grit。biome.json の plugins）
 - スクリプト: `bun run check`（Biome の検査・型チェック・テストをまとめて。失敗すれば終了コードが 0 以外）、`bun run fix`（フォーマット・lint の自動修正・import の並べ替え）、`e2e`（端末込みの E2E）、`smoke`（本物の Claude Code でのスモークテスト）、`lint`・`format`・`typecheck`・`test`・`build`
-- Bun 固有の API は `Bun.spawnSync`（redux/middlewares/shared/shell.ts）、`Bun.stdin`（entry/hook.ts）、`bun:test` だけで、残りは Bun が互換実装している node:* を使っている
+- Bun 固有の API は `Bun.spawnSync`（redux/middlewares/shared/shell.ts）、`Bun.stdin`（entry/cli.ts）、`bun:test` だけで、残りは Bun が互換実装している node:* を使っている
 
 ## テスト
 確認したいことに合わせて3つの層に分けている。下の層ほど本物に近く、重い。
@@ -169,7 +176,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 | B. 端末込みの E2E | `src/entry/__tests__/e2e/` | `bun run e2e`（AGENT_WS_E2E=1。check では飛ばす） | tmux（script で接続したクライアントつき）・ps・git・hooks-config | claude（記録した hook 入力を流す偽物） |
 | C. スモーク | `scripts/smoke-claude.sh` | `bun run smoke [--dist] [--keep]`（手で動かす） | Claude Code も含めて全部 | なし（モデルを呼ぶ） |
 
-- A は、本物の Claude Code から記録した hook 入力（`src/redux/middlewares/claude/__tests__/fixtures/claude-code-2.1.309-turns.jsonl` と、中断を書いた会話ログ `transcript-deny.jsonl`・`transcript-esc.jsonl`）を entry の関数に流し、印・一覧・通知・jump の行き先・popup が閉じるかを確かめる。1つのセッションの流れを、起動 → 完了 → フォーカスで確認 → 許可 → 表示中の完了 → 拒否 → 質問 → Esc → 終了の順にたどる
+- A は、本物の Claude Code から記録した hook 入力（`src/redux/middlewares/claude/__tests__/fixtures/claude-code-2.1.309-turns.jsonl` と、中断を書いた会話ログ `transcript-deny.jsonl`・`transcript-esc.jsonl`）を entry のコマンド（commands/*）に流して ui の表示で読み、印・一覧・通知・jump の行き先・popup が閉じるかを確かめる。1つのセッションの流れを、起動 → 完了 → フォーカスで確認 → 許可 → 表示中の完了 → 拒否 → 質問 → Esc → 終了の順にたどる
 - B の偽の claude（`fake-claude.ts`）は `claude` という名前のシンボリックリンクから起動する。ps からは `bun …/claude` に見えるので本物と同じくエージェントとして見つかり、hook はその子として動くので本体の pid も本物と同じく祖先から分かる。hooks は `hooks-config` の出力を settings.json に置き、その matcher どおりに流す。tmux の設定は「セットアップ」と同じ。ステータスラインは status-right を `SR[…]` で囲み、クライアントの端末に描かれた中身から読む
   - 壊したら落ちることを確かめた: `refresh-client -S` を呼ばない → ステータスラインが消えない（A でも落ちる）、popup を閉じない → 閉じない
   - tmux の癖: `display-popup` はポップアップが閉じるまで戻らない。新しいペインのシェルはログインシェルなので /etc/profile が PATH を上書きする（default-command で避けている）

@@ -17,7 +17,7 @@ import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
 import type { Agent } from "../../types/agent.ts";
 import { isReplayed, replayed } from "../../utils/replayed.ts";
 import { effects, on } from "../effects.ts";
-import { defaultDir, type LogRead, openLog } from "./log.ts";
+import { type LogRead, openLog } from "./log.ts";
 
 /** pid が分からないエージェントを、ログの更新が途絶えてから保持する期間 */
 const TTL = 24 * 60 * 60_000;
@@ -33,13 +33,13 @@ const expired = (agent: Agent, mtimeMs: number, at: number) => !agent.pid && at 
 const recordOf = (st: RootState, id: string) => [st.app.agents.byId[id], st.app.attention[id]] as const;
 
 export interface EventLogOptions {
-  dir?: string; // ログの置き場所（省くと defaultDir()）
+  dir: string; // ログの置き場所
   follow?: boolean; // 他のプロセスが書いた分を取り込み続ける（watch）
 }
 
-export const eventLog = (o: EventLogOptions = {}): AppMiddleware =>
+export const eventLog = (o: EventLogOptions): AppMiddleware =>
   effects((api) => {
-    const log = openLog(o.dir ?? defaultDir());
+    const log = openLog(o.dir);
     const offsets = new Map<string, number>(); // このプロセスが読み終えた位置。見張りでは差分だけ流す
 
     /** 読んだ分を、記録済みの目印を付けて流す */

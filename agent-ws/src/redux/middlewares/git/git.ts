@@ -1,18 +1,23 @@
 import { readdirSync, statSync } from "node:fs";
-import { homedir } from "node:os";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import { attempt } from "../../../lib/attempt.ts";
 import type { Worktree } from "../../types/workspace.ts";
 import { lines, realPath, run } from "../shared/shell.ts";
 
+/** ghq のルートを決めるもの（環境変数 GHQ_ROOT とホーム。entry が渡す） */
+export interface Ghq {
+  root: string[]; // GHQ_ROOT
+  home: string;
+}
+
 /** ghq のルート（ghq コマンド → GHQ_ROOT → git config ghq.root → ~/ghq） */
-export function ghqRoots(): string[] {
+export function ghqRoots(ghq: Ghq): string[] {
   const roots = [
     lines(run("ghq", ["root", "--all"])),
-    (process.env.GHQ_ROOT ?? "").split(delimiter).filter(Boolean),
-    lines(run("git", ["config", "--get-all", "ghq.root"])).map((p) => p.replace(/^~/, homedir())),
+    ghq.root,
+    lines(run("git", ["config", "--get-all", "ghq.root"])).map((p) => p.replace(/^~/, ghq.home)),
   ].find((c) => c.length);
-  return (roots ?? [join(homedir(), "ghq")]).map(realPath);
+  return (roots ?? [join(ghq.home, "ghq")]).map(realPath);
 }
 
 /** ghq 管理下のリポジトリ（ghq が無ければ <root>/<host>/<owner>/<repo> を走査） */

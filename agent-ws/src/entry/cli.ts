@@ -1,83 +1,86 @@
 #!/usr/bin/env bun
 /**
- * agent-ws — ghq 管理下のリポジトリ > worktree > プロセス を、AI エージェントの応答状況つきで表示する
- *
- *   agent-ws [list] [query] [--all] [--agents-only] [--json]  一覧を1回表示
- *   agent-ws watch [query] [--all] [--interval=2] [--popup]   常駐表示。j/k で選択、Enter でそのペインへ移動
- *   agent-ws status [--tmux]                                  ステータスライン用の印（⏳ 許可待ち / ❓ 質問待ち / ✓ 完了して未確認 / ✗ エラー）
- *   agent-ws seen <pane_pid>                                  そのペインで完了したものを既読にする（tmux の pane-focus-in から呼ぶ）
- *   agent-ws jump <pid|path> [--create] [--dry-run]           その pid / パスがいる tmux ペインへ移動
- *   agent-ws hook                                             Claude Code の hook から呼ばれる（stdin に JSON）
- *   agent-ws hooks-config                                     ~/.claude/settings.json に足す hooks 設定を出力
- *
- * 環境変数: AGENT_WS_NOTIFY（通知する状態。既定 waiting,asking,ready,error。空で通知しない）/ AGENT_WS_STATE_DIR / GHQ_ROOT
- *           AGENT_WS_DUMP（hook の入力をそのまま追記するファイル。入力の形を確かめるとき用）
+ * agent-ws のプロセスの境界: 引数・環境変数・標準入力を読み、コマンドを実行し、標準出力と終了コードに書く
+ * 使い方は command.ts の USAGE
  *
  * 構成（依存は矢印の向きだけ）:
- *   entry/*（コマンドごとに middleware・購読者を選んで Store を作る）
- *     ├→ redux/middlewares/*（外部システムとのやりとり: eventLog・claude・processes・git・tmux・clock）
- *     ├→ redux/subscribers/*（状態を人に見せる: statusLine・notifier）
+ *   entry/cli.ts（プロセスの境界。context: 環境変数といまの時刻、command: 引数 → Command）
+ *     ├→ entry/commands/*（コマンドごとに middleware・購読者を選んで Store を作り、出来事を伝える。結果は状態）
+ *     │     ├→ redux/middlewares/*（外部システムとのやりとり: eventLog・claude・processes・git・tmux・clock）
+ *     │     ├→ redux/subscribers/*（状態を人に見せる: statusLine・notifier）
  *     │     └→ redux/modules/{app,ui}/*（ドメイン: slice・selector・listener。I/O を知らない）
- *     └→ ui/*（描画）
+ *     └→ ui/*（表示: 状態 → 文字・画面）
  */
-import { parseArgs } from "node:util";
+import { appendFileSync } from "node:fs";
+import { attempt } from "../lib/attempt.ts";
+import { match } from "../lib/match.ts";
 import { hooksConfig } from "../redux/middlewares/claude/hook.ts";
 import { realPath } from "../redux/middlewares/shared/shell.ts";
+import { selectArrived } from "../redux/modules/ui/visit/selector.ts";
+import { jumpText } from "../ui/jump.ts";
+import { listRows, listText } from "../ui/list.ts";
+import { statusText } from "../ui/status.ts";
 import type { ColorMode } from "../ui/terminal.ts";
-import { runHook } from "./hook.ts";
-import { runJump } from "./jump.ts";
-import { runList } from "./list.ts";
-import { runSeen } from "./seen.ts";
-import { runStatus } from "./status.ts";
-import { runWatch } from "./watch.ts";
+import { runWatch as runTui } from "../ui/watch.ts";
+import { watchViewOf } from "../ui/watchView.ts";
+import { type Command, type Of, parseCommand } from "./command.ts";
+import { hook } from "./commands/hook.ts";
+import { jump } from "./commands/jump.ts";
+import { list } from "./commands/list.ts";
+import { seen } from "./commands/seen.ts";
+import { status } from "./commands/status.ts";
+import { watch, watchControls } from "./commands/watch.ts";
+import { contextOf, displayOf } from "./context.ts";
 
-const { values: opt, positionals } = parseArgs({
-  allowPositionals: true,
-  options: {
-    all: { type: "boolean", default: false },
-    "agents-only": { type: "boolean", default: false },
-    json: { type: "boolean", default: false },
-    tmux: { type: "boolean", default: false },
-    popup: { type: "boolean", default: false },
-    create: { type: "boolean", default: false },
-    "dry-run": { type: "boolean", default: false },
-    interval: { type: "string", default: "2" },
-  },
-});
-const filter = { all: opt.all, agentsOnly: opt["agents-only"] };
-
-function colorMode(): ColorMode {
-  if (process.stdout.isTTY || process.env.FORCE_COLOR === "1") return "ansi";
-  return "none";
-}
-const color = colorMode();
+const ctx = contextOf(process.env, Date.now());
+const display = displayOf(process.stdout, process.env);
+const print = (text: string) => console.log(text);
 
 /** ステータスラインに埋め込むときは tmux の書式で色を付ける */
-function statusColor(): ColorMode {
-  if (opt.tmux) return "tmux";
-  return color;
-}
-
-/** サブコマンド → 処理（arg はサブコマンドの次の引数） */
-const COMMANDS: Record<string, (arg?: string) => unknown> = {
-  list: (query) => runList({ query, filter, json: opt.json, color }),
-  watch: (query) => runWatch({ query, filter, intervalMs: Number(opt.interval) * 1000, popup: opt.popup, color }),
-  status: () => runStatus({ color: statusColor() }),
-  seen: (panePid) => {
-    if (/^\d+$/.test(panePid ?? "")) runSeen(Number(panePid));
-  },
-  jump: (arg) => {
-    if (!runJump({ arg, create: opt.create, dryRun: opt["dry-run"], color })) process.exitCode = 1;
-  },
-  hook: () => runHook(),
-  "hooks-config": () => console.log(JSON.stringify(hooksConfig(process.execPath, realPath(process.argv[1])), null, 2)),
+const statusColor = (c: Of<"status">): ColorMode => {
+  if (c.tmux) return "tmux";
+  return display.color;
 };
 
-/** サブコマンドが無ければ list（最初の引数は絞り込み） */
-async function main([first = "", second]: string[]): Promise<void> {
-  const command = COMMANDS[first];
-  if (!command) return void COMMANDS.list(first || undefined);
-  await command(second);
+/** Claude Code の hook から呼ばれる。失敗しても Claude Code の動作は止めない */
+async function receiveHook(): Promise<void> {
+  const input = await Bun.stdin.text();
+  // 入力の確認用: 受け取った JSON をそのまま1行ずつ追記する
+  if (ctx.dump) attempt(() => appendFileSync(ctx.dump ?? "", `${input.replace(/\n/g, " ")}\n`), undefined);
+  attempt(() => hook(JSON.parse(input || "{}"), ctx), undefined);
 }
 
-await main(positionals);
+/** 常駐表示: 状態が変わるたびに描き直し、人の操作を出来事として伝える */
+function runWatch(c: Of<"watch">): void {
+  const store = watch(c, ctx);
+  runTui({
+    rows: () => listRows(store.getState(), c.filter, display.home),
+    view: () => watchViewOf(store.getState()),
+    subscribe: (onChange) => void store.subscribe(onChange),
+    ...watchControls(store),
+    color: display.color,
+  });
+}
+
+function runJump(c: Of<"jump">): void {
+  const st = jump(c, ctx).getState();
+  print(jumpText(st, c.target, display.color));
+  if (!selectArrived(st)) process.exitCode = 1;
+}
+
+const run = (command: Command) =>
+  match(command, {
+    list: (c) => print(listText(list(c, ctx).getState(), c, display)),
+    watch: runWatch,
+    status: (c) => print(statusText(status(ctx).getState(), statusColor(c))),
+    seen: (c) => void seen(c, ctx),
+    jump: runJump,
+    hook: receiveHook,
+    hooksConfig: () => print(JSON.stringify(hooksConfig(process.execPath, realPath(process.argv[1])), null, 2)),
+    usage: (c) => {
+      console.error(c.message);
+      process.exitCode = 2;
+    },
+  });
+
+await run(parseCommand(process.argv.slice(2), process.cwd()));

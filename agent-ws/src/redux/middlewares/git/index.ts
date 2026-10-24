@@ -18,6 +18,7 @@ import { always, effects, on } from "../effects.ts";
 import * as cli from "./git.ts";
 
 export interface GitOptions {
+  ghq: cli.Ghq; // ghq のルートを決めるもの
   repos?: { query?: string }; // リポジトリ構成を持つ（query で絞る）
   dirty?: Filter; // このフィルタで表示する worktree の変更件数を持つ
 }
@@ -46,14 +47,14 @@ const shownWorktrees = (filter: Filter) =>
       .map((w) => w.path);
   });
 
-export const git = (o: GitOptions = {}): AppMiddleware =>
+export const git = (o: GitOptions): AppMiddleware =>
   effects((api) => {
     const selectShown = shownWorktrees(o.dirty ?? { all: false, agentsOnly: false });
     const now = () => api.getState().app.lifecycle.now;
 
     const scanRepos = (at: number) => {
       if (!o.repos) return;
-      const roots = cli.ghqRoots();
+      const roots = cli.ghqRoots(o.ghq);
       api.dispatch(reposScanned({ roots, repos: scanRepoPaths(roots, o.repos.query), at }));
     };
     const countDirty = (at: number) => {

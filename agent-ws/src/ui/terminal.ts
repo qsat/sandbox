@@ -6,6 +6,13 @@ import type { Cell, Row, Tone } from "./view.ts";
 
 export type ColorMode = "none" | "ansi" | "tmux";
 
+/** 出力先の端末: 色の付け方・幅・ホーム（パスを ~ で縮める） */
+export interface Display {
+  color: ColorMode;
+  width: number;
+  home: string;
+}
+
 const ANSI: Record<Tone, string> = {
   plain: "",
   strong: "1",
