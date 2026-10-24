@@ -16,12 +16,25 @@ import { treeRows, visitMessage } from "../ui/view.ts";
 import { runWatch as runTui } from "../ui/watch.ts";
 import { start } from "./store.ts";
 
-export function runWatch(o: { query?: string; filter: Filter; intervalMs: number; popup: boolean; color: ColorMode }): void {
+export interface WatchOptions {
+  query?: string;
+  filter: Filter;
+  intervalMs: number;
+  popup: boolean;
+}
+
+/** watch の Store: ログを追い続け、interval ごとにスキャンする */
+export function watchStore(o: WatchOptions) {
   const store = start(
     [processes({ list: true }), git({ repos: { query: o.query }, dirty: o.filter }), claude(), tmux(), clock({ intervalMs: o.intervalMs })],
     { follow: true },
   );
   store.dispatch(watchOpened({ popup: o.popup }));
+  return store;
+}
+
+export function runWatch(o: WatchOptions & { color: ColorMode }): void {
+  const store = watchStore(o);
   runTui({
     rows: () => {
       const st = store.getState();

@@ -9,15 +9,24 @@ import { type ColorMode, formatRow } from "../ui/terminal.ts";
 import { treeRows } from "../ui/view.ts";
 import { start } from "./store.ts";
 
-export function runList(o: { query?: string; filter: Filter; json: boolean; color: ColorMode }): void {
+export interface ListOptions {
+  query?: string;
+  filter: Filter;
+  json: boolean;
+  color: ColorMode;
+  width: number;
+}
+
+export function listText(o: ListOptions): string {
   const store = start([processes({ list: true }), git({ repos: { query: o.query }, dirty: o.filter }), claude()]);
-  const repos = selectTree(store.getState(), o.filter);
-  if (o.json) {
-    console.log(JSON.stringify(repos, null, 2));
-    return;
-  }
   const st = store.getState();
-  for (const row of treeRows(repos, { roots: selectRoots(st), home: homedir(), now: selectNow(st) })) {
-    console.log(formatRow(row, process.stdout.columns ?? 160, o.color));
-  }
+  const repos = selectTree(st, o.filter);
+  if (o.json) return JSON.stringify(repos, null, 2);
+  return treeRows(repos, { roots: selectRoots(st), home: homedir(), now: selectNow(st) })
+    .map((row) => formatRow(row, o.width, o.color))
+    .join("\n");
+}
+
+export function runList(o: Omit<ListOptions, "width">): void {
+  console.log(listText({ ...o, width: process.stdout.columns ?? 160 }));
 }

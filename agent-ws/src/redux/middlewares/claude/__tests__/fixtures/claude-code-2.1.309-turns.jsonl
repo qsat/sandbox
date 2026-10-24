@@ -1,0 +1,17 @@
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "SessionStart", "source": "startup"}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "UserPromptSubmit", "prompt": "1+1は？数字だけ答えて"}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "Stop", "last_assistant_message": "2", "background_tasks": []}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "UserPromptSubmit", "prompt": "Bash で `echo a > approve.txt` を実行して、終わったら一言で報告して"}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "PermissionRequest", "tool_name": "Bash", "tool_input": {"command": "echo a > approve.txt", "description": "Write \"a\" to approve.txt"}}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_input": {"command": "echo a > approve.txt", "description": "Write \"a\" to approve.txt"}}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "Stop", "last_assistant_message": "`approve.txt` を作成し、「a」を書き込みました。", "background_tasks": []}
+{"session_id": "s1", "cwd": "/w/proj", "agent_id": "a580c83a5b9ca51fb", "agent_type": "", "hook_event_name": "SubagentStop", "last_assistant_message": "approve.txt の中身を表示して", "background_tasks": []}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "UserPromptSubmit", "prompt": "Bash で `echo b > deny.txt` を実行して"}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "PermissionRequest", "tool_name": "Bash", "tool_input": {"command": "echo b > deny.txt", "description": "Write \"b\" to deny.txt"}}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "UserPromptSubmit", "prompt": "AskUserQuestion ツールで「好きな色は？」と、赤・青の2択で質問して。答えを聞いたら一言で返して"}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "PermissionRequest", "tool_name": "AskUserQuestion", "tool_input": {}}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "PostToolUse", "tool_name": "AskUserQuestion", "tool_input": {}}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "Stop", "last_assistant_message": "赤ですね。", "background_tasks": []}
+{"session_id": "s1", "cwd": "/w/proj", "agent_id": "a4b20d92dfc5cbd1a", "agent_type": "", "hook_event_name": "SubagentStop", "background_tasks": []}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "UserPromptSubmit", "prompt": "ツールは使わずに、日本の47都道府県それぞれについて3文ずつ説明して"}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "SessionEnd", "reason": "prompt_input_exit"}
