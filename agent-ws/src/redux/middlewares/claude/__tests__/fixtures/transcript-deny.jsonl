@@ -1,0 +1,7 @@
+{"type": "user", "timestamp": "2026-10-24T14:04:26.023Z", "message": {"content": "Bash で `echo b > deny.txt` を実行して"}}
+{"type": "attachment", "timestamp": "2026-10-24T14:04:26.022Z"}
+{"type": "assistant", "timestamp": "2026-10-24T14:04:28.669Z", "message": {"content": [{"type": "tool_use"}]}}
+{"type": "user", "timestamp": "2026-10-24T14:04:30.053Z", "message": {"content": [{"type": "tool_result"}]}}
+{"type": "user", "timestamp": "2026-10-24T14:04:30.055Z", "message": {"content": [{"type": "text", "text": "[Request interrupted by user for tool use]"}]}}
+{"type": "system", "timestamp": "2026-10-24T14:04:30.059Z"}
+{"type": "file-history-snapshot"}
