@@ -2,12 +2,15 @@
  * claude middleware: Claude Code とのやりとり（その形式を知っているのはここだけ）
  *
  * - hookReceived: hook の入力をエージェントの出来事に変えて流す。新しいエージェントなら本体の pid と場所を結びつける
- * - interruptionCheckRequested: hook の届かない中断・拒否を会話ログから拾う
+ * - 起動したとき・時間が経ったとき: hook の届かない中断・拒否を会話ログから拾う
+ *
+ * hook の処理は、そのエージェントのこれまでの状態が Store にあることを前提にする（entry が先に initialized を出す）
  */
 import { createAction } from "@reduxjs/toolkit";
 import type { AppMiddleware } from "../../createStore.ts";
 import { isBlocked, selectAgent, selectAgents } from "../../modules/app/agents/selector.ts";
-import { agentAttached, agentEnded, agentsRequested, interruptionCheckRequested, turnInterrupted } from "../../modules/app/agents/slice.ts";
+import { agentAttached, agentEnded, turnInterrupted } from "../../modules/app/agents/slice.ts";
+import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
 import type { Pid } from "../../types/agent.ts";
 import { detectAgent } from "../../utils/detectAgent.ts";
 import { inspect } from "../system/proc.ts";
@@ -37,7 +40,6 @@ export const claude = (): AppMiddleware => (api) => (next) => (action) => {
     const events = toEvents(input, at);
     if (!events.length) return result;
     const agentId = input.session_id;
-    api.dispatch(agentsRequested({ ids: [agentId] }));
     const known = selectAgent(api.getState(), agentId);
     const onlyEnd = events.every((e) => agentEnded.match(e));
     if (!onlyEnd && (!known?.pid || (input.transcript_path && !known.transcript))) {
@@ -45,7 +47,7 @@ export const claude = (): AppMiddleware => (api) => (next) => (action) => {
       api.dispatch(agentAttached({ agentId, at, pid: known?.pid ?? findAgentPid(), cwd, transcript: input.transcript_path }));
     }
     for (const e of events) api.dispatch(e);
-  } else if (interruptionCheckRequested.match(action)) {
+  } else if (initialized.match(action) || ticked.match(action)) {
     for (const a of selectAgents(api.getState())) {
       if (!a.transcript || (a.turn.status !== "running" && !isBlocked(a.turn.status))) continue;
       const tail = tailSince(a.transcript, a.turn.since);

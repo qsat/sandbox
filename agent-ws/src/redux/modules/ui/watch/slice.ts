@@ -2,7 +2,7 @@
  * watch（常駐表示）の画面の状態: 選択中の行とスクロール位置
  * 行そのものは状態から毎回組み立てるので持たない。行は key で指す
  */
-import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
+import { createAction, createSlice, type PayloadAction } from "@reduxjs/toolkit";
 
 export interface WatchViewState {
   cursor: string | null; // 選択中の行の key
@@ -22,3 +22,6 @@ export const watchView = createSlice({
   },
 });
 export const { cursorSet, scrolled } = watchView.actions;
+
+/** 人が r キーで読み直しを頼んだ */
+export const reloadPressed = createAction("ui/watch/reloadPressed");

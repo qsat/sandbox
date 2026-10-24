@@ -57,19 +57,6 @@ export const agentRestored = createAction<{ agent: Agent; attention: { unseen: b
 export const agentForgotten = createAction<{ agentId: string }>("agent/forgotten");
 export const agentProcessesScanned = createAction<AgentProcess[]>("agent/processesScanned");
 
-// 意図（〜してほしい）。middleware が I/O して、結果を上の出来事・アクションで戻す
-/** ログからエージェントを組み立てる（ids を省くと全エージェント） */
-export const agentsRequested = createAction<{ ids?: string[] } | undefined>("agent/agentsRequested");
-/** ログの変化を取り込む（他のプロセスが追記・削除した分だけ） */
-export const logsChanged = createAction("agent/logsChanged");
-export const agentProcessesRequested = createAction("agent/processesRequested");
-/** プロセスが消えたエージェントを終わらせる */
-export const livenessCheckRequested = createAction<{ at: number }>("agent/livenessCheckRequested");
-/** hook の届かない中断を拾う */
-export const interruptionCheckRequested = createAction<{ at: number }>("agent/interruptionCheckRequested");
-/** エージェントを追い続ける（watch） */
-export const followStarted = createAction<{ intervalMs: number }>("agent/followStarted");
-
 // ---------------------------------------------------------------------
 // reducer
 // ---------------------------------------------------------------------

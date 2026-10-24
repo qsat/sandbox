@@ -2,24 +2,17 @@
  * eventLog middleware: エージェントの出来事をログに記録し、ログから流し直す
  *
  * - 記録: エージェントの出来事と確認（acknowledged）のうち、状態を変えたものだけを追記する。agentEnded ならログごと消す
- * - 流し直し: agentsRequested でログを読み、記録済みの目印（replayed）を付けて dispatch する。
+ * - 流し直し: 起動したら（initialized）ログを読み、記録済みの目印（replayed）を付けて dispatch する。
  *   同じ出来事に agents と attention の両方の reducer が反応する
- * - 見張り: followStarted でログのディレクトリを見張り、他のプロセスが書いた分を取り込む
+ * - 見張り: follow のとき、ログのディレクトリを見張って他のプロセスが書いた分を取り込む。時間が経ったら（ticked）取りこぼしも拾う
  *
  * createStore の log として、reducer の直前に組む（他の middleware が途中で出した出来事より先に記録するため）
  */
 import { isAnyOf } from "@reduxjs/toolkit";
 import type { AppMiddleware, RootState } from "../../createStore.ts";
-import {
-  agentEnded,
-  agentForgotten,
-  agentRestored,
-  agentsRequested,
-  followStarted,
-  isAgentEvent,
-  logsChanged,
-} from "../../modules/app/agents/slice.ts";
+import { agentEnded, agentForgotten, agentRestored, isAgentEvent } from "../../modules/app/agents/slice.ts";
 import { acknowledged } from "../../modules/app/attention/slice.ts";
+import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
 import { isReplayed, replayed } from "../../utils/replayed.ts";
 import { defaultDir, openLog } from "./log.ts";
 
@@ -33,8 +26,13 @@ const isRecorded = isAnyOf(isAgentEvent, acknowledged);
 /** 記録の単位: そのエージェントの状態と確認の状況（どちらかが変われば記録する） */
 const recordOf = (st: RootState, id: string) => [st.app.agents.byId[id], st.app.attention[id]] as const;
 
+export interface EventLogOptions {
+  dir?: string; // ログの置き場所（省くと defaultDir()）
+  follow?: boolean; // 他のプロセスが書いた分を取り込み続ける（watch）
+}
+
 export const eventLog =
-  (o: { dir?: string } = {}): AppMiddleware =>
+  (o: EventLogOptions = {}): AppMiddleware =>
   (api) => {
     const log = openLog(o.dir ?? defaultDir());
     const offsets = new Map<string, number>(); // このプロセスが読み終えた位置。見張りでは差分だけ流す
@@ -90,18 +88,17 @@ export const eventLog =
         return result;
       }
       const result = next(action);
-      if (agentsRequested.match(action)) {
-        const all = log.list();
-        const wanted = action.payload?.ids;
-        for (const l of wanted ? all.filter((x) => wanted.includes(x.id)) : all) load(l.id, l.mtimeMs);
-      } else if (logsChanged.match(action)) {
-        follow();
-      } else if (followStarted.match(action) && !stopWatching) {
-        let timer: Timer | undefined;
-        stopWatching = log.watch(() => {
-          clearTimeout(timer); // 連続した追記はまとめて取り込む
-          timer = setTimeout(() => api.dispatch(logsChanged()), 50);
-        });
+      if (initialized.match(action)) {
+        for (const l of log.list()) load(l.id, l.mtimeMs);
+        if (o.follow && !stopWatching) {
+          let timer: Timer | undefined;
+          stopWatching = log.watch(() => {
+            clearTimeout(timer); // 連続した追記はまとめて取り込む
+            timer = setTimeout(follow, 50);
+          });
+        }
+      } else if (ticked.match(action) && o.follow) {
+        follow(); // 見張りが取りこぼしたときの保険
       }
       return result;
     };

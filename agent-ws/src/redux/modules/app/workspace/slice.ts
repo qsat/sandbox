@@ -4,8 +4,8 @@
  * 外から観測した「いまの値」なのでログには残さず、スキャンするたびに置き換える。
  * どのエージェントがどの worktree にいるかは持たず、selector でエージェントと結びつける。
  */
-import { createAction, createSlice, type PayloadAction } from "@reduxjs/toolkit";
-import type { Filter, Repository } from "../../../types/workspace.ts";
+import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
+import type { Repository } from "../../../types/workspace.ts";
 
 export interface WorkspaceState {
   roots: string[]; // ghq のルート（リポジトリ名の基準）
@@ -27,10 +27,3 @@ export const workspace = createSlice({
   },
 });
 export const { reposScanned, dirtyScanned } = workspace.actions;
-
-// 意図（〜してほしい）。middleware がスキャンして、結果を上のアクションで戻す
-export const reposRequested = createAction<{ query?: string }>("workspace/reposRequested");
-/** 変更件数は表示する worktree だけ数える */
-export const dirtyRequested = createAction<{ filter: Filter }>("workspace/dirtyRequested");
-/** スキャンし続ける（watch）。変更件数は interval ごと、リポジトリ構成は15秒ごと */
-export const scanStarted = createAction<{ query?: string; filter: Filter; intervalMs: number }>("workspace/scanStarted");

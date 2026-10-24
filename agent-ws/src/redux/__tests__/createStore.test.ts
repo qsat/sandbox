@@ -4,11 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AppMiddleware, createStore } from "../createStore.ts";
 import { claude, hookReceived } from "../middlewares/claude/index.ts";
+import { clock } from "../middlewares/clock/index.ts";
 import { eventLog } from "../middlewares/eventLog/index.ts";
 import { tmux } from "../middlewares/tmux/index.ts";
-import { agentAttached, agentsRequested, turnFinished, turnStarted } from "../modules/app/agents/slice.ts";
+import { agentAttached, turnFinished, turnStarted } from "../modules/app/agents/slice.ts";
 import { selectUnseen } from "../modules/app/attention/selector.ts";
 import { acknowledged } from "../modules/app/attention/slice.ts";
+import { initialized, ticked } from "../modules/app/lifecycle/slice.ts";
 import { visitRequested } from "../modules/ui/visit/slice.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "agent-ws-test-"));
@@ -16,6 +18,7 @@ const hook = (input: Record<string, unknown>, at: number) => hookReceived({ inpu
 
 test("hook の入力は middleware が出来事に変えてログに残し、別の Store がログから同じ状態を組み立てる", () => {
   const store = createStore({ log: eventLog({ dir }), effects: [claude()] });
+  store.dispatch(initialized({ at: 0 }));
   store.dispatch(hook({ hook_event_name: "SessionStart" }, 1));
   store.dispatch(hook({ hook_event_name: "UserPromptSubmit" }, 2));
   store.dispatch(hook({ hook_event_name: "Stop", last_assistant_message: "終わり" }, 3));
@@ -26,13 +29,13 @@ test("hook の入力は middleware が出来事に変えてログに残し、別
   // 別のプロセス（別の Store）はログから同じ状態を組み立てる。確認（acknowledged）もログに残る
   store.dispatch(acknowledged({ agentId: "s1", at: 4 }));
   const other = createStore({ log: eventLog({ dir }) });
-  other.dispatch(agentsRequested());
+  other.dispatch(initialized({ at: 9 }));
   expect(other.getState().app).toEqual({ ...store.getState().app });
 });
 
-test("middleware を組まない Store では意図は何も起こさない（entry が要る分だけ組む）", () => {
+test("middleware を組まない Store では、起動しても何も起こらない（何をするかは組んだ middleware が決める）", () => {
   const store = createStore();
-  store.dispatch(agentsRequested());
+  store.dispatch(initialized({ at: 1 }));
   expect(store.getState().app.agents.byId).toEqual({});
 });
 
@@ -57,6 +60,20 @@ test("effects が出来事の途中で出した出来事は、元の出来事よ
   expect(selectUnseen(store.getState(), "a")).toBe(false);
 
   const other = createStore({ log: eventLog({ dir: logDir }) });
-  other.dispatch(agentsRequested());
+  other.dispatch(initialized({ at: 9 }));
   expect(selectUnseen(other.getState(), "a")).toBe(false);
+});
+
+test("clock は起動すると interval ごとに時間の経過を出す", async () => {
+  const seen: string[] = [];
+  const record: AppMiddleware = () => (next) => (action) => {
+    if (ticked.match(action)) seen.push(action.type);
+    return next(action);
+  };
+  const store = createStore({ effects: [record, clock({ intervalMs: 10 })] });
+  await Bun.sleep(30);
+  expect(seen).toEqual([]); // 起動するまでは出さない
+  store.dispatch(initialized({ at: 0 }));
+  await Bun.sleep(35);
+  expect(seen.length).toBeGreaterThanOrEqual(2);
 });
