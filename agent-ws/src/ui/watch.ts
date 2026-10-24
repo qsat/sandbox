@@ -4,7 +4,7 @@
  * 人の操作は出来事として伝えるだけで、結果は状態の変化として受け取る（popup を閉じるのも状態を見て決める）。
  * 何を表示するか・操作をどう伝えるかは関数で受け取る（このモジュールは Store の中身を知らない）
  */
-import { coalesce } from "../lib/coalesce.ts";
+import { debounce } from "../lib/debounce.ts";
 import type { VisitTarget } from "../redux/types/visit.ts";
 import type { ColorMode } from "./terminal.ts";
 import { formatRow, paint } from "./terminal.ts";
@@ -118,10 +118,10 @@ export function runWatch(o: WatchOptions): void {
     process.stdin.on("data", (key: string) => keys[key]?.());
   }
   // 状態が変わったら: 閉じるべきなら閉じる。そうでなければ、続く変化を 1 フレームにまとめて描き直す
-  const redraw = coalesce(draw);
+  const redraw = debounce(draw, 30);
   o.subscribe(() => {
     if (o.view().close) return quit();
-    redraw(30);
+    redraw();
   });
   draw();
 }

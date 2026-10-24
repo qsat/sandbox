@@ -4,7 +4,7 @@
  * middleware が「出来事に反応して外界とやりとりし、結果を出来事として戻す」のに対し、購読者は状態を映すだけで何も dispatch しない。
  * 何を映すかは状態だけで決まるので、どの出来事で変わったかは見ない。entry がログから状態を組み立て終えた後に購読させる
  */
-import { coalesce } from "../../lib/coalesce.ts";
+import { debounce } from "../../lib/debounce.ts";
 import type { AppStore, RootState } from "../createStore.ts";
 
 export type AppSubscriber = (store: AppStore) => void;
@@ -33,9 +33,9 @@ export function observe<T>(
     prev = next;
     onChange(next, before);
   };
-  const checkSoon = coalesce(check);
+  const checkSoon = debounce(check, 0);
   return store.subscribe(() => {
-    if (o.settle) return checkSoon(0);
+    if (o.settle) return checkSoon();
     check();
   });
 }

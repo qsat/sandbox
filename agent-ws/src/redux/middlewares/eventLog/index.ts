@@ -9,7 +9,7 @@
  * createStore の log として、reducer の直前に組む（他の middleware が途中で出した出来事より先に記録するため）
  */
 import { isAnyOf } from "@reduxjs/toolkit";
-import { coalesce } from "../../../lib/coalesce.ts";
+import { debounce } from "../../../lib/debounce.ts";
 import type { AppMiddleware, RootState } from "../../createStore.ts";
 import { agentEnded, agentForgotten, agentRestored, isAgentEvent } from "../../modules/app/agents/slice.ts";
 import { acknowledged } from "../../modules/app/attention/slice.ts";
@@ -85,7 +85,7 @@ export const eventLog = (o: EventLogOptions = {}): AppMiddleware =>
       const ids = new Set(present.map((l) => l.id));
       for (const id of [...offsets.keys()].filter((id) => !ids.has(id))) forget(id);
     };
-    const followSoon = coalesce(follow); // 連続した追記はまとめて取り込む
+    const followSoon = debounce(follow, 50); // 連続した追記はまとめて取り込む
 
     return [
       // 状態を変えた出来事だけを記録する（流し直した出来事は記録済み）
@@ -103,7 +103,7 @@ export const eventLog = (o: EventLogOptions = {}): AppMiddleware =>
       }),
       on(initialized, ({ payload: { at } }) => {
         for (const l of log.list()) load(l.id, l.mtimeMs, at);
-        if (o.follow) log.watch(() => followSoon(50));
+        if (o.follow) log.watch(followSoon);
       }),
       on(ticked, () => {
         if (o.follow) follow(); // 見張りが取りこぼしたときの保険
