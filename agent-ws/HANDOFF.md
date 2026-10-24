@@ -77,7 +77,8 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
         types/            ドメインの型（agent・attention・workspace・visit）
         utils/            純粋な関数を1関数1ファイルで（detectAgent・isUnder・repoName・firstLine・ancestry・findPane・replayed）
       ui/                 描画: view（行モデル）・terminal（色と幅）・watch（TUI。状態を読んで描くだけ。人の操作は出来事として伝える）
-      lib/                ドメインを知らない汎用の道具: attempt（失敗したら代わりの値）・scan（reduce の途中経過）・coalesce（続けて呼ばれても1回にまとめる）
+      lib/                ドメインを知らない汎用の道具: attempt（失敗したら代わりの値）・scan（reduce の途中経過）・coalesce（続けて呼ばれても1回にまとめる）・
+                          match（kind によるパターンマッチ）
 
 - modules（slice・selector・listener）は I/O を知らない。外部システムとのやりとりは middleware が吸収する。listener は I/O を伴わないつなぎが要るモジュールにだけ置く（今は無いが、仕組み（listener middleware・addAppListener・listen）は createStore に組んである）
 - アクションは「起きたこと」だけにする（セッターや特定の middleware への命令にしない）。entry が dispatch するのは起動した（initialized）ことと、外界・人の出来事（hookReceived・paneFocused・destinationChosen・rowSelected・reloadPressed）だけ。ログの読み込み・生死の確認・スキャンなどは、出来事を受けた middleware がそれぞれ判断して行う
@@ -111,7 +112,8 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 - 時間の経過は clock の middleware が ticked として出す（watch だけが組む）。ticked を受けて、eventLog はログの取りこぼしを拾い、processes は生死の確認とプロセス一覧を、git は変更件数とリポジトリ構成（前回から15秒以上たっていれば）を、claude は中断の確認を行う。エージェントが増えて pid がプロセス一覧に無いとき・消えたときは、processes が interval を待たずにプロセスを取り直す（続けて届いても1回にまとめる。消えたときは SessionEnd がプロセスの終了より先に届くので1秒待つ）
 - コマンドごとの違いは middleware のオプションで表す。たとえば status は processes() だけでプロセス一覧もリポジトリも調べない（生死の確認だけ）、list と watch は processes({ list: true })・git({ repos, dirty })、watch だけ eventLog({ follow: true }) と clock を組む
 - hook も起動時に全エージェントのログを読む（エージェント10体でも1回あたり +3ms 程度）。claude の middleware は、そのエージェントのこれまでの状態が Store にある前提で hook を処理する
-- tmux のステータスラインは、印が変わったときだけ statusLine の購読者が `tmux refresh-client -S` で描き直す（`#()` も再実行される。tmux 3.4 で確認）。watch では、他のプロセスが記録した変化を取り込んだときも描き直す
+- tmux のステータスラインは、印が変わったときだけ statusLine の購読者が `tmux refresh-client -S` で描き直す（`#()` も再実行される。tmux 3.4 で確認）。
+  比べるのは出来事の連鎖が終わってから（observe の settle。待ち時間 0 でまとめる）。連鎖は同期的に進むので、途中の状態（表示中のペインで完了して確認済みになる間の ✓）は映さない。watch では、他のプロセスが記録した変化を取り込んだときも描き直す
 
 ### Claude Code の hook
 - hook は全イベント共通の1コマンドにし、何が起きたかは `hook_event_name` で判断する。登録するイベントは redux/middlewares/claude/hook.ts の `HOOK_EVENTS`（SessionStart, UserPromptSubmit, PermissionRequest, PostToolUse, PostToolUseFailure, Notification, Stop, StopFailure, SubagentStart, SubagentStop, SessionEnd）
@@ -149,6 +151,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 - 実装も手続き的にしない。lint で次を禁止している（テストも同じ）
   - 三項演算子（style/noTernary）: 分岐は早期 return の小さな関数か、対応表（Record）で書く
   - else（lint/no-else.grit）: ガード節で早期 return する
+  - switch（lint/no-switch.grit）: 文字列のキーなら対応表（Record）、kind で分かれる型なら lib/match（全ケースを書かないと型エラー）
   - let（lint/no-let.grit）: const と式で書く（ループは map・filter・find・reduce・再帰、try/catch の結果は lib/attempt、途中経過は lib/scan）。
     呼び出しをまたいで状態を持つしかないものだけ、理由を書いて `// biome-ignore lint/plugin/no-let: 理由` で許す（今は lib/coalesce・subscribers/observe・E2E のクライアントの3か所）
   - 引数への再代入（style/noParameterAssign）、認知的複雑度 10 を超える関数（complexity/noExcessiveCognitiveComplexity）

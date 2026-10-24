@@ -47,5 +47,5 @@
       }
     }
   },
-  "plugins": ["./lint/no-else.grit", "./lint/no-let.grit"]
+  "plugins": ["./lint/no-else.grit", "./lint/no-let.grit", "./lint/no-switch.grit"]
 }

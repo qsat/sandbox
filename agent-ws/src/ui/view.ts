@@ -1,6 +1,7 @@
 /**
  * 表示モデル: ドメイン → 行（Row）。何を・どんな意味で見せるかだけ決め、色や装飾はしない
  */
+import { match } from "../lib/match.ts";
 import { isBlocked, visibleSubagents } from "../redux/modules/app/agents/selector.ts";
 import { attentionOf } from "../redux/modules/app/attention/selector.ts";
 import type { Agent, Status, Subagent, TurnStatus } from "../redux/types/agent.ts";
@@ -239,18 +240,13 @@ export function notification({ repo, branch, kind, reason }: Notice): { title: s
 export function visitMessage(r: VisitResult): Cell {
   const pane = (p: { session: string; window: string; windowName: string; id: string }) =>
     `${p.session}:${p.window} (${p.windowName}) ${p.id}`;
-  switch (r.kind) {
-    case "focused":
-      return cell(`→ ${pane(r.pane)}`, "ok");
-    case "found":
-      return cell(pane(r.pane));
-    case "created":
-      return cell(`→ 新しいウィンドウ ${r.path}`, "ok");
-    case "notFound":
-      return cell(`${r.title} を表示しているペインがありません`, "warn");
-    case "failed":
-      return cell(`${r.title} へ移動できませんでした（tmux クライアントの外？）`, "warn");
-  }
+  return match(r, {
+    focused: (r) => cell(`→ ${pane(r.pane)}`, "ok"),
+    found: (r) => cell(pane(r.pane)),
+    created: (r) => cell(`→ 新しいウィンドウ ${r.path}`, "ok"),
+    notFound: (r) => cell(`${r.title} を表示しているペインがありません`, "warn"),
+    failed: (r) => cell(`${r.title} へ移動できませんでした（tmux クライアントの外？）`, "warn"),
+  });
 }
 
 export function duration(ms: number): string {

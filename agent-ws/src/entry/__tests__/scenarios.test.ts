@@ -124,6 +124,9 @@ function hooks(inputs: string[], agentId: string, transcript: string) {
 
 /** 録った会話ログを、いまの時刻で書き出す（Esc・拒否は hook が発火せず、会話ログにだけ残る） */
 /** 会話ログを、直前の hook より後に書かれたものとして置く（ファイルの時刻は数 ms 単位と粗いので、書いた時刻は明示する） */
+/** ステータスラインは出来事の連鎖が終わってから描き直すので、それを待つ */
+const settle = () => Bun.sleep(1);
+
 async function writeTranscript(path: string, fixture: string) {
   const at = new Date(Date.now() + 1);
   const lines = (await read(fixture)).map((l) => JSON.stringify({ ...JSON.parse(l), timestamp: at.toISOString() }));
@@ -194,9 +197,13 @@ describe("1つのセッションの流れ", async () => {
     expect(agentLine()).toContain("● 実行中");
   });
 
-  test("いま見ているペインで完了したら ✓ を出さない（内部用のエージェントは数えない）", () => {
+  test("いま見ているペインで完了したら ✓ を出さない（ステータスラインも描き直さない。内部用のエージェントは数えない）", async () => {
     look("%1");
+    await settle(); // それまでの描き直しを済ませてから数える
+    const refreshes = world.refreshes;
     feed(6, 7);
+    await settle();
+    expect(world.refreshes).toBe(refreshes); // 完了して確認済みになる間の ✓ は映さない
     expect(status()).toBe("");
     expect(agentLine()).toContain("✓ 入力待ち");
     expect(list()).not.toContain("⤷");
@@ -228,10 +235,12 @@ describe("1つのセッションの流れ", async () => {
     expect(agentLine()).toContain("中断しました");
   });
 
-  test("ステータスラインは印が変わったときだけ描き直す", () => {
+  test("ステータスラインは印が変わったときだけ描き直す", async () => {
+    await settle();
     expect(world.refreshes).toBeGreaterThan(0);
     const before = world.refreshes;
     feed(15, 15); // 実行中になる（印は変わらない）
+    await settle();
     expect(world.refreshes).toBe(before);
   });
 
