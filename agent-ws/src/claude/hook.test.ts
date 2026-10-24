@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
-import type { SessionsState } from "../domain/sessions.ts";
-import { attached, attention, noticeOf, sessionsReducer } from "../domain/sessions.ts";
-import type { HookInput } from "./claude.ts";
-import { interruptedSince, toActions } from "./claude.ts";
+import { noticeOf } from "../redux/modules/notification/selector.ts";
+import { attention } from "../redux/modules/sessions/selector.ts";
+import type { SessionsState } from "../redux/modules/sessions/slice.ts";
+import { attached, sessionsReducer } from "../redux/modules/sessions/slice.ts";
+import type { HookInput } from "./hook.ts";
+import { interruptedSince, toActions } from "./hook.ts";
 
 /** 本物の Claude Code（2.1.309）で取った hook 入力を順に流し、各イベント後の状態を記録する */
 async function replay(file: string) {

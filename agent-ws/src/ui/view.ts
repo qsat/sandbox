@@ -3,8 +3,10 @@
  */
 import type { JumpResult, JumpTarget, Notice, Proc, Repository, Worktree } from "../domain/model.ts";
 import { isUnder, repoName } from "../domain/model.ts";
-import type { Session, SessionStatus, Status, StatusFlags } from "../domain/sessions.ts";
-import { attention, isBlocked, visibleSubagents } from "../domain/sessions.ts";
+import { attention, visibleSubagents } from "../redux/modules/sessions/selector.ts";
+import type { Session, SessionStatus, Status } from "../redux/modules/sessions/slice.ts";
+import { isBlocked } from "../redux/modules/sessions/slice.ts";
+import type { StatusFlags } from "../redux/modules/statusLine/selector.ts";
 
 /** 意味としてのトーン。実際の色は terminal.ts が決める */
 export type Tone = "plain" | "strong" | "dim" | "title" | "agent" | "ok" | "warn" | Status;

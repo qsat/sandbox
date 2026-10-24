@@ -6,7 +6,8 @@
  * 本体が人を待っているか（attention）はサブエージェントから導けるので、保存せずに selector で求める。
  */
 import { createAction, createReducer, isAnyOf, type PayloadActionCreator } from "@reduxjs/toolkit";
-import type { Pid } from "./model.ts";
+import type { HookInput } from "../../../claude/hook.ts";
+import type { Pid } from "../../../domain/model.ts";
 
 /** ready: 入力待ち（起動直後・ターン完了） / waiting: 許可待ち / asking: 質問への回答待ち */
 export type SessionStatus = "ready" | "running" | "waiting" | "asking" | "error";
@@ -76,6 +77,20 @@ export const isSessionAction = isAnyOf(...sessionActions);
 export const logReplayed = createAction<{ sessionId: string; base?: Session; actions: SessionAction[] }>("session/logReplayed");
 /** 他のプロセスがログを消した */
 export const forgotten = createAction<{ sessionId: string }>("session/forgotten");
+
+// ---------------------------------------------------------------------
+// 意図（〜してほしい）。listener が I/O して、結果を上のアクションで戻す
+// ---------------------------------------------------------------------
+/** ログからセッションを組み立てる（ids を省くと全セッション） */
+export const sessionsRequested = createAction<{ ids?: string[] } | undefined>("session/sessionsRequested");
+/** ログの変化を取り込む（他のプロセスが追記・削除した分だけ） */
+export const logsChanged = createAction("session/logsChanged");
+/** プロセスが消えたセッションを閉じ、hook の届かない中断を拾う */
+export const settleRequested = createAction<{ at: number }>("session/settleRequested");
+/** Claude Code の hook が呼ばれた */
+export const hookReceived = createAction<{ input: HookInput; at: number }>("session/hookReceived");
+/** そのペインで完了したセッションを既読にする（tmux の pane-focus-in とポップアップからの移動） */
+export const seenInPaneRequested = createAction<{ panePid: Pid; at: number }>("session/seenInPaneRequested");
 
 // ---------------------------------------------------------------------
 // reducer
@@ -151,60 +166,5 @@ export const sessionsReducer = createReducer({} as SessionsState, (b) => {
   on(seen, (s) => put(s, "unseen", false));
 });
 
-// ---------------------------------------------------------------------
-// selector
-// ---------------------------------------------------------------------
-export const allSessions = (st: SessionsState) => Object.values(st);
-
 /** 人の操作を待っている状態 */
 export const isBlocked = (st: SessionStatus | undefined) => st === "waiting" || st === "asking";
-
-/** 本体として見せる状態。本体が待っていなくても、サブエージェントが許可を待っていれば許可待ち */
-export interface Attention {
-  status: SessionStatus;
-  reason?: string;
-  since: number;
-  subagent?: Subagent; // サブエージェント由来のとき
-}
-
-export function attention(s: Session): Attention {
-  if (isBlocked(s.status) || s.status === "error") return s;
-  const sub = Object.values(s.subagents).find((a) => a.status === "waiting");
-  return sub ? { status: "waiting", since: sub.since, subagent: sub } : s;
-}
-
-/** 表示するサブエージェント（完了したものは2分だけ残す） */
-export const visibleSubagents = (s: Session, now: number) =>
-  Object.values(s.subagents)
-    .filter((a) => a.status !== "done" || now - a.since < 2 * 60_000)
-    .sort((a, b) => a.since - b.since);
-
-/** 通知する遷移: 許可・質問待ち・エラーになった、またはターンが完了した（バックグラウンドが残る完了・中断は除く） */
-export type NoticeKind = "waiting" | "asking" | "error" | "ready";
-export function noticeOf(prev: Session | undefined, next: Session | undefined): { kind: NoticeKind; reason?: string } | null {
-  if (!next) return null;
-  const a = prev && attention(prev);
-  const b = attention(next);
-  if (b.status !== a?.status && (isBlocked(b.status) || b.status === "error")) {
-    return { kind: b.status as NoticeKind, reason: b.subagent ? `[${b.subagent.type}] ${b.subagent.detail ?? ""}` : b.reason };
-  }
-  return next.unseen && !prev?.unseen ? { kind: "ready", reason: next.reason } : null;
-}
-
-/** ステータスラインに出す印（対応が要るものの有無だけ） */
-export interface StatusFlags {
-  waiting: boolean;
-  asking: boolean;
-  unseen: boolean;
-  error: boolean;
-}
-
-export function statusFlags(sessions: Session[]): StatusFlags {
-  const st = sessions.map((s) => attention(s).status);
-  return {
-    waiting: st.includes("waiting"),
-    asking: st.includes("asking"),
-    unseen: sessions.some((s) => s.unseen),
-    error: st.includes("error"),
-  };
-}

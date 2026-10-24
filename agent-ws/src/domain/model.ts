@@ -4,7 +4,8 @@
  *   Repository ─< Worktree ─< Proc ── Session ─< Subagent
  *                                └─ 表示先 Pane（tmux）
  */
-import type { NoticeKind, Session } from "./sessions.ts";
+import type { NoticeKind } from "../redux/modules/notification/selector.ts";
+import type { Session } from "../redux/modules/sessions/slice.ts";
 
 export type Pid = number;
 export type AgentKind = "claude" | "codex" | "aider" | "gemini" | "cursor" | "copilot" | "opencode" | "amp";

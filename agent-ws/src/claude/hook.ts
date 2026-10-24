@@ -2,10 +2,10 @@
  * Claude Code との境界（腐敗防止層）: hook の入力・会話ログの形を知っているのはここだけ
  * 入力の形は本物の Claude Code（2.1.309）で確かめた。src/fixtures/ に実データがある
  */
-import type { SessionAction } from "../domain/sessions.ts";
+import type { SessionAction } from "../redux/modules/sessions/slice.ts";
 import {
   failed, notified, permissionRequested, promptSubmitted, started, stopped, subagentStarted, subagentStopped, toolUsed, ended,
-} from "../domain/sessions.ts";
+} from "../redux/modules/sessions/slice.ts";
 import { firstLine } from "../domain/model.ts";
 
 /** hook に登録するイベントと matcher。toActions が解釈するイベントと一致させる */

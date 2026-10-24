@@ -1,8 +1,12 @@
 import { expect, test } from "bun:test";
-import type { SessionAction, SessionsState } from "./sessions.ts";
+import type { RootState } from "../../createStore.ts";
+import { noticeOf } from "../notification/selector.ts";
+import { selectStatusFlags } from "../statusLine/selector.ts";
+import { attention } from "./selector.ts";
+import type { SessionAction, SessionsState } from "./slice.ts";
 import {
-  attached, attention, interrupted, logReplayed, noticeOf, permissionRequested, promptSubmitted, seen, sessionsReducer, statusFlags, stopped, toolUsed,
-} from "./sessions.ts";
+  attached, interrupted, logReplayed, permissionRequested, promptSubmitted, seen, sessionsReducer, stopped, toolUsed,
+} from "./slice.ts";
 
 const on = (at: number) => ({ sessionId: "s", at });
 const init = sessionsReducer(undefined, { type: "init" });
@@ -50,10 +54,10 @@ test("ログの流し直しはスナップショットから続きを適用す�
   expect(replayed.s).toMatchObject({ status: "ready", unseen: true, since: 2 });
 });
 
-test("noticeOf / statusFlags: 通知とステータスラインの印", () => {
+test("noticeOf / selectStatusFlags: 通知とステータスラインの印", () => {
   const running = run(born, promptSubmitted(on(1)));
   const done = sessionsReducer(running, stopped({ ...on(2), message: "終わり", background: false }));
   expect(noticeOf(running.s, done.s)).toEqual({ kind: "ready", reason: "終わり" });
   expect(noticeOf(undefined, run(born).s)).toBeNull(); // 起動直後は通知しない
-  expect(statusFlags([done.s!])).toEqual({ waiting: false, asking: false, unseen: true, error: false });
+  expect(selectStatusFlags({ sessions: done } as RootState)).toEqual({ waiting: false, asking: false, unseen: true, error: false });
 });

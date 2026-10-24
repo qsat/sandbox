@@ -8,7 +8,7 @@ AI エージェント（主に Claude Code）を複数の git worktree で並行
 - リポジトリは ghq 管理。worktree はブランチごとにフラットに展開している（置き場所は `git worktree list` から取るので、命名は問わない）
 - 常駐表示は tmux（neovim ではなく）。ポップアップとステータスラインで使う
 
-## できること（cli.ts のサブコマンド）
+## できること（src/entry/cli.ts のサブコマンド）
 - `list [query] [--all] [--agents-only] [--json]`: 一覧を1回表示する。既定では「追加 worktree がある、または何か動いている」リポジトリだけを出す
 - `watch [query] [--interval=2] [--popup]`: 常駐表示。j/k で選択、Enter でそのペイン／ウィンドウへ移動、r で再読込、q で終了。`--popup` を付けると移動後に終了する
 - `status [--tmux]`: ステータスライン用の印。対応が要るものの有無だけを出し、何も無ければ空（⏳ 許可待ち / ❓ 質問待ち / ✓ 完了して未確認 / ✗ エラー）。中身はポップアップ（`watch --popup`）で見る。セッションのログしか読まないので軽い
@@ -21,31 +21,35 @@ AI エージェント（主に Claude Code）を複数の git worktree で並行
 ターンが完了した ready には「未確認」（`unseen`）が付き、一覧では「✓ 完了」と出る。次のプロンプト・そのペインへのフォーカス・ポップアップからの移動で消える。
 waiting・asking・ready・error への遷移で通知する（tmux の display-message と、osascript または notify-send）。通知する状態は `AGENT_WS_NOTIFY` で絞れる。
 
-## 構成（Redux Toolkit。依存は矢印の向きだけ）
-    cli.ts ─┬→ src/app/intents（意図のアクション）・src/app/store
-            │     src/app/effects（listener）─┬→ src/domain/*   集約・スライス・selector（純粋。単体テストあり）
-            │     src/app/claude（境界）──────┴→ src/infra/*    ログ・git・proc・tmux・notify・shell
-            └→ src/ui/*  ─────────────────────→ src/domain/*   view（行モデル）・terminal（色と幅）・watch（対話）
+## 構成（Redux Toolkit・re-ducks。依存は矢印の向きだけ）
+    src/entry/*（初期化）─┬→ src/redux/createStore.ts・src/redux/modules/{slug}/{slice,selector,listener}.ts
+                         │        └→ src/domain/model.ts（純粋）・src/claude/hook.ts（Claude Code の入力の境界）・src/infra/*（I/O）
+                         └→ src/ui/*（表示）
 
-    CLI・UI ─ dispatch(意図) ─→ middleware ─┬→ listener  意図に反応して I/O し、結果を事実のアクションで戻す。
-                                            │            通知・ステータスラインの再描画・表示中の完了の既読化・watch の定期スキャンも
-                                            └→ 永続化    セッションのアクションを、状態が変わったときだけログに追記
+    entry ─ dispatch(意図) ─→ middleware ─┬→ listener     意図に反応して I/O し、結果を事実のアクションで戻す
+                                          └→ persistence  セッションのアクションを、状態が変わったときだけログに追記
 
-- thunk は使わない（thunk middleware も外している）。I/O を伴う手続きは「意図のアクション（〜Requested）→ listener → 事実のアクション」で表す。結果を返す必要がある移動は `jumped` で Store（navigation）に記録し、呼び出し側が読む
-- listener の処理は await を含まない限り dispatch の中で同期的に終わる。CLI は dispatch の直後に状態を読むのでこれに頼っている（app/store.test.ts で確かめている）
+    src/
+      entry/        cli.ts（引数の解析と振り分け）・コマンドごとの初期化（list / watch / status / seen / jump / hook）・store.ts
+      redux/
+        createStore.ts   Store のファクトリ（reducer と middleware だけ）・addAppListener・listen
+        middlewares/     persistence.ts
+        modules/
+          sessions/      セッション集約（本体＋サブエージェント）。ログの読み込み・取り込み・掃除・hook・既読化
+          workspace/     リポジトリ構成・プロセス・変更件数とそのスキャン。ツリーを組み立てる selector
+          navigation/    ペインへの移動と、その結果（jumped）
+          notification/  通知する遷移（selector）と通知（listener）。状態は持たない
+          statusLine/    ステータスラインの印（selector）と tmux の再描画（listener）。状態は持たない
+          watch/         常駐の定期スキャンとログの変化の取り込み
+      domain/model.ts    Redux に依らない型と純粋なルール（エージェント判定・移動先ペインの特定など）
+      claude/hook.ts     hook の入力 → アクション、会話ログからの中断検出、hooks 設定
+      infra/             eventLog（アクションログとスナップショット）・git・proc・tmux・notify・shell・transcript
+      ui/                view（行モデル）・terminal（色と幅）・watch（対話）
 
-- `domain/sessions.ts`: セッション集約（本体＋サブエージェント）。アクション（attached / started / promptSubmitted / permissionRequested / toolUsed / notified / stopped / failed / subagentStarted / subagentStopped / interrupted / seen / ended）、reducer、selector（attention・noticeOf・statusFlags・visibleSubagents）
-- `domain/workspace.ts`: リポジトリ構成・プロセス一覧・変更件数のスライスと、ツリーを組み立てる selector（selectTree）
-- `domain/model.ts`: 型とエージェント判定（detectAgent）、移動先ペインの特定（findPane）
-- `app/claude.ts`: hook の入力 → アクション（toActions）、会話ログからの中断検出（interruptedSince）、hooks 設定
-- `app/intents.ts`: 意図のアクション（sessionsRequested / logsChanged / settleRequested / hookReceived / reposRequested / processesRequested / dirtyRequested / seenInPaneRequested / jumpRequested / watchStarted）
-- `app/effects.ts`: listener（意図への反応と、事実・状態の変化への反応）
-- `domain/navigation.ts`: 直近の移動の結果（jumped）
-- `app/store.ts`: configureStore と永続化 middleware
-- `infra/eventLog.ts`: セッションごとのアクションログとスナップショット
-- `ui/view.ts`: ドメインを `Row`/`Cell` に変換する。色ではなく意味のトーン（ok / warn / waiting など）を持つ。罫線ツリーは汎用の flatten で描く。最初に選ぶ行は `priority` で示す
-- `ui/terminal.ts`: トーンを ANSI か tmux の `#[fg=]` に変換し、表示幅（全角は2桁）で切り詰める
-- `ui/watch.ts`: 行の取得・購読・移動・再読込を関数で受け取る TUI（Store や tmux の中身は知らない）
+- 各モジュールの slice.ts は事実のアクション・reducer に加えて、意図のアクション（〜Requested など）を持つ。listener.ts は `addAppListener` のアクションの配列を返す
+- thunk は使わない（thunk middleware も外している）。I/O を伴う手続きは「意図のアクション → listener → 事実のアクション」で表す。結果を返す必要がある移動は `jumped` で Store（navigation）に記録し、呼び出し側が読む
+- createStore はファクトリで、reducer と middleware は全コマンド共通。listener はコマンドによって要らない・困るもの（status から tmux を再描画させると status がまた呼ばれる、hook 以外での通知など）があるので、entry が要るモジュールの分だけ store 初期化のときに `addAppListener` で登録する
+- listener の処理は await を含まない限り dispatch の中で同期的に終わる。entry は dispatch の直後に状態を読むのでこれに頼っている（redux/createStore.test.ts で確かめている）
 
 ## 設計判断とその理由
 ### 状態の持ち方
@@ -66,7 +70,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 - tmux のステータスラインは、印（statusFlags）が変わったときだけ listener が `tmux refresh-client -S` で描き直す（`#()` も再実行される。tmux 3.4 で確認）
 
 ### Claude Code の hook
-- hook は全イベント共通の1コマンドにし、何が起きたかは `hook_event_name` で判断する。登録するイベントは app/claude.ts の `HOOK_EVENTS`（SessionStart, UserPromptSubmit, PermissionRequest, PostToolUse, PostToolUseFailure, Notification, Stop, StopFailure, SubagentStart, SubagentStop, SessionEnd）
+- hook は全イベント共通の1コマンドにし、何が起きたかは `hook_event_name` で判断する。登録するイベントは claude/hook.ts の `HOOK_EVENTS`（SessionStart, UserPromptSubmit, PermissionRequest, PostToolUse, PostToolUseFailure, Notification, Stop, StopFailure, SubagentStart, SubagentStop, SessionEnd）
 - claude 本体の pid は、hook プロセスの祖先を辿って `attached` に記録する
 - サブエージェントは本体プロセスの中で動くので、hook の `agent_id` でだけ観測できる。`agent_type` が空のもの（入力候補の先読みなど内部用）は無視する
 - 許可待ちは PermissionRequest で記録する。Notification の permission_prompt は数秒遅れて届き、サブエージェント由来でも `agent_id` が付かないので使わない（matcher からも外した）
@@ -86,7 +90,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 - 移動先: pid の祖先が pane_pid に当たるペイン → そのパスにいるペイン → （watch か --create のとき）新しいウィンドウ
 
 ## セットアップ
-- `bun install && bun run build` で `dist/agent-ws.js` に bundle する（RTK を含めて1ファイル。`NODE_ENV=production`）。開発中は `bun cli.ts …` でそのまま動く
+- `bun install && bun run build` で `dist/agent-ws.js` に bundle する（RTK を含めて1ファイル。`NODE_ENV=production`）。開発中は `bun src/entry/cli.ts …` でそのまま動く
 - `bun dist/agent-ws.js hooks-config` の出力を `~/.claude/settings.json` の hooks にマージする（実行したファイルのパスが入る）
 - tmux（~/.tmux.conf）:
 
@@ -96,7 +100,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
       set-hook -g pane-focus-in 'run-shell -b "bun ~/path/agent-ws/dist/agent-ws.js seen #{pane_pid}"'
 
 - 実行環境は Bun。依存は @reduxjs/toolkit だけ（bundle に含まれる）。開発時は typescript と @types/bun も使う
-- Bun 固有の API は `Bun.spawnSync`（infra/shell.ts）、`Bun.stdin`（cli.ts の hook）、`bun:test` だけで、残りは Bun が互換実装している node:* を使っている
+- Bun 固有の API は `Bun.spawnSync`（infra/shell.ts）、`Bun.stdin`（entry/hook.ts）、`bun:test` だけで、残りは Bun が互換実装している node:* を使っている
 
 ## 検証状況
 - 済み（本物の Claude Code 2.1.309 を、クライアントを接続した tmux 3.4 の中で対話実行。bundle した dist で確認）:
@@ -105,8 +109,8 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
   - 完了と既読: 別ウィンドウを見ている間の完了で ✓ → そのウィンドウへ移ると pane-focus-in で消える、表示中のペインで完了したら ✓ を出さない、jump で既読
   - subscribe: `watch --interval=60` でも、許可待ち・他プロセスが記録した中断が即座に反映される。claude の起動は1秒以内、終了は約1秒で一覧に反映される
   - ステータスラインは状態が変わったときに描き直される（status-interval=600 でも `#()` が再実行される）
-  - hook 1回の処理は約38ms（bundle 版。RTK 導入前は約32ms）。状態が変わらない PostToolUse はログに残らない
-- 済み: tsc（strict）が通る。単体テスト14件（`bun test`）が通る
+  - hook 1回の処理は約36〜38ms（bundle 版。RTK 導入前は約32ms）。状態が変わらない PostToolUse はログに残らない
+- 済み: tsc（strict）が通る。単体テスト15件（`bun test`）が通る
 - 未検証:
   - Notification の elicitation_dialog / agent_needs_input、StopFailure、PostToolUseFailure の実際の入力。確かめるときは `AGENT_WS_DUMP=<ファイル>` を付けて claude を起動すると hook の入力がそのまま追記される
   - バックグラウンドのサブエージェントの許可を拒否したときの本体側の状態
@@ -119,7 +123,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 - 中断の検出は会話ログを見に行ったときだけ（list / status / seen、watch の interval ごと）。watch の interval を長くすると反映が遅れる（tmux の status が先に検出してログに記録すれば、watch にはすぐ反映される）
 
 ## 保留中の論点
-1. コード量: コメント・空行を除いて 1376 行（Redux 化の前は 1008 行）。増えた主な理由は、ログとスナップショット、意図のアクションと listener への整理、ワークスペースのスライス。減らすなら機能を削る。候補は、エージェント以外のプロセス表示、--json、ghq が無い環境向けの走査、claude と codex 以外の判定
+1. コード量: コメント・空行を除いて 1487 行（Redux 化の前は 1008 行）。増えた主な理由は、ログとスナップショット、意図のアクションと listener への整理、ワークスペースのスライス、re-ducks でのモジュール分割と entry の分割（import 文が増えた）。減らすなら機能を削る。候補は、エージェント以外のプロセス表示、--json、ghq が無い環境向けの走査、claude と codex 以外の判定
 2. 子プロセスを ppid でエージェントの下にネストする案（リポジトリ > worktree > エージェント > 子プロセス）。提案したが未回答
 3. ペインが無い worktree の新しいウィンドウを今いるセッションに作っている。リポジトリ名のセッションに作るかどうか
 4. 中断の検出も subscribe にする案: running / 待ちのセッションの会話ログを fs.watch で見張れば、interval を待たずに中断を拾える

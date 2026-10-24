@@ -6,7 +6,7 @@
     "agent-ws": "./dist/agent-ws.js"
   },
   "scripts": {
-    "build": "bun build cli.ts --target=bun --outfile=dist/agent-ws.js --minify-syntax --minify-whitespace --define 'process.env.NODE_ENV=\"production\"'",
+    "build": "bun build src/entry/cli.ts --target=bun --outfile=dist/agent-ws.js --minify-syntax --minify-whitespace --define 'process.env.NODE_ENV=\"production\"'",
     "test": "bun test",
     "typecheck": "tsc"
   },
