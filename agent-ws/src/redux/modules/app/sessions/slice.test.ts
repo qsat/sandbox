@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { RootState } from "../../../createStore.ts";
-import { noticeOf } from "../notification/selector.ts";
 import { selectStatusFlags } from "../../ui/statusLine/selector.ts";
+import { noticeOf } from "../notification/selector.ts";
 import { attention } from "./selector.ts";
 import type { SessionAction, SessionsState } from "./slice.ts";
 import {

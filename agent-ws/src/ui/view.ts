@@ -1,15 +1,15 @@
 /**
  * 表示モデル: ドメイン → 行（Row）。何を・どんな意味で見せるかだけ決め、色や装飾はしない
  */
+import { attention, visibleSubagents } from "../redux/modules/app/sessions/selector.ts";
+import { isBlocked } from "../redux/modules/app/sessions/slice.ts";
 import type { JumpResult, JumpTarget } from "../redux/types/navigation.ts";
 import type { Notice } from "../redux/types/notice.ts";
+import type { Session, SessionStatus, Status } from "../redux/types/session.ts";
+import type { StatusFlags } from "../redux/types/statusLine.ts";
 import type { Proc, Repository, Worktree } from "../redux/types/workspace.ts";
 import { isUnder } from "../redux/utils/isUnder.ts";
 import { repoName } from "../redux/utils/repoName.ts";
-import { attention, visibleSubagents } from "../redux/modules/app/sessions/selector.ts";
-import type { Session, SessionStatus, Status } from "../redux/types/session.ts";
-import { isBlocked } from "../redux/modules/app/sessions/slice.ts";
-import type { StatusFlags } from "../redux/types/statusLine.ts";
 
 /** 意味としてのトーン。実際の色は terminal.ts が決める */
 export type Tone = "plain" | "strong" | "dim" | "title" | "agent" | "ok" | "warn" | Status;

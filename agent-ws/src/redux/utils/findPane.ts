@@ -1,5 +1,5 @@
-import type { Pid } from "../types/workspace.ts";
 import type { JumpTarget, Pane } from "../types/navigation.ts";
+import type { Pid } from "../types/workspace.ts";
 import { ancestry } from "./ancestry.ts";
 import { isUnder } from "./isUnder.ts";
 

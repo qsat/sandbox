@@ -3,8 +3,8 @@
  * 状態が変わらないものは残さない（流し直しても同じなので）。ended ならログごと消す
  */
 import type { Middleware } from "@reduxjs/toolkit";
-import * as eventLog from "../infra/eventLog.ts";
 import type { RootState } from "../createStore.ts";
+import * as eventLog from "../infra/eventLog.ts";
 import { selectSession } from "../modules/app/sessions/selector.ts";
 import { ended, isSessionAction } from "../modules/app/sessions/slice.ts";
 

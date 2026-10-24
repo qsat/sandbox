@@ -1,7 +1,7 @@
-import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { expect, test } from "bun:test";
 
 // ログの置き場所は読み込み時に決まるので、先に一時ディレクトリへ向けてから読み込む
 const dir = mkdtempSync(join(tmpdir(), "agent-ws-test-"));

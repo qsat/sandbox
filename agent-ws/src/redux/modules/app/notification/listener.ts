@@ -1,9 +1,9 @@
-import type { Notice } from "../../../types/notice.ts";
-import * as git from "../../../infra/git.ts";
-import { repoName } from "../../../utils/repoName.ts";
 import { addAppListener, type AppListener } from "../../../createStore.ts";
-import { isSessionAction } from "../sessions/slice.ts";
+import * as git from "../../../infra/git.ts";
+import type { Notice } from "../../../types/notice.ts";
+import { repoName } from "../../../utils/repoName.ts";
 import { selectSession } from "../sessions/selector.ts";
+import { isSessionAction } from "../sessions/slice.ts";
 import { noticeOf } from "./selector.ts";
 
 /** 人の注意が要る遷移を知らせる（ログの流し直しでは知らせない。書いたプロセスが知らせ済み） */

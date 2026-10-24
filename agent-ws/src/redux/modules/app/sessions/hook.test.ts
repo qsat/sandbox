@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
+import type { HookInput } from "../../../types/hook.ts";
 import { noticeOf } from "../notification/selector.ts";
+import { interruptedSince, toActions } from "./hook.ts";
 import { attention } from "./selector.ts";
 import type { SessionsState } from "./slice.ts";
 import { attached, sessionsReducer } from "./slice.ts";
-import type { HookInput } from "../../../types/hook.ts";
-import { interruptedSince, toActions } from "./hook.ts";
 
 /** 本物の Claude Code（2.1.309）で取った hook 入力を順に流し、各イベント後の状態を記録する */
 async function replay(file: string) {

@@ -1,21 +1,21 @@
 /**
  * セッションの副作用: ログの読み込み・取り込み・掃除、hook の受け付け、既読化
  */
-import { interruptedSince, toActions } from "./hook.ts";
-import type { Pid } from "../../../types/workspace.ts";
-import { ancestry } from "../../../utils/ancestry.ts";
-import { detectAgent } from "../../../utils/detectAgent.ts";
-import { findPane } from "../../../utils/findPane.ts";
+import { addAppListener, type AppDispatch, type AppListener, type RootState } from "../../../createStore.ts";
 import * as eventLog from "../../../infra/eventLog.ts";
 import * as proc from "../../../infra/proc.ts";
 import { realPath } from "../../../infra/shell.ts";
 import * as tmux from "../../../infra/tmux.ts";
 import { tailSince } from "../../../infra/transcript.ts";
-import { addAppListener, type AppDispatch, type AppListener, type RootState } from "../../../createStore.ts";
+import type { Pid } from "../../../types/workspace.ts";
+import { ancestry } from "../../../utils/ancestry.ts";
+import { detectAgent } from "../../../utils/detectAgent.ts";
+import { findPane } from "../../../utils/findPane.ts";
+import { interruptedSince, toActions } from "./hook.ts";
 import { selectSession, selectSessions } from "./selector.ts";
 import {
-  attached, ended, forgotten, hookReceived, interrupted, isBlocked, logReplayed, logsChanged, seen, seenInPaneRequested, sessionsRequested,
-  settleRequested, stopped,
+  attached, ended, followStarted, forgotten, hookReceived, interrupted, isBlocked, logReplayed, logsChanged, seen, seenInPaneRequested,
+  sessionsRequested, settleRequested, stopped,
 } from "./slice.ts";
 
 /** pid が分からないセッションを、ログの更新が途絶えてから保持する期間 */
@@ -136,6 +136,25 @@ export const sessionListeners = (): AppListener[] => [
       if (!s?.unseen || !s.pid) return;
       const pane = findPane({ title: "", name: "", pid: s.pid }, tmux.listPanes(), parentOf());
       if (pane?.active) api.dispatch(seen({ sessionId: s.id, at: action.payload.at }));
+    },
+  }),
+
+  addAppListener({
+    actionCreator: followStarted,
+    effect: async ({ payload: { intervalMs } }, api) => {
+      let timer: Timer | undefined;
+      const stop = eventLog.watch(() => {
+        clearTimeout(timer); // 連続した追記はまとめて取り込む
+        timer = setTimeout(() => api.dispatch(logsChanged()), 50);
+      });
+      try {
+        for (;; await api.delay(intervalMs)) {
+          api.dispatch(logsChanged()); // fs.watch が取りこぼしたときの保険
+          api.dispatch(settleRequested({ at: Date.now() }));
+        }
+      } finally {
+        stop();
+      }
     },
   }),
 ];

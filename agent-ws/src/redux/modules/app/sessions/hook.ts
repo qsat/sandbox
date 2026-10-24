@@ -2,12 +2,12 @@
  * Claude Code との境界（腐敗防止層）: hook の入力・会話ログの形を知っているのはここだけ
  * 入力の形は本物の Claude Code（2.1.309）で確かめた。src/fixtures/ に実データがある
  */
+import type { HookInput } from "../../../types/hook.ts";
+import { firstLine } from "../../../utils/firstLine.ts";
 import type { SessionAction } from "./slice.ts";
 import {
   failed, notified, permissionRequested, promptSubmitted, started, stopped, subagentStarted, subagentStopped, toolUsed, ended,
 } from "./slice.ts";
-import { firstLine } from "../../../utils/firstLine.ts";
-import type { HookInput } from "../../../types/hook.ts";
 
 /** hook に登録するイベントと matcher。toActions が解釈するイベントと一致させる */
 export const HOOK_EVENTS: Record<string, string | null> = {

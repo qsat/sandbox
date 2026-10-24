@@ -1,6 +1,6 @@
 import type { RootState } from "../../../createStore.ts";
-import { attention, selectSessions } from "../../app/sessions/selector.ts";
 import type { StatusFlags } from "../../../types/statusLine.ts";
+import { attention, selectSessions } from "../../app/sessions/selector.ts";
 
 export function selectStatusFlags(st: RootState): StatusFlags {
   const sessions = selectSessions(st);

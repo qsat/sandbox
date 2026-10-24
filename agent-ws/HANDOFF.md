@@ -39,10 +39,11 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
         modules/
           app/
             sessions/      セッション集約（本体＋サブエージェント）。ログの読み込み・取り込み・掃除・hook・既読化。
+                           followStarted でログの変化を見張り続ける（watch）。
                            hook.ts は Claude Code の入力 → アクションの境界（fixtures/ に実データ）
-            workspace/     リポジトリ構成・プロセス・変更件数とそのスキャン。ツリーを組み立てる selector
+            workspace/     リポジトリ構成・プロセス・変更件数とそのスキャン。ツリーを組み立てる selector。
+                           scanStarted でスキャンし続ける（watch）
             notification/  通知する遷移（selector）と通知（listener）。状態は持たない
-            polling/       watch コマンドの定期スキャンとログの変化の取り込み。状態は持たない
           ui/
             navigation/    ペインへの移動と、その結果（jumped）
             watch/         watch の画面の状態（選択中の行・スクロール位置）。選択を動かすと移動の結果は消える
@@ -73,7 +74,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 ### 画面の更新（subscribe）
 - watch は Store を購読し、変化したら 1 フレーム（30ms）にまとめて描き直す
 - 他のプロセス（hook）が書いたログは、ログのディレクトリを fs.watch で見張って差分だけ取り込む（followLogs）。取り込んだアクションは `logReplayed` で流すので、再び記録も通知もしない
-- 定期スキャンは watch の listener が回す（プロセス・変更件数・中断の検出は `--interval` ごと、リポジトリ構成は15秒ごと）。セッションが増えて pid がプロセス一覧に無いとき・消えたときは、interval を待たずにプロセスを取り直す（消えたときは SessionEnd がプロセスの終了より先に届くので1秒待つ）
+- 定期処理は持ち主のモジュールが回す。watch の entry が sessions の followStarted と workspace の scanStarted を dispatch し、sessions はログの見張りと interval ごとの掃除（消えたプロセス・中断の検出）、workspace は interval ごとのプロセス・変更件数と15秒ごとのリポジトリ構成のスキャンを受け持つ。セッションが増えて pid がプロセス一覧に無いとき・消えたときは、interval を待たずにプロセスを取り直す（消えたときは SessionEnd がプロセスの終了より先に届くので1秒待つ）
 - tmux のステータスラインは、印（statusFlags）が変わったときだけ listener が `tmux refresh-client -S` で描き直す（`#()` も再実行される。tmux 3.4 で確認）
 
 ### Claude Code の hook

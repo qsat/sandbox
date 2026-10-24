@@ -7,8 +7,8 @@
  */
 import { createAction, createReducer, isAnyOf, type PayloadActionCreator } from "@reduxjs/toolkit";
 import type { HookInput } from "../../../types/hook.ts";
-import type { Pid } from "../../../types/workspace.ts";
 import type { AgentRef, Session, SessionStatus, SubagentStatus } from "../../../types/session.ts";
+import type { Pid } from "../../../types/workspace.ts";
 
 // ---------------------------------------------------------------------
 // アクション（何が起きたか。すべて sessionId と発生時刻 at を持つ）
@@ -61,6 +61,8 @@ export const settleRequested = createAction<{ at: number }>("session/settleReque
 export const hookReceived = createAction<{ input: HookInput; at: number }>("session/hookReceived");
 /** そのペインで完了したセッションを既読にする（tmux の pane-focus-in とポップアップからの移動） */
 export const seenInPaneRequested = createAction<{ panePid: Pid; at: number }>("session/seenInPaneRequested");
+/** セッションを追い続ける（watch）。ログの変化はすぐ取り込み、interval ごとに消えたプロセス・中断を片付ける */
+export const followStarted = createAction<{ intervalMs: number }>("session/followStarted");
 
 // ---------------------------------------------------------------------
 // reducer

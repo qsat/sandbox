@@ -30,3 +30,5 @@ export const reposRequested = createAction<{ roots: string[]; query?: string }>(
 export const processesRequested = createAction("workspace/processesRequested");
 /** 変更件数は表示する worktree だけ数える */
 export const dirtyRequested = createAction<{ filter: Filter }>("workspace/dirtyRequested");
+/** スキャンし続ける（watch）。プロセス・変更件数は interval ごと、リポジトリ構成は15秒ごと */
+export const scanStarted = createAction<{ roots: string[]; query?: string; filter: Filter; intervalMs: number }>("workspace/scanStarted");

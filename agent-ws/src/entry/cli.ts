@@ -19,8 +19,8 @@
  *                    └→ ui/*（描画）
  */
 import { parseArgs } from "node:util";
-import { hooksConfig } from "../redux/modules/app/sessions/hook.ts";
 import { realPath } from "../redux/infra/shell.ts";
+import { hooksConfig } from "../redux/modules/app/sessions/hook.ts";
 import type { ColorMode } from "../ui/terminal.ts";
 import { runHook } from "./hook.ts";
 import { runJump } from "./jump.ts";

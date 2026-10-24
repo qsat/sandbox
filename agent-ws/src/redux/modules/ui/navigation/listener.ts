@@ -1,9 +1,9 @@
+import { addAppListener, type AppListener } from "../../../createStore.ts";
+import * as proc from "../../../infra/proc.ts";
+import * as tmux from "../../../infra/tmux.ts";
 import type { JumpResult } from "../../../types/navigation.ts";
 import type { Pid } from "../../../types/workspace.ts";
 import { findPane } from "../../../utils/findPane.ts";
-import * as proc from "../../../infra/proc.ts";
-import * as tmux from "../../../infra/tmux.ts";
-import { addAppListener, type AppListener } from "../../../createStore.ts";
 import { seenInPaneRequested } from "../../app/sessions/slice.ts";
 import { jumped, jumpRequested } from "./slice.ts";
 
