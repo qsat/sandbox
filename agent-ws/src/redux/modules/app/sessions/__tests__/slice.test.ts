@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import type { RootState } from "../../../createStore.ts";
-import { selectStatusFlags } from "../../ui/statusLine/selector.ts";
-import { noticeOf } from "../notification/selector.ts";
-import { attention } from "./selector.ts";
-import type { SessionAction, SessionsState } from "./slice.ts";
+import type { RootState } from "../../../../createStore.ts";
+import { selectStatusFlags } from "../../../ui/statusLine/selector.ts";
+import { noticeOf } from "../../notification/selector.ts";
+import { attention } from "../selector.ts";
+import type { SessionAction, SessionsState } from "../slice.ts";
 import {
   attached,
   interrupted,
@@ -14,7 +14,7 @@ import {
   sessionsReducer,
   stopped,
   toolUsed,
-} from "./slice.ts";
+} from "../slice.ts";
 
 const on = (at: number) => ({ sessionId: "s", at });
 const must = <T>(v: T | undefined): T => {

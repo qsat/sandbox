@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { createStore } from "../../../createStore.ts";
-import { jumped } from "../navigation/slice.ts";
-import { cursorSet, scrolled } from "./slice.ts";
+import { createStore } from "../../../../createStore.ts";
+import { jumped } from "../../navigation/slice.ts";
+import { cursorSet, scrolled } from "../slice.ts";
 
 test("選択を動かすと、前の移動の結果は消える", () => {
   const store = createStore();

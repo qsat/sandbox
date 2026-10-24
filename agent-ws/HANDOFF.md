@@ -40,7 +40,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
           app/
             sessions/      セッション集約（本体＋サブエージェント）。ログの読み込み・取り込み・掃除・hook・既読化。
                            followStarted でログの変化を見張り続ける（watch）。
-                           hook.ts は Claude Code の入力 → アクションの境界（fixtures/ に実データ）
+                           hook.ts は Claude Code の入力 → アクションの境界（__tests__/fixtures/ に実データ）
             workspace/     リポジトリ構成・プロセス・変更件数とそのスキャン。ツリーを組み立てる selector。
                            scanStarted でスキャンし続ける（watch）
             notification/  通知する遷移（selector）と通知（listener）。状態は持たない
@@ -108,13 +108,14 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
       set-hook -g pane-focus-in 'run-shell -b "bun ~/path/agent-ws/dist/agent-ws.js seen #{pane_pid}"'
 
 - 実行環境は Bun。依存は @reduxjs/toolkit だけ（bundle に含まれる）。開発時は typescript・@types/bun・@biomejs/biome も使う
+- テストは対象のモジュールがある場所の `__tests__/` に置く（テストデータも `__tests__/fixtures/`）
 - フォーマットと lint は Biome（Rome の後継）。設定は biome.json（スペース2・行幅140・ダブルクォート・セミコロンあり・末尾カンマあり、lint は推奨ルール、import の並べ替えも Biome に任せる）。tsconfig でも未使用の変数・引数・import を検出する
 - スクリプト: `bun run check`（Biome の検査・型チェック・テストをまとめて。失敗すれば終了コードが 0 以外）、`bun run fix`（フォーマット・lint の自動修正・import の並べ替え）、`lint`・`format`・`typecheck`・`test`・`build`
 - Bun 固有の API は `Bun.spawnSync`（redux/infra/shell.ts）、`Bun.stdin`（entry/hook.ts）、`bun:test` だけで、残りは Bun が互換実装している node:* を使っている
 
 ## 検証状況
 - 済み（本物の Claude Code 2.1.309 を、クライアントを接続した tmux 3.4 の中で対話実行。bundle した dist で確認）:
-  - hook の入力の形。Notification の種別は `notification_type`。hooks 設定の `args` 形式は使える。入力は `src/redux/modules/app/sessions/fixtures/` に保存し、テストで再生している
+  - hook の入力の形。Notification の種別は `notification_type`。hooks 設定の `args` 形式は使える。入力は `src/redux/modules/app/sessions/__tests__/fixtures/` に保存し、テストで再生している
   - 起動直後の入力待ちと本体 pid の特定、許可待ち（理由つき）、許可の拒否と応答中の Esc からの復帰、バックグラウンドのサブエージェントの許可待ち（本体は ⏳、詳細はサブエージェントの行）→許可→完了、AskUserQuestion で ❓、SessionEnd でログが消える
   - 完了と既読: 別ウィンドウを見ている間の完了で ✓ → そのウィンドウへ移ると pane-focus-in で消える、表示中のペインで完了したら ✓ を出さない、jump で既読
   - subscribe: `watch --interval=60` でも、許可待ち・他プロセスが記録した中断が即座に反映される。claude の起動は1秒以内、終了は約1秒で一覧に反映される

@@ -6,12 +6,12 @@ import { join } from "node:path";
 // ログの置き場所は読み込み時に決まるので、先に一時ディレクトリへ向けてから読み込む
 const dir = mkdtempSync(join(tmpdir(), "agent-ws-test-"));
 process.env.AGENT_WS_STATE_DIR = dir;
-const { createStore, listen } = await import("./createStore.ts");
-const { sessionListeners } = await import("./modules/app/sessions/listener.ts");
-const { hookReceived, sessionsRequested } = await import("./modules/app/sessions/slice.ts");
-const { navigationListeners } = await import("./modules/ui/navigation/listener.ts");
-const { jumpRequested } = await import("./modules/ui/navigation/slice.ts");
-const eventLog = await import("./infra/eventLog.ts");
+const { createStore, listen } = await import("../createStore.ts");
+const { sessionListeners } = await import("../modules/app/sessions/listener.ts");
+const { hookReceived, sessionsRequested } = await import("../modules/app/sessions/slice.ts");
+const { navigationListeners } = await import("../modules/ui/navigation/listener.ts");
+const { jumpRequested } = await import("../modules/ui/navigation/slice.ts");
+const eventLog = await import("../infra/eventLog.ts");
 
 test("意図は dispatch の中で listener が処理し、セッションのアクションはログに残る", () => {
   expect(eventLog.DIR).toBe(dir);
