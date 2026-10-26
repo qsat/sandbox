@@ -11,13 +11,10 @@ import { selectUnseen } from "../attention/selector.ts";
 
 export const selectRoots = (st: RootState) => st.app.workspace.roots;
 
-/** プロセスに hook で分かった状況を結びつける（pid 優先、pid が分からない claude は cwd） */
+/** プロセスに hook で分かった状況を結びつける（pid 優先、pid が分からなければ cwd） */
 export function linkAgents(processes: AgentProcess[], agents: Agent[], unseen: (id: string) => boolean): AgentAt[] {
   const byPid = new Map(agents.filter((a) => a.pid).map((a) => [a.pid, a] as const));
-  const byCwd = (p: AgentProcess) => {
-    if (p.kind !== "claude") return undefined;
-    return agents.find((a) => !a.pid && a.cwd === p.cwd);
-  };
+  const byCwd = (p: AgentProcess) => agents.find((a) => !a.pid && a.cwd === p.cwd);
   return processes.map((p) => {
     const agent = byPid.get(p.pid) ?? byCwd(p) ?? null;
     return { process: p, agent, unseen: Boolean(agent && unseen(agent.id)) };

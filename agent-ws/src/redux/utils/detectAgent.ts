@@ -1,10 +1,7 @@
 import type { AgentKind } from "../types/agent.ts";
 
-/** 見つけるエージェント: 応答状況が分かる claude と、一覧に出す codex */
-const AGENTS: [AgentKind, RegExp][] = [
-  ["claude", /^claude$|@anthropic-ai\/claude-code|\/claude\/versions\//],
-  ["codex", /^codex$|@openai\/codex/],
-];
+/** 見つけるエージェント（今は claude だけ。増やすときは AgentKind とここに足す） */
+const AGENTS: [AgentKind, RegExp][] = [["claude", /^claude$|@anthropic-ai\/claude-code|\/claude\/versions\//]];
 const RUNTIMES = /^(node|bun|deno|npx)$/;
 const basename = (p: string) => p.slice(p.lastIndexOf("/") + 1);
 
