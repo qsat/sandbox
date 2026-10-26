@@ -1,7 +1,7 @@
 /** エージェント: worktree で動くエージェント1体と、そのターン・サブエージェント */
 
 export type Pid = number;
-export type AgentKind = "claude" | "codex" | "aider" | "gemini" | "cursor" | "copilot" | "opencode" | "amp";
+export type AgentKind = "claude" | "codex";
 
 /** ready: 入力待ち（起動直後・ターンの完了後） / waiting: 許可待ち / asking: 質問への回答待ち */
 export type TurnStatus = "ready" | "running" | "waiting" | "asking" | "error";
