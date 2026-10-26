@@ -7,7 +7,7 @@
  */
 import { createSlice, isAnyOf, type PayloadAction } from "@reduxjs/toolkit";
 import type { Agent, AgentProcess, Pid, SubagentRef, SubagentStatus, TurnStatus } from "../../../types/agent.ts";
-import { isBlocked } from "../../../utils/isBlocked.ts";
+import { isInTurn } from "../../../utils/isInTurn.ts";
 
 type On<T = unknown> = { agentId: string; at: number } & T;
 
@@ -101,7 +101,7 @@ export const agents = createSlice({
     turnFailed: toAgent<On<{ error?: string }>>((a, p) => setTurn(a, "error", p.at, p.error)),
     /** Esc での中断・許可の拒否 */
     turnInterrupted: toAgent<On>((a, p) => {
-      if (a.turn.status === "running" || isBlocked(a.turn.status)) setTurn(a, "ready", p.at, "中断しました");
+      if (isInTurn(a.turn.status)) setTurn(a, "ready", p.at, "中断しました");
     }),
     subagentStarted: toAgent<On<{ subagent: SubagentRef }>>((a, p) => setSubagent(a, p.subagent, "running", p.at)),
     subagentFinished: toAgent<On<{ subagent: SubagentRef; message?: string }>>((a, p) =>

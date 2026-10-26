@@ -32,7 +32,6 @@ export const STATUS: Record<Status, { icon: string; label: string }> = {
 export const cell = (text: string, tone: Tone = "plain"): Cell => ({ text, tone });
 /** 条件が真のときだけセルを入れる */
 export const when = (cond: unknown, ...cells: Cell[]) => cells.filter(() => Boolean(cond));
-export const shortName = (name: string) => name.slice(name.lastIndexOf("/") + 1);
 
 /** 経過時間（4s・3m・2h5m・1d） */
 export function duration(ms: number): string {

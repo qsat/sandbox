@@ -15,19 +15,15 @@ import { turnFinished } from "../../modules/app/agents/slice.ts";
 import { selectUnseen } from "../../modules/app/attention/selector.ts";
 import { acknowledged } from "../../modules/app/attention/slice.ts";
 import { destinationChosen, paneFocused, visited } from "../../modules/ui/visit/slice.ts";
-import type { Pid } from "../../types/agent.ts";
 import type { Pane, VisitResult, VisitTarget } from "../../types/visit.ts";
 import { ancestry } from "../../utils/ancestry.ts";
 import { findPane } from "../../utils/findPane.ts";
 import { isReplayed } from "../../utils/replayed.ts";
 import { type AppApi, effects, on } from "../effects.ts";
-import { psTable } from "../processes/proc.ts";
+import { processTree } from "../processes/proc.ts";
 import * as cli from "./tmux.ts";
 
-const parentOf = () => {
-  const ppid = new Map(psTable().map((p) => [p.pid, p.ppid]));
-  return (pid: Pid) => ppid.get(pid);
-};
+const parentOf = () => processTree().parentOf;
 
 /** パスは実体で探す（シンボリックリンク越しに開いたペインも見つける） */
 const resolved = (t: VisitTarget): VisitTarget => {

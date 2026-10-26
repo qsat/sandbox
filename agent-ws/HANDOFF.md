@@ -130,8 +130,8 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
   比べるのは出来事の連鎖が終わってから（observe の settle。lib/debounce の待ち時間 0 でまとめる）。連鎖は同期的に進むので、途中の状態（表示中のペインで完了して確認済みになる間の ✓）は映さない。通知も同じwatch では、他のプロセスが記録した変化を取り込んだときも描き直す
 
 ### Claude Code の hook
-- hook は全イベント共通の1コマンドにし、何が起きたかは `hook_event_name` で判断する。登録するイベントは redux/middlewares/claude/hook.ts の `HOOK_EVENTS`（SessionStart, UserPromptSubmit, PermissionRequest, PostToolUse, PostToolUseFailure, Notification, Stop, StopFailure, SubagentStart, SubagentStop, SessionEnd）
-- claude 本体の pid は、hook プロセスの祖先を辿って agentAttached に記録する
+- hook は全イベント共通の1コマンドにし、何が起きたかは `hook_event_name` で判断する。登録するイベントは redux/middlewares/claude/hook.ts の `RULES`（イベントごとの matcher と、入力 → 出来事の規則を1つの表に持つ。hooks-config もここから作る）（SessionStart, UserPromptSubmit, PermissionRequest, PostToolUse, PostToolUseFailure, Notification, Stop, StopFailure, SubagentStart, SubagentStop, SessionEnd）
+- claude 本体の pid は、hook プロセスの祖先を辿って agentAttached に記録する（ps の一覧を1回取り、utils/ancestry で辿る。tmux の行き先探しと同じ辿り方）
 - サブエージェントは本体プロセスの中で動くので、hook の `agent_id` でだけ観測できる。`agent_type` が空のもの（入力候補の先読みなど内部用）は無視する
 - 許可待ちは PermissionRequest で記録する。Notification の permission_prompt は数秒遅れて届き、サブエージェント由来でも `agent_id` が付かないので使わない（matcher からも外した）
 - 質問待ち: AskUserQuestion は許可待ちと同じ PermissionRequest で届く（ツール名で分ける）。MCP の elicitation_dialog も質問待ちにする

@@ -15,30 +15,22 @@ import { selectAgent, selectAgents } from "../../modules/app/agents/selector.ts"
 import { type AgentEvent, agentAttached, agentEnded, turnInterrupted } from "../../modules/app/agents/slice.ts";
 import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
 import type { Agent, Pid } from "../../types/agent.ts";
+import { ancestry } from "../../utils/ancestry.ts";
 import { detectAgent } from "../../utils/detectAgent.ts";
-import { isBlocked } from "../../utils/isBlocked.ts";
+import { isInTurn } from "../../utils/isInTurn.ts";
 import { always, effects, on } from "../effects.ts";
-import { inspect } from "../processes/proc.ts";
+import { processTree } from "../processes/proc.ts";
 import { type HookInput, toEvents } from "./hook.ts";
 import { interruptedAt, tailSince, watchTranscript } from "./transcript.ts";
 
 /** Claude Code の hook が呼ばれた（input は stdin の JSON そのまま）。外から届いた合図で、どの reducer も扱わない */
 export const hookReceived = createAction<{ input: unknown; at: number }>("claude/hookReceived");
 
-/** プロセスの祖先（ps で1つずつ辿る。必要な分だけ） */
-function* processAncestry(pid: Pid): Generator<{ pid: Pid; ppid: Pid; command: string }> {
-  if (pid <= 1) return;
-  const p = inspect(pid);
-  if (!p) return;
-  yield { pid, ...p };
-  yield* processAncestry(p.ppid);
-}
-
 /** hook の祖先プロセスを辿って claude 本体の pid を探す（parent: hook を呼んだプロセス） */
-const findAgentPid = (parent: Pid): Pid | null =>
-  processAncestry(parent)
-    .take(6)
-    .find((p) => detectAgent(p.command) === "claude")?.pid ?? null;
+function findAgentPid(parent: Pid): Pid | null {
+  const tree = processTree();
+  return ancestry(parent, tree.parentOf, 6).find((pid) => detectAgent(tree.commandOf(pid)) === "claude") ?? null;
+}
 
 const cwdOf = (input: HookInput, known?: Agent) => {
   if (input.cwd) return realPath(input.cwd);
@@ -54,8 +46,7 @@ function attachment(input: HookInput, events: AgentEvent[], at: number, parent: 
 }
 
 /** 中断を確かめる相手: 実行中・待ちで、会話ログの場所が分かっているエージェント */
-const inTurn = (a: Agent): a is Agent & { transcript: string } =>
-  Boolean(a.transcript) && (a.turn.status === "running" || isBlocked(a.turn.status));
+const inTurn = (a: Agent): a is Agent & { transcript: string } => Boolean(a.transcript) && isInTurn(a.turn.status);
 
 /** hook の届かない中断・拒否: この状況になった後の会話ログに中断が書かれていれば、その時刻 */
 function interruptionOf(a: Agent): number | null {

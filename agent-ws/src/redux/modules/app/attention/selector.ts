@@ -7,9 +7,12 @@ import { selectAgent, selectAgents } from "../agents/selector.ts";
 /** ターンの完了を、人がまだ見ていないか */
 export const selectUnseen = (st: RootState, agentId: string): boolean => st.app.attention[agentId]?.unseen ?? false;
 
+/** 人に知らせる状況: 許可・質問待ち・エラー */
+const isAlert = (s: TurnStatus): s is "waiting" | "asking" | "error" => isBlocked(s) || s === "error";
+
 /** エージェントとして見せる状況。本体が待っていなくても、サブエージェントが許可を待っていれば許可待ち */
 export function attentionOf(a: Agent): Attention {
-  if (isBlocked(a.turn.status) || a.turn.status === "error") return a.turn;
+  if (isAlert(a.turn.status)) return a.turn;
   const sub = Object.values(a.subagents).find((s) => s.status === "waiting");
   if (!sub) return a.turn;
   return { status: "waiting", since: sub.since, subagent: sub };
@@ -26,9 +29,6 @@ export function selectStatusFlags(st: RootState): StatusFlags {
     error: statuses.includes("error"),
   };
 }
-
-/** 人に知らせる状況: 許可・質問待ち・エラー */
-const isAlert = (s: TurnStatus): s is "waiting" | "asking" | "error" => isBlocked(s) || s === "error";
 
 /** 知らせる遷移: 許可・質問待ち・エラーになった、またはターンが完了した（未確認になった） */
 export function selectNotice(prev: RootState, next: RootState, agentId: string): { kind: NoticeKind; reason?: string } | null {

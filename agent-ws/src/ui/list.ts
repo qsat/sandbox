@@ -1,6 +1,7 @@
 /**
  * 一覧（list・watch）: 状態 → リポジトリ > worktree > エージェント > サブエージェント のツリー
  */
+import { basename } from "node:path";
 import { visibleSubagents } from "../redux/modules/app/agents/selector.ts";
 import { attentionOf } from "../redux/modules/app/attention/selector.ts";
 import { selectNow } from "../redux/modules/app/lifecycle/selector.ts";
@@ -13,7 +14,7 @@ import type { AgentAt, Filter, Repository, Worktree } from "../redux/types/works
 import { isBlocked } from "../redux/utils/isBlocked.ts";
 import { isUnder } from "../redux/utils/isUnder.ts";
 import { repoName } from "../redux/utils/repoName.ts";
-import { type Cell, cell, duration, type Row, STATUS, shortName, type Tone, when } from "./parts.ts";
+import { type Cell, cell, duration, type Row, STATUS, type Tone, when } from "./parts.ts";
 import { type Display, formatRow } from "./terminal.ts";
 
 export interface ViewOptions {
@@ -65,14 +66,14 @@ function repoNode(r: Repository, o: ViewOptions): Node {
       ...(["waiting", "asking"] as const).flatMap((st) => when(count(st), cell(`${STATUS[st].icon}${count(st)}`, st))),
     ],
     key: `repo:${r.path}`,
-    target: { title: r.name, name: shortName(r.name), pid: agents[0]?.process.pid, path: agents[0]?.process.cwd ?? r.path },
+    target: { title: r.name, name: basename(r.name), pid: agents[0]?.process.pid, path: agents[0]?.process.cwd ?? r.path },
     children: r.worktrees.map((w) => worktreeNode(r, w, o)),
   };
 }
 
 function worktreeNode(r: Repository, w: Worktree, o: ViewOptions): Node {
   const name = w.branch ?? w.head;
-  const title = `${shortName(r.name)} [${name}]`;
+  const title = `${basename(r.name)} [${name}]`;
   return {
     cells: [
       cell(w.branch ?? `(detached ${w.head})`, "strong"),

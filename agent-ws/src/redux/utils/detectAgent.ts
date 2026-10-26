@@ -1,9 +1,9 @@
+import { basename } from "node:path";
 import type { AgentKind } from "../types/agent.ts";
 
 /** 見つけるエージェント（今は claude だけ。増やすときは AgentKind とここに足す） */
 const AGENTS: [AgentKind, RegExp][] = [["claude", /^claude$|@anthropic-ai\/claude-code|\/claude\/versions\//]];
 const RUNTIMES = /^(node|bun|deno|npx)$/;
-const basename = (p: string) => p.slice(p.lastIndexOf("/") + 1);
 
 /** 実行ファイル名でエージェントを判定する。node 等のランタイム経由ならスクリプトのパスで判定 */
 export function detectAgent(command: string): AgentKind | null {

@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readlinkSync } from "node:fs";
 import { attempt } from "../../../lib/attempt.ts";
 import { run } from "../../../lib/run.ts";
 import type { Pid } from "../../types/agent.ts";
-import { type PsEntry, parseInspect, parseLsofCwds, parsePsTable } from "./parse.ts";
+import { type PsEntry, parseLsofCwds, parsePsTable } from "./parse.ts";
 
 /** OS から見えるプロセス */
 export interface ProcInfo extends PsEntry {
@@ -35,8 +35,14 @@ const procCwds = () =>
 
 const lsofCwds = () => parseLsofCwds(run("lsof", ["-a", "-d", "cwd", "-Fpn"]) ?? "");
 
-/** そのプロセスの親と、実行したコマンド（無ければ null） */
-export const inspect = (pid: Pid) => parseInspect(run("ps", ["-o", "ppid=,command=", "-p", String(pid)]) ?? "");
+/** ps の一覧から、プロセスの親と実行したコマンドを引く（祖先を辿るのに使う） */
+export function processTree() {
+  const byPid = new Map(psTable().map((p) => [p.pid, p]));
+  return {
+    parentOf: (pid: Pid) => byPid.get(pid)?.ppid,
+    commandOf: (pid: Pid) => byPid.get(pid)?.command ?? "",
+  };
+}
 
 export function isAlive(pid: Pid): boolean {
   try {

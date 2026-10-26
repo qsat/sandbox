@@ -75,24 +75,27 @@ const edges = [...imports].flatMap(([from, tos]) => tos.map(({ to, typeOnly }) =
 const readsRootState = (e: { from: string; to: string; typeOnly: boolean }) =>
   e.typeOnly && e.from.startsWith("redux/modules/") && e.to === "redux/rootReducer.ts";
 
+/** 失敗したときに、どの import が違反かを読めるようにする */
+const shown = (es: { from: string; to: string }[]) => es.map(({ from, to }) => `${from} → ${to}`);
+
 test("どのファイルも、いずれかの層に入っている", () => {
   expect(files.filter((f) => !layerOf(f))).toEqual([]);
 });
 
 test("上の層は下の層だけを import する", () => {
   const wrong = edges.filter((e) => !readsRootState(e) && !ALLOWED[layerOf(e.from) ?? "lib"].includes(layerOf(e.to) ?? "lib"));
-  expect(wrong.map(({ from, to }) => `${from} → ${to}`)).toEqual([]);
+  expect(shown(wrong)).toEqual([]);
 });
 
 test("ドメイン（modules/app）は画面（modules/ui）を知らない", () => {
   const wrong = edges.filter(({ from, to }) => from.startsWith("redux/modules/app/") && to.startsWith("redux/modules/ui/"));
-  expect(wrong.map(({ from, to }) => `${from} → ${to}`)).toEqual([]);
+  expect(shown(wrong)).toEqual([]);
 });
 
 test("middleware は他の外部システムの middleware 本体に頼らない（I/O のファイルは使ってよい）", () => {
   const system = (f: string) => f.match(/^redux\/middlewares\/([^/]+)\//)?.[1];
   const wrong = edges.filter(({ from, to }) => system(from) && system(to) && system(from) !== system(to) && to.endsWith("/index.ts"));
-  expect(wrong.map(({ from, to }) => `${from} → ${to}`)).toEqual([]);
+  expect(shown(wrong)).toEqual([]);
 });
 
 test("ファイル単位の循環が無い", () => {

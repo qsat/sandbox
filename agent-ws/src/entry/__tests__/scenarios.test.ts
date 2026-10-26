@@ -55,11 +55,6 @@ const worktree = (path: string, branch: string, isMain: boolean) => ({
 mock.module("../../redux/middlewares/processes/proc.ts", () => ({
   psTable: () => world.procs.map((p) => ({ pid: p.pid, ppid: p.ppid, elapsed: "00:01", command: p.command })),
   listProcesses: () => world.procs.map((p) => ({ ...p, elapsed: "00:01" })),
-  inspect: (pid: number) => {
-    const p = world.procs.find((x) => x.pid === pid);
-    if (!p) return null;
-    return { ppid: p.ppid, command: p.command };
-  },
   isAlive: (pid: number) => world.procs.some((x) => x.pid === pid),
 }));
 mock.module("../../redux/middlewares/tmux/tmux.ts", () => ({
