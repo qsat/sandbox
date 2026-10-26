@@ -5,7 +5,7 @@ import { attentionOf, selectNotice, selectUnseen } from "../../../modules/app/at
 import type { RootState } from "../../../rootReducer.ts";
 import { rootReducer } from "../../../rootReducer.ts";
 import { type HookInput, toEvents } from "../hook.ts";
-import { interruptedSince } from "../transcript.ts";
+import { interruptedAt } from "../transcript.ts";
 
 /** 本物の Claude Code（2.1.309）で取った hook 入力を順に流し、各イベント後の状況を記録する */
 async function replay(file: string) {
@@ -66,7 +66,7 @@ test("実データ: バックグラウンドのサブエージェントが許可
   expect(steps.at(-1)).toMatchObject({ event: "SessionEnd", status: undefined });
 });
 
-test("interruptedSince: 会話ログの末尾がこの状況になった後の中断（Esc・許可の拒否）か", () => {
+test("interruptedAt: 会話ログの末尾がこの状況になった後の中断（Esc・許可の拒否）なら、その時刻", () => {
   const entry = (type: string, text: string, ms: number) =>
     JSON.stringify({ type, timestamp: new Date(ms).toISOString(), message: { content: [{ type: "text", text }] } });
   const denied = [
@@ -74,7 +74,7 @@ test("interruptedSince: 会話ログの末尾がこの状況になった後の�
     entry("user", "[Request interrupted by user for tool use]", 2_000),
     '{"type":"last-prompt"}',
   ];
-  expect(interruptedSince(denied, 1_000)).toBe(true);
-  expect(interruptedSince([entry("assistant", "消します", 1_500)], 1_000)).toBe(false);
-  expect(interruptedSince(denied, 2_500)).toBe(false); // 前のターンの中断
+  expect(interruptedAt(denied, 1_000)).toBe(2_000);
+  expect(interruptedAt([entry("assistant", "消します", 1_500)], 1_000)).toBeNull();
+  expect(interruptedAt(denied, 2_500)).toBeNull(); // 前のターンの中断
 });

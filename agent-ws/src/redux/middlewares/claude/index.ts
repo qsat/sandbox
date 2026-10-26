@@ -3,10 +3,12 @@
  *
  * - hookReceived: hook の入力をエージェントの出来事に変えて流す。新しいエージェントなら本体の pid と場所を結びつける
  * - 起動したとき・時間が経ったとき: hook の届かない中断・拒否を会話ログから拾う
+ * - follow のとき: 実行中・待ちのエージェントの会話ログを見張り、書き換わったらすぐ中断を確かめる（watch。interval を待たない）
  *
  * hook の処理は、そのエージェントのこれまでの状態が Store にあることを前提にする（entry が先に initialized を出す）
  */
 import { createAction } from "@reduxjs/toolkit";
+import { debounce } from "../../../lib/debounce.ts";
 import { realPath } from "../../../lib/run.ts";
 import type { AppMiddleware } from "../../createStore.ts";
 import { selectAgent, selectAgents } from "../../modules/app/agents/selector.ts";
@@ -15,10 +17,10 @@ import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
 import type { Agent, Pid } from "../../types/agent.ts";
 import { detectAgent } from "../../utils/detectAgent.ts";
 import { isBlocked } from "../../utils/isBlocked.ts";
-import { effects, on } from "../effects.ts";
+import { always, effects, on } from "../effects.ts";
 import { inspect } from "../processes/proc.ts";
 import { type HookInput, toEvents } from "./hook.ts";
-import { interruptedSince, tailSince } from "./transcript.ts";
+import { interruptedAt, tailSince, watchTranscript } from "./transcript.ts";
 
 /** Claude Code の hook が呼ばれた（input は stdin の JSON そのまま）。外から届いた合図で、どの reducer も扱わない */
 export const hookReceived = createAction<{ input: unknown; at: number }>("claude/hookReceived");
@@ -51,26 +53,63 @@ function attachment(input: HookInput, events: AgentEvent[], at: number, parent: 
   return [agentAttached({ agentId: input.session_id, at, pid, cwd: cwdOf(input, known), transcript: input.transcript_path })];
 }
 
-/** hook の届かない中断・拒否: 実行中・待ちのエージェントで、この状況になった後の会話ログに中断が書かれた */
-function wasInterrupted(a: Agent): boolean {
-  if (!a.transcript || (a.turn.status !== "running" && !isBlocked(a.turn.status))) return false;
+/** 中断を確かめる相手: 実行中・待ちで、会話ログの場所が分かっているエージェント */
+const inTurn = (a: Agent): a is Agent & { transcript: string } =>
+  Boolean(a.transcript) && (a.turn.status === "running" || isBlocked(a.turn.status));
+
+/** hook の届かない中断・拒否: この状況になった後の会話ログに中断が書かれていれば、その時刻 */
+function interruptionOf(a: Agent): number | null {
+  if (!inTurn(a)) return null;
   const tail = tailSince(a.transcript, a.turn.since);
-  return Boolean(tail && interruptedSince(tail, a.turn.since));
+  if (!tail) return null;
+  return interruptedAt(tail, a.turn.since);
 }
 
 export interface ClaudeOptions {
   parent: Pid; // このプロセスの親（hook なら、その祖先に claude 本体がいる）
+  follow?: boolean; // 実行中・待ちのエージェントの会話ログを見張る（watch）
 }
 
 export const claude = (o: ClaudeOptions): AppMiddleware =>
-  effects((api) => [
-    on(hookReceived, ({ payload: { input: raw, at } }) => {
-      const input = raw as HookInput;
-      const events = toEvents(input, at);
-      const known = selectAgent(api.getState(), input.session_id);
-      for (const e of [...attachment(input, events, at, o.parent, known), ...events]) api.dispatch(e);
-    }),
-    on([initialized, ticked], ({ payload: { at } }) => {
-      for (const a of selectAgents(api.getState()).filter(wasInterrupted)) api.dispatch(turnInterrupted({ agentId: a.id, at }));
-    }),
-  ]);
+  effects((api) => {
+    const interrupt = (a: Agent) => {
+      const at = interruptionOf(a);
+      if (at !== null) api.dispatch(turnInterrupted({ agentId: a.id, at }));
+    };
+    /** 会話ログのパス → 見張りを止める */
+    const watching = new Map<string, () => void>();
+    /** 見張る会話ログを、いまの状態（実行中・待ちのエージェント）に合わせる */
+    const follow = () => {
+      const wanted = new Map(
+        selectAgents(api.getState())
+          .filter(inTurn)
+          .map((a) => [a.transcript, a.id]),
+      );
+      for (const path of [...watching.keys()].filter((p) => !wanted.has(p))) {
+        watching.get(path)?.();
+        watching.delete(path);
+      }
+      for (const [path, id] of [...wanted].filter(([p]) => !watching.has(p))) {
+        const check = () => {
+          const a = selectAgent(api.getState(), id);
+          if (a) interrupt(a);
+        };
+        watching.set(path, watchTranscript(path, debounce(check, 50))); // 続けて書かれたらまとめて確かめる
+      }
+    };
+
+    return [
+      on(hookReceived, ({ payload: { input: raw, at } }) => {
+        const input = raw as HookInput;
+        const events = toEvents(input, at);
+        const known = selectAgent(api.getState(), input.session_id);
+        for (const e of [...attachment(input, events, at, o.parent, known), ...events]) api.dispatch(e);
+      }),
+      on([initialized, ticked], () => {
+        for (const a of selectAgents(api.getState())) interrupt(a);
+      }),
+      always(() => {
+        if (o.follow) follow();
+      }),
+    ];
+  });

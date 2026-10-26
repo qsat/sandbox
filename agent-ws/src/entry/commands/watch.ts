@@ -16,7 +16,7 @@ export function watch(c: Of<"watch">, ctx: Context): AppStore {
   const effects = [
     processes({ list: true, self: ctx.pid }),
     git({ ghq: ctx.ghq, repos: { query: c.query }, dirty: c.filter }),
-    claude({ parent: ctx.ppid }),
+    claude({ parent: ctx.ppid, follow: true }),
     tmux(),
     clock({ intervalMs: c.intervalMs }),
   ];

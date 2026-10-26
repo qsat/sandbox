@@ -1,7 +1,7 @@
 /**
  * Claude Code の会話ログ。Esc での中断と許可の拒否では hook が何も発火しないので、ここでだけ分かる
  */
-import { closeSync, openSync, readSync, statSync } from "node:fs";
+import { closeSync, openSync, readSync, statSync, watch } from "node:fs";
 import { attempt } from "../../../lib/attempt.ts";
 
 /** 会話ログが since より後に書かれていれば、末尾の行を返す（そうでなければ読まない） */
@@ -37,10 +37,18 @@ const isInterruption = (content: unknown) =>
 
 /**
  * 中断も拒否も、会話ログに user の "[Request interrupted by user…]" が書かれる。
- * 末尾の発言がそれで、かつ since 以降の記録なら中断された（前のターンの中断は拾わない）
+ * 末尾の発言がそれで、かつ since 以降の記録なら、中断された時刻（前のターンの中断は拾わない）。中断されていなければ null
  */
-export function interruptedSince(transcriptTail: string[], since: number): boolean {
+export function interruptedAt(transcriptTail: string[], since: number): number | null {
   const last = transcriptTail.map(parse).findLast((e) => e?.type === "user" || e?.type === "assistant");
-  if (!last) return false;
-  return Date.parse(last.timestamp ?? "") >= since && isInterruption(last.message?.content);
+  if (!last || !isInterruption(last.message?.content)) return null;
+  const at = Date.parse(last.timestamp ?? "");
+  if (!(at >= since)) return null; // 時刻が読めないものも拾わない
+  return at;
+}
+
+/** 会話ログが書き換わるのを見張る（無ければ何もしない）。戻り値で止める */
+export function watchTranscript(path: string, onChange: () => void): () => void {
+  const w = attempt(() => watch(path, () => onChange()), null);
+  return () => w?.close();
 }

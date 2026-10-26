@@ -146,6 +146,13 @@ function hooks(inputs: string[], agentId: string, transcript: string) {
   }
 }
 
+/** 条件が成り立つまで待つ（ファイルの見張りなど、非同期に届くもの） */
+async function until(ok: () => boolean, deadline = Date.now() + 2000): Promise<void> {
+  if (ok() || Date.now() > deadline) return void expect(ok()).toBe(true);
+  await Bun.sleep(10);
+  return until(ok, deadline);
+}
+
 /** ステータスライン・通知は出来事の連鎖が終わってから出すので、それを待つ */
 const settle = () => Bun.sleep(1);
 
@@ -333,5 +340,20 @@ describe("watch の画面", () => {
     store.dispatch(rowSelected("pid:1"));
     expect(selectShownVisit(store.getState())).toBeNull();
     receiveHook({ hook_event_name: "SessionEnd", session_id: "s5", cwd: FEATURE });
+  });
+
+  test("実行中のエージェントの会話ログを見張り、Esc の中断を interval を待たずに拾う", async () => {
+    const transcript = join(dir, "s6.transcript.jsonl");
+    writeFileSync(transcript, "");
+    const on = { session_id: "s6", cwd: FEATURE, transcript_path: transcript };
+    receiveHook({ ...on, hook_event_name: "SessionStart" });
+    receiveHook({ ...on, hook_event_name: "UserPromptSubmit" });
+    const store = watch({ kind: "watch", filter, intervalMs: 3_600_000, popup: false }, ctx()); // 時間が経ったことにはならない
+    const turn = () => store.getState().app.agents.byId.s6?.turn;
+    expect(turn()?.status).toBe("running");
+    await writeTranscript(transcript, "transcript-esc.jsonl");
+    await until(() => turn()?.status === "ready");
+    expect(turn()?.reason).toBe("中断しました");
+    receiveHook({ ...on, hook_event_name: "SessionEnd" });
   });
 });

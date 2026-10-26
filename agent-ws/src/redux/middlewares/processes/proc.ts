@@ -1,25 +1,16 @@
 import { existsSync, readdirSync, readlinkSync } from "node:fs";
 import { attempt } from "../../../lib/attempt.ts";
-import { lines, run } from "../../../lib/run.ts";
+import { run } from "../../../lib/run.ts";
 import type { Pid } from "../../types/agent.ts";
+import { type PsEntry, parseInspect, parseLsofCwds, parsePsTable } from "./parse.ts";
 
 /** OS から見えるプロセス */
-export interface ProcInfo {
-  pid: Pid;
-  ppid: Pid;
-  elapsed: string;
-  command: string;
+export interface ProcInfo extends PsEntry {
   cwd: string | null; // 読めなければ null
 }
 
 /** ps の一覧（cwd なし。親子関係を辿るだけならこれで足りる） */
-export function psTable(): Omit<ProcInfo, "cwd">[] {
-  return lines(run("ps", ["-axo", "pid=,ppid=,etime=,command="])).flatMap((l) => {
-    const m = l.trim().match(/^(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/);
-    if (!m) return [];
-    return [{ pid: Number(m[1]), ppid: Number(m[2]), elapsed: m[3], command: m[4] }];
-  });
-}
+export const psTable = (): PsEntry[] => parsePsTable(run("ps", ["-axo", "pid=,ppid=,etime=,command="]) ?? "");
 
 export function listProcesses(): ProcInfo[] {
   const cwds = readCwds();
@@ -42,21 +33,10 @@ const procCwds = () =>
       ),
   );
 
-/** lsof -F の出力は p<pid>（その後に f<fd> などが続くことがある）と n<path> の繰り返し */
-const lsofCwds = () =>
-  new Map(
-    [...(run("lsof", ["-a", "-d", "cwd", "-Fpn"]) ?? "").matchAll(/^p(\d+)\n(?:[^pn].*\n)*n(.*)$/gm)].map(
-      (m) => [Number(m[1]), m[2]] as const,
-    ),
-  );
+const lsofCwds = () => parseLsofCwds(run("lsof", ["-a", "-d", "cwd", "-Fpn"]) ?? "");
 
-export function inspect(pid: Pid): { ppid: Pid; command: string } | null {
-  const m = run("ps", ["-o", "ppid=,command=", "-p", String(pid)])
-    ?.trim()
-    .match(/^(\d+)\s+(.*)$/);
-  if (!m) return null;
-  return { ppid: Number(m[1]), command: m[2] };
-}
+/** そのプロセスの親と、実行したコマンド（無ければ null） */
+export const inspect = (pid: Pid) => parseInspect(run("ps", ["-o", "ppid=,command=", "-p", String(pid)]) ?? "");
 
 export function isAlive(pid: Pid): boolean {
   try {

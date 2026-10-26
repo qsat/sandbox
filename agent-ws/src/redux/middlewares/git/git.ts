@@ -4,6 +4,7 @@ import { attempt } from "../../../lib/attempt.ts";
 import { lines, realPath, run } from "../../../lib/run.ts";
 import type { Worktree } from "../../types/workspace.ts";
 import { repoName } from "../../utils/repoName.ts";
+import { parseWorktrees } from "./parse.ts";
 
 /** ghq のルートを決めるもの（環境変数 GHQ_ROOT とホーム。entry が渡す） */
 export interface Ghq {
@@ -41,36 +42,8 @@ function scan(dir: string, depth: number): string[] {
     .flatMap((p) => scan(p, depth - 1));
 }
 
-/** "key value" の行の並び → key → value（値の無い行は空文字） */
-const fieldsOf = (block: string) =>
-  new Map(
-    block.split("\n").map((line) => {
-      const [key = "", ...rest] = line.split(" ");
-      return [key, rest.join(" ")] as const;
-    }),
-  );
-
-/** `git worktree list --porcelain` の1ブロック（先頭がメイン） */
-function worktreeOf(block: string, i: number): Worktree {
-  const kv = fieldsOf(block);
-  return {
-    path: realPath(kv.get("worktree") ?? ""),
-    branch: kv.get("branch")?.replace(/^refs\/heads\//, "") ?? null,
-    head: (kv.get("HEAD") ?? "").slice(0, 8),
-    isMain: i === 0,
-    bare: kv.has("bare"),
-    locked: kv.has("locked"),
-    prunable: kv.has("prunable"),
-    dirty: null,
-    agents: [],
-  };
-}
-
-export function listWorktrees(repoPath: string): Worktree[] {
-  const out = run("git", ["worktree", "list", "--porcelain"], repoPath)?.trim();
-  if (!out) return [];
-  return out.split(/\n\n+/).map(worktreeOf);
-}
+export const listWorktrees = (repoPath: string): Worktree[] =>
+  parseWorktrees(run("git", ["worktree", "list", "--porcelain"], repoPath) ?? "").map((w) => ({ ...w, path: realPath(w.path) }));
 
 export function countDirty(path: string): number | null {
   const out = run("git", ["status", "--porcelain"], path);

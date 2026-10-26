@@ -74,11 +74,12 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
                           popup で行き先へ移れたら閉じる（selectShouldClose）。watch は visit を読むが、visit は watch を知らない
         middlewares/      外部システムごと。出来事を受けて、自分の判断で I/O し、結果を出来事として戻す。何をするかは entry がオプションで決める。
                           effects.ts の effects・on で「出来事 → 反応」の対応表として書く
+                          外部システムの出力の解析は、そのシステムのディレクトリの parse.ts に純粋な関数で置く（本物を動かさずにテストできる）
           eventLog/       出来事の記録・流し直し・見張り（log.ts がファイルの読み書き）
-          claude/         Claude Code の hook 入力 → 出来事（hook.ts）、会話ログからの中断検出（transcript.ts）。実データの fixture
-          processes/      ps（proc.ts）: プロセスが消えたエージェントを終わらせる・エージェントのプロセス一覧
-          git/            git（git.ts）: リポジトリ構成・変更件数・場所 → リポジトリ名とブランチ（locate。通知の組み立てで使う）
-          tmux/           移動・フォーカスでの確認・表示中の完了の確認（tmux.ts がコマンド）
+          claude/         Claude Code の hook 入力 → 出来事（hook.ts）、会話ログからの中断検出と見張り（transcript.ts）。実データの fixture
+          processes/      ps（proc.ts、解析は parse.ts）: プロセスが消えたエージェントを終わらせる・エージェントのプロセス一覧
+          git/            git（git.ts、解析は parse.ts）: リポジトリ構成・変更件数・場所 → リポジトリ名とブランチ（locate。通知の組み立てで使う）
+          tmux/           移動・フォーカスでの確認・表示中の完了の確認（tmux.ts がコマンド、解析は parse.ts）
           clock/          時間の経過を出来事（ticked）にする（watch で組む）
         types/            ドメインの型（agent・attention・workspace・visit）
         utils/            純粋な関数を1関数1ファイルで（detectAgent・isBlocked・isUnder・repoName・firstLine・ancestry・findPane・replayed）
@@ -135,7 +136,8 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 - 許可待ちは PermissionRequest で記録する。Notification の permission_prompt は数秒遅れて届き、サブエージェント由来でも `agent_id` が付かないので使わない（matcher からも外した）
 - 質問待ち: AskUserQuestion は許可待ちと同じ PermissionRequest で届く（ツール名で分ける）。MCP の elicitation_dialog も質問待ちにする
 - Stop の時点でバックグラウンドのサブエージェントが動いていれば（`background_tasks`）、本体は終わったときに自動で再開するので未確認にも通知にもしない
-- Esc での中断と許可の拒否では hook が1つも発火しない。どちらも会話ログ（`transcript_path`）に `[Request interrupted by user…]` が書かれるので、実行中・待ちのエージェントに限り、この状況になった後に会話ログが更新されていれば末尾 16KB を読み、この状況になった後の中断記録があれば turnInterrupted を記録する
+- Esc での中断と許可の拒否では hook が1つも発火しない。どちらも会話ログ（`transcript_path`）に `[Request interrupted by user…]` が書かれるので、実行中・待ちのエージェントに限り、この状況になった後に会話ログが更新されていれば末尾 16KB を読み、この状況になった後の中断記録があれば、その記録の時刻で turnInterrupted を記録する。
+  確かめるのは起動したとき・時間が経ったとき。watch では、実行中・待ちのエージェントの会話ログを fs.watch で見張り、書き換わったら（50ms まとめて）すぐ確かめる
 
 ### 完了と確認
 - 「完了」はターンが完了して人がまだ見ていないもの。入力待ちをそのまま印にすると、手が空いている claude で常に点いてしまうため
@@ -206,12 +208,10 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 
 ## 既知の制約
 - 応答が始まる前に Esc で取り消すと、プロンプトが入力欄に戻るだけで hook も会話ログの記録も無い。次のプロンプトを送るまで「実行中」のまま残る
-- 中断の検出は会話ログを見に行ったときだけ（list / status / seen、watch の interval ごと）。watch の interval を長くすると反映が遅れる（tmux の status が先に検出してログに記録すれば、watch にはすぐ反映される）
+- 中断の検出は、watch 以外では会話ログを見に行ったときだけ（list / status / seen）。watch は会話ログを見張るので interval を待たない
 
 ## 保留中の論点
 1. コード量: コメント・空行を除いて 1784 行（Redux 化の前は 1008 行。Biome の整形で import が複数行になった分を含む）。減らすなら機能を削る。候補は、--json、ghq が無い環境向けの走査、claude と codex 以外の判定（エージェント以外のプロセス表示はドメインの再設計で削った）
 2. 子プロセスを ppid でエージェントの下にネストする案（リポジトリ > worktree > エージェント > 子プロセス）。提案したが未回答
 3. ペインが無い worktree の新しいウィンドウを今いるセッションに作っている。リポジトリ名のセッションに作るかどうか
-4. 中断の検出も subscribe にする案: 実行中・待ちのエージェントの会話ログを fs.watch で見張れば、interval を待たずに中断を拾える
-5. middleware 同士が下回り（shared のコマンド実行、processes の ps、git）を共有している。コマンド出力の解析（git worktree・ps・lsof・tmux list-panes）を純粋な関数として utils に切り出せば、本物を動かさずにテストできる
 
