@@ -1,9 +1,9 @@
 import type { AppStore } from "../redux/createStore.ts";
-import { claude } from "../redux/middlewares/claude/index.ts";
-import { clock } from "../redux/middlewares/clock/index.ts";
-import { git } from "../redux/middlewares/git/index.ts";
-import { processes } from "../redux/middlewares/processes/index.ts";
-import { tmux } from "../redux/middlewares/tmux/index.ts";
+import { interruptionChecks, transcriptWatch } from "../redux/listeners/claude/index.ts";
+import { clock } from "../redux/listeners/clock/index.ts";
+import { dirtyCounts, repositories } from "../redux/listeners/git/index.ts";
+import { processList, processLiveness } from "../redux/listeners/processes/index.ts";
+import { tmux } from "../redux/listeners/tmux/index.ts";
 import { destinationChosen } from "../redux/modules/ui/visit/slice.ts";
 import { reloadPressed, rowSelected, watchOpened } from "../redux/modules/ui/watch/slice.ts";
 import type { VisitTarget } from "../redux/types/visit.ts";
@@ -13,14 +13,17 @@ import type { Context, Of } from "./types.ts";
 
 /** 常駐表示: ログを追い続け、interval ごとにスキャンする */
 export function watch(c: Of<"watch">, ctx: Context): AppStore {
-  const effects = [
-    processes({ list: true, self: ctx.pid }),
-    git({ ghq: ctx.ghq, repos: { query: c.query }, dirty: c.filter }),
-    claude({ parent: ctx.ppid, follow: true }),
-    tmux(),
-    clock({ intervalMs: c.intervalMs }),
+  const listeners = [
+    ...processLiveness(),
+    ...processList({ self: ctx.pid }),
+    ...dirtyCounts({ filter: c.filter }), // repositories より先に組む
+    ...repositories({ ghq: ctx.ghq, query: c.query }),
+    ...interruptionChecks(),
+    ...transcriptWatch(),
+    ...tmux(),
+    ...clock({ intervalMs: c.intervalMs }),
   ];
-  const store = start(ctx, effects, { follow: true, subscribers: [statusLine()] });
+  const store = start(ctx, listeners, { follow: true, subscribers: [statusLine()] });
   store.dispatch(watchOpened({ popup: c.popup }));
   return store;
 }

@@ -1,14 +1,14 @@
 /**
  * 依存の向き: 上の層は下の層だけを import する（テストのコードは除く）
  *
- *   entry（cli と境界の補助 utils）→ commands → ui・redux/middlewares → redux/createStore・rootReducer → redux/modules → redux/types・utils → lib
- *   （ui と redux/middlewares は互いに知らない）
+ *   entry（cli と境界の補助 utils）→ commands → ui・redux/listeners → redux/createStore・rootReducer → redux/modules → redux/types・utils → lib
+ *   （ui と redux/listeners は互いに知らない）
  *
  * 例外は1つ: modules の selector は rootReducer.ts の RootState を型としてだけ読んでよい（状態の形は rootReducer が決めるため）。
  * 型だけなので実行時の依存は無く、slice は selector を読まないのでファイル単位の循環にもならない
  *
  * あわせて、ファイル単位の循環が無いこと、ドメイン（modules/app）が画面（modules/ui）を知らないこと、
- * middleware が他の外部システムの middleware 本体（index.ts）に頼らないこと（使ってよいのはそのシステムの I/O だけ）を確かめる
+ * listener が他の外部システムの listener 本体（index.ts）に頼らないこと（使ってよいのはそのシステムの I/O だけ）を確かめる
  */
 import { expect, test } from "bun:test";
 import { dirname, join, normalize, relative } from "node:path";
@@ -16,7 +16,7 @@ import { Glob } from "bun";
 
 const SRC = join(import.meta.dir, "..");
 
-const LAYERS = ["entry", "commands", "ui", "middlewares", "store", "modules", "domain", "lib"] as const;
+const LAYERS = ["entry", "commands", "ui", "listeners", "store", "modules", "domain", "lib"] as const;
 type Layer = (typeof LAYERS)[number];
 
 /** ファイル → 層 */
@@ -24,7 +24,7 @@ const LAYER_OF: [RegExp, Layer][] = [
   [/^commands\//, "commands"],
   [/^entry\//, "entry"],
   [/^ui\//, "ui"],
-  [/^redux\/middlewares\//, "middlewares"],
+  [/^redux\/listeners\//, "listeners"],
   [/^redux\/(createStore|rootReducer)\.ts$/, "store"],
   [/^redux\/modules\//, "modules"],
   [/^redux\/(types|utils)\//, "domain"],
@@ -34,10 +34,10 @@ const layerOf = (file: string) => LAYER_OF.find(([re]) => re.test(file))?.[1];
 
 /** 層 → import してよい層（自分の層も含む） */
 const ALLOWED: Record<Layer, Layer[]> = {
-  entry: ["entry", "commands", "ui", "middlewares", "store", "modules", "domain", "lib"],
-  commands: ["commands", "ui", "middlewares", "store", "modules", "domain", "lib"],
+  entry: ["entry", "commands", "ui", "listeners", "store", "modules", "domain", "lib"],
+  commands: ["commands", "ui", "listeners", "store", "modules", "domain", "lib"],
   ui: ["ui", "store", "modules", "domain", "lib"],
-  middlewares: ["middlewares", "store", "modules", "domain", "lib"],
+  listeners: ["listeners", "store", "modules", "domain", "lib"],
   store: ["store", "modules", "domain", "lib"],
   modules: ["modules", "domain", "lib"],
   domain: ["domain", "lib"],
@@ -92,8 +92,8 @@ test("ドメイン（modules/app）は画面（modules/ui）を知らない", ()
   expect(shown(wrong)).toEqual([]);
 });
 
-test("middleware は他の外部システムの middleware 本体に頼らない（I/O のファイルは使ってよい）", () => {
-  const system = (f: string) => f.match(/^redux\/middlewares\/([^/]+)\//)?.[1];
+test("listener は他の外部システムの listener 本体に頼らない（I/O のファイルは使ってよい）", () => {
+  const system = (f: string) => f.match(/^redux\/listeners\/([^/]+)\//)?.[1];
   const wrong = edges.filter(({ from, to }) => system(from) && system(to) && system(from) !== system(to) && to.endsWith("/index.ts"));
   expect(shown(wrong)).toEqual([]);
 });

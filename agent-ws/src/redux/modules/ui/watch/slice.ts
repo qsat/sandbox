@@ -34,5 +34,5 @@ export const watchView = createSlice({
 });
 export const { opened: watchOpened, rowSelected } = watchView.actions;
 
-/** 人が r キーで読み直しを頼んだ（どの reducer も扱わない合図。git の middleware が取り直す） */
+/** 人が r キーで読み直しを頼んだ（どの reducer も扱わない合図。git の listener が取り直す） */
 export const reloadPressed = createAction("ui/watch/reloadPressed");

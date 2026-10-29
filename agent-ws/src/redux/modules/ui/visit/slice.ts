@@ -25,5 +25,5 @@ export const visit = createSlice({
 });
 export const { destinationChosen, visited } = visit.actions;
 
-/** 人がそのペインにフォーカスした（tmux の pane-focus-in・移動の結果）。どの reducer も扱わない合図で、tmux の middleware が確認に変える */
+/** 人がそのペインにフォーカスした（tmux の pane-focus-in・移動の結果）。どの reducer も扱わない合図で、tmux の listener が確認に変える */
 export const paneFocused = createAction<{ panePid: Pid; at: number }>("visit/paneFocused");

@@ -52,12 +52,12 @@ const worktree = (path: string, branch: string, isMain: boolean) => ({
   agents: [],
 });
 
-mock.module("../../redux/middlewares/processes/proc.ts", () => ({
+mock.module("../../redux/listeners/processes/proc.ts", () => ({
   psTable: () => world.procs.map((p) => ({ pid: p.pid, ppid: p.ppid, elapsed: "00:01", command: p.command })),
   listProcesses: () => world.procs.map((p) => ({ ...p, elapsed: "00:01" })),
   isAlive: (pid: number) => world.procs.some((x) => x.pid === pid),
 }));
-mock.module("../../redux/middlewares/tmux/tmux.ts", () => ({
+mock.module("../../redux/listeners/tmux/tmux.ts", () => ({
   listPanes: () => world.panes,
   focusPane: (id: string) => {
     look(id);
@@ -71,7 +71,7 @@ mock.module("../../ui/subscribers/tmux.ts", () => ({
   },
   displayMessage: () => null,
 }));
-mock.module("../../redux/middlewares/git/git.ts", () => ({
+mock.module("../../redux/listeners/git/git.ts", () => ({
   ghqRoots: () => ["/g"],
   listRepoPaths: () => [REPO],
   listWorktrees: () => [worktree(REPO, "main", true), worktree(FEATURE, "feat", false)],
@@ -104,7 +104,7 @@ const { rowSelected } = await import("../../redux/modules/ui/watch/slice.ts");
 // ---------------------------------------------------------------------
 // 操作
 // ---------------------------------------------------------------------
-const FIXTURES = new URL("../../redux/middlewares/claude/__tests__/fixtures/", import.meta.url);
+const FIXTURES = new URL("../../redux/listeners/claude/__tests__/fixtures/", import.meta.url);
 const read = async (name: string) => (await Bun.file(new URL(name, FIXTURES)).text()).trim().split("\n");
 const filter = { all: false, agentsOnly: false };
 

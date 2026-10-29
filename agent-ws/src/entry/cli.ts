@@ -4,11 +4,11 @@
  * 使い方は utils/command.ts の USAGE
  *
  * 構成（依存は矢印の向きだけ。src/__tests__/layers.test.ts で確かめている）:
- *   entry（cli と境界の補助 utils）→ commands → ui・redux/middlewares → redux/createStore・rootReducer → redux/modules → redux/types・utils → lib
+ *   entry（cli と境界の補助 utils）→ commands → ui・redux/listeners → redux/createStore・rootReducer → redux/modules → redux/types・utils → lib
  *     entry: この cli.ts と、境界の補助（utils: 引数 → Command、環境変数・時刻 → Context）
- *     commands: コマンドごとに middleware・購読者を選んで Store を作り、出来事を伝える。結果は状態
- *     ui: 人に見せる（状態 → 文字・画面、ステータスラインの描き直し・通知）。middleware は知らない
- *     redux/middlewares: 外部システムとのやりとり。出来事に反応して I/O し、結果を出来事として戻す
+ *     commands: コマンドごとに listener・購読者を選んで Store を作り、出来事を伝える。結果は状態
+ *     ui: 人に見せる（状態 → 文字・画面、ステータスラインの描き直し・通知）。listener は知らない
+ *     redux/listeners: 外部システムとのやりとり。出来事に反応して I/O し、結果を出来事として戻す
  *     redux/modules: ドメイン（slice・selector）。I/O を知らない
  */
 import { appendFileSync } from "node:fs";
@@ -22,7 +22,7 @@ import { watch, watchControls } from "../commands/watch.ts";
 import { attempt } from "../lib/attempt.ts";
 import { match } from "../lib/match.ts";
 import { realPath } from "../lib/run.ts";
-import { hooksConfig } from "../redux/middlewares/claude/hook.ts";
+import { hooksConfig } from "../redux/listeners/claude/hook.ts";
 import { selectArrived } from "../redux/modules/ui/visit/selector.ts";
 import { jumpText } from "../ui/jump.ts";
 import { listRows, listText } from "../ui/list.ts";

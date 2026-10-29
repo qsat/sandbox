@@ -1,6 +1,6 @@
 /**
  * コマンドの外から来るもの: 環境変数・いまの時刻・端末。プロセスの境界（cli.ts）で1回だけ作る
- * これより内側（コマンド・middleware・購読者）は process.env も Date.now() も見ない（clock の middleware を除く）
+ * これより内側（コマンド・listener・購読者）は process.env も Date.now() も見ない（clock の listener を除く）
  */
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";

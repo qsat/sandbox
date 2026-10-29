@@ -1,25 +1,26 @@
 /**
- * tmux middleware: 人がどこを見ているか・どこへ行くか（tmux のペイン）
+ * tmux: 人がどこを見ているか・どこへ行くか（tmux のペイン。listener）
  *
  * - destinationChosen: 人が選んだ行き先のペインへ移動する（無ければ新しいウィンドウ）。結果は visited
  * - paneFocused: そのペインにいるエージェントの完了を確認したことにする
  * - turnFinished: いま表示しているペインで完了したなら、もう見ている
  *
- * ステータスラインの描き直しは、状態を映すだけなので middleware ではなく購読者（subscribers/statusLine）が行う
+ * ステータスラインの描き直しは、状態を映すだけなので listener ではなく購読者（ui/subscribers/statusLine）が行う
  */
 
+import { isAllOf } from "@reduxjs/toolkit";
 import { realPath } from "../../../lib/run.ts";
-import type { AppMiddleware } from "../../createStore.ts";
+import type { AppApi, AppListener } from "../../createStore.ts";
 import { selectAgent, selectAgents } from "../../modules/app/agents/selector.ts";
 import { turnFinished } from "../../modules/app/agents/slice.ts";
 import { selectUnseen } from "../../modules/app/attention/selector.ts";
 import { acknowledged } from "../../modules/app/attention/slice.ts";
 import { destinationChosen, paneFocused, visited } from "../../modules/ui/visit/slice.ts";
+import type { RootState } from "../../rootReducer.ts";
 import type { Pane, VisitResult, VisitTarget } from "../../types/visit.ts";
 import { ancestry } from "../../utils/ancestry.ts";
 import { findPane } from "../../utils/findPane.ts";
-import { isReplayed } from "../../utils/replayed.ts";
-import { type AppApi, effects, on } from "../effects.ts";
+import { isFresh } from "../../utils/replayed.ts";
 import { processTree } from "../processes/proc.ts";
 import * as cli from "./tmux.ts";
 
@@ -54,23 +55,38 @@ function visit(api: AppApi, target: VisitTarget, create: boolean, dryRun: boolea
   return openWindow(t.path, t);
 }
 
-export const tmux = (): AppMiddleware =>
-  effects((api) => [
-    on(destinationChosen, ({ payload: p }) => api.dispatch(visited(visit(api, p.target, p.create, p.dryRun ?? false)))),
-    on(paneFocused, ({ payload: { panePid, at } }) => {
-      const st = api.getState();
-      const unseen = selectAgents(st).filter((a) => a.pid && selectUnseen(st, a.id));
-      if (!unseen.length) return; // フォーカスのたびに呼ばれるので、未確認が無ければ ps もしない
-      const up = parentOf();
-      const inPane = unseen.filter((a) => ancestry(a.pid, up).some((pid) => pid === panePid));
-      for (const a of inPane) api.dispatch(acknowledged({ agentId: a.id, at }));
+/** 未確認で、pid が分かっているエージェント */
+const unseenAgents = (st: RootState) => selectAgents(st).filter((a) => a.pid && selectUnseen(st, a.id));
+
+/** このプロセスで起きた完了（読み直した完了は、書いたプロセスが確かめ済み） */
+const isFreshFinish = isAllOf(turnFinished, isFresh);
+
+export const tmux = (): AppListener[] => [
+  (start) =>
+    start({
+      actionCreator: destinationChosen,
+      effect: ({ payload: p }, api) => void api.dispatch(visited(visit(api, p.target, p.create, p.dryRun ?? false))),
     }),
-    on(turnFinished, (action) => {
-      if (isReplayed(action)) return;
-      const { agentId, at } = action.payload;
-      const a = selectAgent(api.getState(), agentId);
-      if (!a?.pid || !selectUnseen(api.getState(), agentId)) return;
-      const pane = findPane({ title: "", name: "", pid: a.pid }, cli.listPanes(), parentOf());
-      if (pane?.active) api.dispatch(acknowledged({ agentId, at }));
+  // フォーカスのたびに届くので、未確認のエージェントがいるときだけ動く（いなければ ps もしない）
+  (start) =>
+    start({
+      predicate: (action, current): action is ReturnType<typeof paneFocused> =>
+        paneFocused.match(action) && unseenAgents(current).length > 0,
+      effect: ({ payload: { panePid, at } }, api) => {
+        const up = parentOf();
+        const inPane = unseenAgents(api.getState()).filter((a) => ancestry(a.pid, up).some((pid) => pid === panePid));
+        for (const a of inPane) api.dispatch(acknowledged({ agentId: a.id, at }));
+      },
     }),
-  ]);
+  // 完了して未確認になったエージェントのペインが、いま表示中なら、もう見ている
+  (start) =>
+    start({
+      predicate: (action, current): action is ReturnType<typeof turnFinished> =>
+        isFreshFinish(action) && unseenAgents(current).some((a) => a.id === action.payload.agentId),
+      effect: ({ payload: { agentId, at } }, api) => {
+        const pid = selectAgent(api.getState(), agentId)?.pid ?? undefined;
+        const pane = findPane({ title: "", name: "", pid }, cli.listPanes(), parentOf());
+        if (pane?.active) api.dispatch(acknowledged({ agentId, at }));
+      },
+    }),
+];

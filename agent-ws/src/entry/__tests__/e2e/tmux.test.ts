@@ -18,7 +18,7 @@ const enabled = process.env.AGENT_WS_E2E === "1" && TOOLS.every((t) => Bun.which
 
 const PROJECT = join(import.meta.dir, "../../../..");
 const CLI = join(PROJECT, "src/entry/cli.ts");
-const INPUTS = join(PROJECT, "src/redux/middlewares/claude/__tests__/fixtures/claude-code-2.1.309-turns.jsonl");
+const INPUTS = join(PROJECT, "src/redux/listeners/claude/__tests__/fixtures/claude-code-2.1.309-turns.jsonl");
 const TIMEOUT = 20_000;
 
 /** 作業ディレクトリ（動かすときだけ beforeAll で作る） */

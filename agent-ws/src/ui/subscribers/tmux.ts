@@ -1,5 +1,5 @@
 /**
- * tmux に見せる: ステータスラインの描き直しとメッセージ（表示のためのコマンドだけ。移動などは tmux の middleware）
+ * tmux に見せる: ステータスラインの描き直しとメッセージ（表示のためのコマンドだけ。移動などは tmux の listener）
  */
 import { lines, run } from "../../lib/run.ts";
 

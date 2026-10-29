@@ -32,21 +32,21 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 | Acknowledge | Attention を人が確認したこと（既読） |
 | Visit | Agent や worktree の場所（tmux のペイン）へ行くこと |
 
-「session」は Claude Code の用語として、claude の middleware の中（`session_id` など）だけで使う。
+「session」は Claude Code の用語として、claude の listener の中（`session_id` など）だけで使う。
 
 ## 構成（Redux Toolkit・re-ducks。依存は矢印の向きだけ。src/__tests__/layers.test.ts で確かめている）
     src/entry（入口の cli と、境界の補助 utils。引数・環境変数・標準入出力・終了コード・いまの時刻・このプロセス）
-       └→ src/commands/*（コマンドごとに middleware・購読者を選んで Store を作り、出来事を伝える。結果は状態で返す）
+       └→ src/commands/*（コマンドごとに listener・購読者を選んで Store を作り、出来事を伝える。結果は状態で返す）
              ├→ src/ui/*（人に見せる: 状態 → 文字・画面、ステータスラインの描き直し・通知）
-             └→ src/redux/middlewares/*（外部システムとのやりとり。I/O の実装もそれぞれの隣に置く）
+             └→ src/redux/listeners/*（外部システムとのやりとり。I/O の実装もそれぞれの隣に置く）
                    └→（ui も）src/redux/createStore.ts・rootReducer.ts → src/redux/modules/{app,ui}/*（ドメイン: slice・selector。I/O を知らない）
                          └→ src/redux/types/*（型）・src/redux/utils/*（純粋な関数） → src/lib/*（ドメインを知らない道具）
 
     依存テストが確かめること: 上の層は下の層だけを import する／ファイル単位の循環が無い／modules/app は modules/ui を知らない／
-    middleware は他の外部システムの middleware 本体（index.ts）に頼らない（そのシステムの I/O のファイルは使ってよい）。
+    listener は他の外部システムの listener 本体（index.ts）に頼らない（そのシステムの I/O のファイルは使ってよい）。
     例外は1つ: modules の selector は rootReducer.ts の RootState を型としてだけ読む（状態の形は rootReducer が決める。slice は selector を読まないので循環しない）
 
-    dispatch ─→ listener ─→ effects（claude・processes・git・tmux・clock）─→ log（eventLog）─→ reducer ─→ subscribers（statusLine・notifier）
+    dispatch ─→ reducer ─→ listener middleware: log（eventLog.record）→ listeners（claude・processes・git・tmux・clock）を登録順に ─→ subscribers（statusLine・notifier）
 
     State: { app: { agents, attention, workspace, lifecycle }, ui: { visit, watch } }
 
@@ -56,10 +56,10 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
         utils/        境界の補助（純粋な関数）
           command.ts  コマンドライン → Command。引数の解釈はここだけ
           context.ts  環境変数・いまの時刻・このプロセス（pid・ppid・OS）→ Context、端末 → Display。ここより内側は process も Date.now() も見ない（clock を除く）
-      commands/       コマンドごとに middleware・購読者を選んで Store を作り、出来事を伝える（list・status・seen・jump・hook・watch）。
+      commands/       コマンドごとに listener・購読者を選んで Store を作り、出来事を伝える（list・status・seen・jump・hook・watch）。
                       どれも (Command, Context) → Store の形で、文字にはしない。types.ts に Command（判別共用体）と Context、start.ts が Store を作って起動する
       redux/
-        createStore.ts  Store のファクトリ。createStore({ log, effects })。addAppListener・listen
+        createStore.ts  Store のファクトリ。createStore({ log, listeners })。RTK の createListenerMiddleware に、log・listeners の順で登録する
         rootReducer.ts  状態の形: 各モジュールの reducer を app と ui にまとめる。RootState
         modules/
           app/
@@ -73,18 +73,19 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
             visit/        人が行き先を選んだ（destinationChosen）・移動の結果（visited）・人がペインにフォーカスした（paneFocused）。移動できたか（selectArrived）
             watch/        watch の画面: 開いた（watchOpened）・人が選んだ行（rowSelected）・移動の結果を見せているか・読み直しの操作（reloadPressed）。
                           popup で行き先へ移れたら閉じる（selectShouldClose）。watch は visit を読むが、visit は watch を知らない
-        middlewares/      外部システムごと。出来事を受けて、自分の判断で I/O し、結果を出来事として戻す。何をするかは entry がオプションで決める。
-                          effects.ts の effects・on で「出来事 → 反応」の対応表として書く
+        listeners/        外部システムごと。出来事を受けて、自分の判断で I/O し、結果を出来事として戻す（RTK の listener）。
+                          関心ごとに listener の組（AppListener[]）を返す関数にし、どれを組むかはコマンドが選ぶ（オプションで分岐しない）。
+                          どの出来事に反応するかは actionCreator・matcher・predicate で決め、effect の中で出来事を判断する if は書かない（下の「listener の書き方」）
                           外部システムの出力の解析は、そのシステムのディレクトリの parse.ts に純粋な関数で置く（本物を動かさずにテストできる）
-          eventLog/       出来事の記録・流し直し・見張り（log.ts がファイルの読み書き）
-          claude/         Claude Code の hook 入力 → 出来事（hook.ts）、会話ログからの中断検出と見張り（transcript.ts）。実データの fixture
-          processes/      ps（proc.ts、解析は parse.ts）: プロセスが消えたエージェントを終わらせる・エージェントのプロセス一覧
-          git/            git（git.ts、解析は parse.ts）: リポジトリ構成・変更件数・場所 → リポジトリ名とブランチ（locate。通知の組み立てで使う）
+          eventLog/       出来事の記録・流し直し（record）・他のプロセスが書いた分の取り込み（follow）。log.ts がファイルの読み書き
+          claude/         Claude Code の hook 入力 → 出来事（claudeHooks・hook.ts）、会話ログからの中断検出（interruptionChecks）と見張り（transcriptWatch）（transcript.ts）。実データの fixture
+          processes/      ps（proc.ts、解析は parse.ts）: プロセスが消えたエージェントを終わらせる（processLiveness）・エージェントのプロセス一覧（processList）
+          git/            git（git.ts、解析は parse.ts）: リポジトリ構成（repositories）・変更件数（dirtyCounts）・場所 → リポジトリ名とブランチ（locate。通知の組み立てで使う）
           tmux/           移動・フォーカスでの確認・表示中の完了の確認（tmux.ts がコマンド、解析は parse.ts）
           clock/          時間の経過を出来事（ticked）にする（watch で組む）
         types/            ドメインの型（agent・attention・workspace・visit）
         utils/            純粋な関数を1関数1ファイルで（detectAgent・isBlocked・isUnder・repoName・firstLine・ancestry・findPane・replayed）
-      ui/                 人に見せる。middleware は知らない（使う外部の情報は組み立てる側が関数で渡す）
+      ui/                 人に見せる。listener は知らない（使う外部の情報は組み立てる側が関数で渡す）
         list.ts status.ts jump.ts watch.ts notification.ts   出力ごとの表示: 状態 → 文字（watch.ts は常駐表示の画面の状態）
         parts.ts        表示の部品: Cell・Row・状況の見せ方（STATUS）・経過時間
         terminal.ts     色と表示幅（Display）
@@ -95,18 +96,28 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
       lib/                ドメインを知らない汎用の道具: attempt（失敗したら代わりの値）・scan（reduce の途中経過）・debounce（続けて呼ばれたら、途絶えてから1回だけ実行）・
                           match（kind によるパターンマッチ）・run（外部コマンドの実行・パスの実体）
 
-- modules（slice・selector・listener）は I/O を知らない。外部システムとのやりとりは middleware が、人に見せるものは ui が吸収する。listener は I/O を伴わないつなぎが要るモジュールにだけ置く（今は無いが、仕組み（listener middleware・addAppListener・listen）は createStore に組んである）
-- アクションは「起きたこと」だけにする（セッターや特定の middleware への命令にしない）。entry が dispatch するのは起動した（initialized）ことと、外界・人の出来事（hookReceived・paneFocused・destinationChosen・rowSelected・reloadPressed）だけ。ログの読み込み・生死の確認・スキャンなどは、出来事を受けた middleware がそれぞれ判断して行う
+- modules（slice・selector）は I/O を知らない。外部システムとのやりとりは listeners が、人に見せるものは ui が吸収する
+- アクションは「起きたこと」だけにする（セッターや特定の listener への命令にしない）。entry が dispatch するのは起動した（initialized）ことと、外界・人の出来事（hookReceived・paneFocused・destinationChosen・rowSelected・reloadPressed）だけ。ログの読み込み・生死の確認・スキャンなどは、出来事を受けた listener がそれぞれ判断して行う
 - 各モジュールの slice.ts は createSlice で出来事と reducer を持つ（他のモジュールの出来事への反応は extraReducers）。reducer の state の形（AgentsState など）は slice.ts、ドメインの型は types/
   - 出来事の type は記録されるので変えない（agents は name "agent"、reducers のキーは attached・started… で type は "agent/attached" など。export するときに agentAttached などへ名前を付け替える）
-  - どの reducer も扱わない合図（hookReceived・paneFocused・reloadPressed。middleware だけが反応する）は createAction のまま。状態を変えない reducer を作らないため
-- middleware と購読者の分担: 出来事に反応して外界とやりとりし、結果を出来事として戻すものは middleware（redux）。状態だけで決まり、人に見せるだけのもの（ステータスライン・通知・watch の画面）は store.subscribe の購読者（ui）。購読者は entry がログから状態を組み立て終えた後に購読させるので、流し直しでは動かない（middleware のような「流し直した出来事か」の判断が要らない）
-- 手続きにしない: 「依頼して返事を受け取る」形（dispatch した直後に結果を読んで戻り値にする）にしない。人の操作は出来事として伝えるだけで、結果は状態の変化として受け取る（移動の結果は ui.visit、popup を閉じるかは selectShouldClose）。描画は状態を読むだけで書き換えない（選択中として出す行・スクロール位置は描画のたびに導く）。middleware は手順の台本にせず、関心ごとに出来事や状態の変化へ反応する（変更件数は表示する worktree が変わったら数え直す、リポジトリを取り直す時期は状態の時刻で決める）
-- 時刻は出来事からだけ受け取る（initialized・ticked・hookReceived などの at）。いまの時刻は app.lifecycle.now にあり、描画も middleware もそれを使う。外界から時刻を取るのは entry の境界（cli.ts → Context）と clock だけ。環境変数・このプロセスの pid・OS も entry の境界でだけ読み、オプションとして middleware・購読者に渡す
+  - どの reducer も扱わない合図（hookReceived・paneFocused・reloadPressed。listener だけが反応する）は createAction のまま。状態を変えない reducer を作らないため
+- listener と購読者の分担: 出来事に反応して外界とやりとりし、結果を出来事として戻すものは listener（redux）。状態だけで決まり、人に見せるだけのもの（ステータスライン・通知・watch の画面）は store.subscribe の購読者（ui）。購読者は entry がログから状態を組み立て終えた後に購読させるので、流し直しでは動かない（listener のような「流し直した出来事か」の判断が要らない）
+- 手続きにしない: 「依頼して返事を受け取る」形（dispatch した直後に結果を読んで戻り値にする）にしない。人の操作は出来事として伝えるだけで、結果は状態の変化として受け取る（移動の結果は ui.visit、popup を閉じるかは selectShouldClose）。描画は状態を読むだけで書き換えない（選択中として出す行・スクロール位置は描画のたびに導く）。listener は手順の台本にせず、関心ごとに出来事や状態の変化へ反応する（変更件数は表示する worktree が変わったら数え直す、リポジトリを取り直す時期は状態の時刻で決める）
+- 時刻は出来事からだけ受け取る（initialized・ticked・hookReceived などの at）。いまの時刻は app.lifecycle.now にあり、描画も listener もそれを使う。外界から時刻を取るのは entry の境界（cli.ts → Context）と clock だけ。環境変数・このプロセスの pid・OS も entry の境界でだけ読み、オプションとして listener・購読者に渡す
 - thunk は使わない（thunk middleware も外している）
-- middleware は同期的に動くので、dispatch から戻った時点で I/O まで終わっている。entry はこれに頼って dispatch の直後に状態を読む
-- どの middleware・購読者を組むかはコマンドごとに entry が決める。たとえば status は statusLine を購読させない（ステータスラインから呼ばれるので、描き直させると自分がまた呼ばれる）、通知（notifier）は hook だけ
-- 記録（eventLog）は createStore の log として reducer の直前に組まれる。effects が出来事の途中で出した出来事（表示中の完了の確認など）より先に記録しないと、ログの順序が入れ替わり、流し直したときの状態が変わる（redux/__tests__/createStore.test.ts で確かめている）
+- listener の effect は dispatch の中で同期的に呼ばれる（I/O は同期で、effect は await しない）ので、dispatch から戻った時点で I/O まで終わっている。entry はこれに頼って dispatch の直後に状態を読む
+- どの listener・購読者を組むかはコマンドごとに entry が決める。たとえば status は statusLine を購読させない（ステータスラインから呼ばれるので、描き直させると自分がまた呼ばれる）、通知（notifier）は hook だけ
+- 記録（eventLog.record）は createStore の log として、ほかの listener より先に登録する。listener は登録順に呼ばれ、effect が dispatch した出来事の listener はその場で呼ばれるので、ほかの listener が出来事の途中で出した出来事（表示中の完了の確認など）より先に記録しないと、ログの順序が入れ替わり、流し直したときの状態が変わる（redux/__tests__/createStore.test.ts で確かめている）
+
+### listener の書き方（effect の中で出来事を判断しない）
+- 反応する条件は start の引数で表し、effect は「条件が成り立ったときにすること」だけにする:
+  - 出来事の種類 → `actionCreator`（1つ）・`matcher`（`isAnyOf(initialized, ticked)` など。型を絞るため const にする: isStartOrTick）
+  - 流し直した出来事を除く → `isAllOf(turnFinished, isFresh)`（utils/replayed）
+  - 状態の変化 → `predicate(action, current, original)`（記録は「エージェントの状態か確認の状況が変わった」、見張りは「見張る会話ログの組が変わった」、変更件数は「表示する worktree が変わった」）
+  - コマンドごとの違い → listener の組を分けてコマンドが選ぶ（processLiveness・processList、repositories・dirtyCounts、eventLog の record・follow、claudeHooks・interruptionChecks・transcriptWatch）
+- effect に残る if は I/O の結果を見るものだけ（ペインが表示中か、会話ログが読めたか など）
+- effect は値を返さない（dispatch の戻り値は `void` で捨てる）。listener ごとの状態（見張り・debounce）は、組を作る関数の中に閉じ込める
+- effect で投げた例外は listener middleware が受け止めて console.error に出す（dispatch には伝わらない）
 
 ## 設計判断とその理由
 ### 状態の持ち方
@@ -124,14 +135,14 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 ### 画面の更新（subscribe）
 - watch は Store を購読し、変化したら 1 フレーム（30ms）にまとめて描き直す
 - 他のプロセス（hook）が書いたログは、eventLog がログのディレクトリを fs.watch で見張って差分だけ取り込む
-- 時間の経過は clock の middleware が ticked として出す（watch だけが組む）。ticked を受けて、eventLog はログの取りこぼしを拾い、processes は生死の確認とプロセス一覧を、git は変更件数とリポジトリ構成（前回から15秒以上たっていれば）を、claude は中断の確認を行う。エージェントが増えて pid がプロセス一覧に無いとき・消えたときは、processes が interval を待たずにプロセスを取り直す（続けて届いても1回にまとめる。消えたときは SessionEnd がプロセスの終了より先に届くので1秒待つ）
-- コマンドごとの違いは middleware のオプションで表す。たとえば status は processes() だけでプロセス一覧もリポジトリも調べない（生死の確認だけ）、list と watch は processes({ list: true })・git({ repos, dirty })、watch だけ eventLog({ follow: true }) と clock を組む
-- hook も起動時に全エージェントのログを読む（エージェント10体でも1回あたり +3ms 程度）。claude の middleware は、そのエージェントのこれまでの状態が Store にある前提で hook を処理する
+- 時間の経過は clock の listener が ticked として出す（watch だけが組む）。ticked を受けて、eventLog はログの取りこぼしを拾い、processes は生死の確認とプロセス一覧を、git は変更件数とリポジトリ構成（前回から15秒以上たっていれば）を、claude は中断の確認を行う。エージェントが増えて pid がプロセス一覧に無いとき・消えたときは、processes が interval を待たずにプロセスを取り直す（続けて届いても1回にまとめる。消えたときは SessionEnd がプロセスの終了より先に届くので1秒待つ）。dirtyCounts は repositories より先に組む（時間が経ったら数えてから構成を取り直し、構成が変わったら表示する worktree の変化としてもう一度数える）
+- コマンドごとの違いは、組む listener の組で表す。たとえば status は processLiveness と interruptionChecks だけでプロセス一覧もリポジトリも調べない（生死の確認だけ）、list と watch は processList・dirtyCounts・repositories も、watch だけ eventLog の follow・transcriptWatch・clock を組む
+- hook も起動時に全エージェントのログを読む（エージェント10体でも1回あたり +3ms 程度）。claudeHooks は、そのエージェントのこれまでの状態が Store にある前提で hook を処理する
 - tmux のステータスラインは、印が変わったときだけ statusLine の購読者が `tmux refresh-client -S` で描き直す（`#()` も再実行される。tmux 3.4 で確認）。
   比べるのは出来事の連鎖が終わってから（observe の settle。lib/debounce の待ち時間 0 でまとめる）。連鎖は同期的に進むので、途中の状態（表示中のペインで完了して確認済みになる間の ✓）は映さない。通知も同じwatch では、他のプロセスが記録した変化を取り込んだときも描き直す
 
 ### Claude Code の hook
-- hook は全イベント共通の1コマンドにし、何が起きたかは `hook_event_name` で判断する。登録するイベントは redux/middlewares/claude/hook.ts の `RULES`（イベントごとの matcher と、入力 → 出来事の規則を1つの表に持つ。hooks-config もここから作る）（SessionStart, UserPromptSubmit, PermissionRequest, PostToolUse, PostToolUseFailure, Notification, Stop, StopFailure, SubagentStart, SubagentStop, SessionEnd）
+- hook は全イベント共通の1コマンドにし、何が起きたかは `hook_event_name` で判断する。登録するイベントは redux/listeners/claude/hook.ts の `RULES`（イベントごとの matcher と、入力 → 出来事の規則を1つの表に持つ。hooks-config もここから作る）（SessionStart, UserPromptSubmit, PermissionRequest, PostToolUse, PostToolUseFailure, Notification, Stop, StopFailure, SubagentStart, SubagentStop, SessionEnd）
 - claude 本体の pid は、hook プロセスの祖先を辿って agentAttached に記録する（ps の一覧を1回取り、utils/ancestry で辿る。tmux の行き先探しと同じ辿り方）
 - サブエージェントは本体プロセスの中で動くので、hook の `agent_id` でだけ観測できる。`agent_type` が空のもの（入力候補の先読みなど内部用）は無視する
 - 許可待ちは PermissionRequest で記録する。Notification の permission_prompt は数秒遅れて届き、サブエージェント由来でも `agent_id` が付かないので使わない（matcher からも外した）
@@ -180,12 +191,12 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 
 | 層 | 場所 | 動かし方 | 本物 | 差し替え |
 |---|---|---|---|---|
-| 単体 | 各モジュールの `__tests__/` | `bun run check`（`bun test`） | slice・selector・middleware・描画 | middleware ごとの I/O |
+| 単体 | 各モジュールの `__tests__/` | `bun run check`（`bun test`） | slice・selector・listener・描画 | listener ごとの I/O |
 | A. シナリオ | `src/commands/__tests__/scenarios.test.ts` | `bun run check` | コマンドから eventLog（一時ディレクトリ）まで全部 | tmux・ps・git・通知（`mock.module`） |
 | B. 端末込みの E2E | `src/entry/__tests__/e2e/` | `bun run e2e`（AGENT_WS_E2E=1。check では飛ばす） | tmux（script で接続したクライアントつき）・ps・git・hooks-config | claude（記録した hook 入力を流す偽物） |
 | C. スモーク | `scripts/smoke-claude.sh` | `bun run smoke [--dist] [--keep]`（手で動かす） | Claude Code も含めて全部 | なし（モデルを呼ぶ） |
 
-- A は、本物の Claude Code から記録した hook 入力（`src/redux/middlewares/claude/__tests__/fixtures/claude-code-2.1.309-turns.jsonl` と、中断を書いた会話ログ `transcript-deny.jsonl`・`transcript-esc.jsonl`）をコマンド（commands/*）に流して ui の表示で読み、印・一覧・通知・jump の行き先・popup が閉じるかを確かめる。1つのセッションの流れを、起動 → 完了 → フォーカスで確認 → 許可 → 表示中の完了 → 拒否 → 質問 → Esc → 終了の順にたどる
+- A は、本物の Claude Code から記録した hook 入力（`src/redux/listeners/claude/__tests__/fixtures/claude-code-2.1.309-turns.jsonl` と、中断を書いた会話ログ `transcript-deny.jsonl`・`transcript-esc.jsonl`）をコマンド（commands/*）に流して ui の表示で読み、印・一覧・通知・jump の行き先・popup が閉じるかを確かめる。1つのセッションの流れを、起動 → 完了 → フォーカスで確認 → 許可 → 表示中の完了 → 拒否 → 質問 → Esc → 終了の順にたどる
 - B の偽の claude（`fake-claude.ts`）は `claude` という名前のシンボリックリンクから起動する。ps からは `bun …/claude` に見えるので本物と同じくエージェントとして見つかり、hook はその子として動くので本体の pid も本物と同じく祖先から分かる。hooks は `hooks-config` の出力を settings.json に置き、その matcher どおりに流す。tmux の設定は「セットアップ」と同じ。ステータスラインは status-right を `SR[…]` で囲み、クライアントの端末に描かれた中身から読む
   - 壊したら落ちることを確かめた: `refresh-client -S` を呼ばない → ステータスラインが消えない（A でも落ちる）、popup を閉じない → 閉じない
   - tmux の癖: `display-popup` はポップアップが閉じるまで戻らない。新しいペインのシェルはログインシェルなので /etc/profile が PATH を上書きする（default-command で避けている）
@@ -193,13 +204,13 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 
 ## 検証状況
 - 済み（本物の Claude Code 2.1.309 を、クライアントを接続した tmux 3.4 の中で対話実行。bundle した dist で確認）:
-  - hook の入力の形。Notification の種別は `notification_type`。hooks 設定の `args` 形式は使える。入力は `src/redux/middlewares/claude/__tests__/fixtures/` に保存し、テストで再生している
+  - hook の入力の形。Notification の種別は `notification_type`。hooks 設定の `args` 形式は使える。入力は `src/redux/listeners/claude/__tests__/fixtures/` に保存し、テストで再生している
   - 起動直後の入力待ちと本体 pid の特定、許可待ち（理由つき）、許可の拒否と応答中の Esc からの復帰、バックグラウンドのサブエージェントの許可待ち（本体は ⏳、詳細はサブエージェントの行）→許可→完了、AskUserQuestion で ❓、SessionEnd でログが消える
   - 完了と既読: 別ウィンドウを見ている間の完了で ✓ → そのウィンドウへ移ると pane-focus-in で消える、表示中のペインで完了したら ✓ を出さない、jump で既読
   - subscribe: `watch --interval=60` でも、許可待ち・他プロセスが記録した中断が即座に反映される。claude の起動は1秒以内、終了は約1秒で一覧に反映される
   - ステータスラインは状態が変わったときに描き直される（status-interval=600 でも `#()` が再実行される）
   - hook 1回の処理は約40ms（bundle 版。同じ条件で比べて、ドメインの再設計の前後で変わらない）。状態が変わらない PostToolUse はログに残らない
-- 済み: tsc（strict）が通る。`bun run check` が通る（単体とシナリオで39件。E2E の9件は飛ばす。30回続けて通る）。`bun run e2e` の9件が通る（3回続けて。1回20秒ほど）。`bun run smoke` が本物の Claude Code 2.1.310 で19項目すべて通る（fixture は 2.1.309 で記録。hook の種類と順序は同じ）
+- 済み: tsc（strict）が通る。`bun run check` が通る（単体とシナリオで55件。E2E の9件は飛ばす）。`bun run e2e` の9件が通る（3回続けて。1回20秒ほど）。`bun run smoke` が本物の Claude Code 2.1.312 で19項目すべて通る（fixture は 2.1.309 で記録。hook の種類と順序は同じ）
 - 未検証:
   - Notification の elicitation_dialog / agent_needs_input、StopFailure、PostToolUseFailure の実際の入力。確かめるときは `AGENT_WS_DUMP=<ファイル>` を付けて claude を起動すると hook の入力がそのまま追記される
   - バックグラウンドのサブエージェントの許可を拒否したときの本体側の状態

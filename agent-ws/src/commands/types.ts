@@ -2,7 +2,7 @@
  * コマンドへの入力: 何をするか（Command）と、コマンドの外から来るもの（Context）
  * プロセスの境界（cli.ts・command.ts・context.ts）がこれを作り、コマンドはこれだけを受け取る
  */
-import type { Ghq } from "../redux/middlewares/git/git.ts";
+import type { Ghq } from "../redux/listeners/git/git.ts";
 import type { Pid } from "../redux/types/agent.ts";
 import type { NoticeKind } from "../redux/types/attention.ts";
 import type { VisitTarget } from "../redux/types/visit.ts";
