@@ -6,7 +6,7 @@
  * - dirtyCounts: 表示する worktree の変更件数を持つ。表示する worktree が変わったとき・時間が経ったときに数え直す
  */
 import { createSelector, isAnyOf } from "@reduxjs/toolkit";
-import type { AppApi, AppListener } from "../../createStore.ts";
+import { type AppApi, type AppListener, addAppListener } from "../../createStore.ts";
 import { selectAgentProcesses } from "../../modules/app/agents/selector.ts";
 import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
 import { filterRepos, placeAgents } from "../../modules/app/workspace/selector.ts";
@@ -61,12 +61,11 @@ export function repositories(o: { ghq: cli.Ghq; query?: string }): AppListener[]
     api.dispatch(reposScanned({ roots, repos: scanRepoPaths(roots, o.query), at }));
   };
   return [
-    (start) => start({ matcher: isStartOrReload, effect: (_, api) => scan(api, api.getState().app.lifecycle.now) }),
-    (start) =>
-      start({
-        predicate: (action, current): action is ReturnType<typeof ticked> => ticked.match(action) && isStale(current, action.payload.at),
-        effect: ({ payload: { at } }, api) => scan(api, at),
-      }),
+    addAppListener({ matcher: isStartOrReload, effect: (_, api) => scan(api, api.getState().app.lifecycle.now) }),
+    addAppListener({
+      predicate: (action, current): action is ReturnType<typeof ticked> => ticked.match(action) && isStale(current, action.payload.at),
+      effect: ({ payload: { at } }, api) => scan(api, at),
+    }),
   ];
 }
 
@@ -84,7 +83,7 @@ export function dirtyCounts(o: { filter: Filter }): AppListener[] {
     api.dispatch(dirtyScanned(Object.fromEntries(shown.map((p) => [p, cli.countDirty(p)]))));
   };
   return [
-    (start) => start({ actionCreator: ticked, effect: (_, api) => count(api) }),
-    (start) => start({ predicate: (_, current) => shownChanged(current), effect: (_, api) => count(api) }),
+    addAppListener({ actionCreator: ticked, effect: (_, api) => count(api) }),
+    addAppListener({ predicate: (_, current) => shownChanged(current), effect: (_, api) => count(api) }),
   ];
 }

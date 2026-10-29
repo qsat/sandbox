@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AppListener, createStore } from "../createStore.ts";
+import { addAppListener, createStore } from "../createStore.ts";
 import { claudeHooks, hookReceived } from "../listeners/claude/index.ts";
 import { clock } from "../listeners/clock/index.ts";
 import { eventLog } from "../listeners/eventLog/index.ts";
@@ -50,8 +50,10 @@ test("移動の結果は visited で Store に戻る", () => {
 test("listener が出来事の途中で出した出来事は、元の出来事より後に記録される（流し直しても同じ状態になる）", () => {
   const logDir = mkdtempSync(join(tmpdir(), "agent-ws-test-"));
   // 表示中のペインで完了したときの tmux のように、完了の途中で確認を出す
-  const seesIt: AppListener = (start) =>
-    start({ actionCreator: turnFinished, effect: ({ payload: { agentId, at } }, api) => void api.dispatch(acknowledged({ agentId, at })) });
+  const seesIt = addAppListener({
+    actionCreator: turnFinished,
+    effect: ({ payload: { agentId, at } }, api) => void api.dispatch(acknowledged({ agentId, at })),
+  });
   const store = createStore({ log: eventLog({ dir: logDir }).record, listeners: [seesIt] });
   store.dispatch(agentAttached({ agentId: "a", at: 1, pid: null, cwd: dir }));
   store.dispatch(turnStarted({ agentId: "a", at: 2 }));
@@ -65,7 +67,7 @@ test("listener が出来事の途中で出した出来事は、元の出来事�
 
 test("clock は起動すると interval ごとに時間の経過を出す", async () => {
   const seen: string[] = [];
-  const record: AppListener = (start) => start({ actionCreator: ticked, effect: (action) => void seen.push(action.type) });
+  const record = addAppListener({ actionCreator: ticked, effect: (action) => void seen.push(action.type) });
   const store = createStore({ listeners: [record, ...clock({ intervalMs: 10 })] });
   await Bun.sleep(30);
   expect(seen).toEqual([]); // 起動するまでは出さない

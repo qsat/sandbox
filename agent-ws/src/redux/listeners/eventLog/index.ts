@@ -9,7 +9,7 @@
  */
 import { type ActionMatchingAnyOf, isAnyOf } from "@reduxjs/toolkit";
 import { debounce } from "../../../lib/debounce.ts";
-import type { AppListener, AppApi as ListenerApi } from "../../createStore.ts";
+import { type AppListener, addAppListener, type AppApi as ListenerApi } from "../../createStore.ts";
 import { agentEnded, agentForgotten, agentRestored, isLiveEvent } from "../../modules/app/agents/slice.ts";
 import { acknowledged } from "../../modules/app/attention/slice.ts";
 import { initialized, ticked } from "../../modules/app/lifecycle/slice.ts";
@@ -98,34 +98,31 @@ export function eventLog(o: EventLogOptions): EventLog {
   return {
     record: [
       // 状態を変えた出来事だけを記録する（流し直した出来事は記録済み）
-      (start) =>
-        start({
-          predicate: (action, current, original): action is AppendedAction =>
-            isAppended(action) && isFresh(action) && changed(current, original, action.payload.agentId),
-          effect: (action) => log.append(action.payload.agentId, action),
-        }),
+      addAppListener({
+        predicate: (action, current, original): action is AppendedAction =>
+          isAppended(action) && isFresh(action) && changed(current, original, action.payload.agentId),
+        effect: (action) => log.append(action.payload.agentId, action),
+      }),
       // エージェントが終わったら、ログごと消す
-      (start) =>
-        start({
-          actionCreator: agentEnded,
-          effect: ({ payload: { agentId } }) => {
-            log.remove(agentId);
-            offsets.delete(agentId);
-          },
-        }),
-      (start) =>
-        start({
-          actionCreator: initialized,
-          effect: ({ payload: { at } }, api) => {
-            for (const l of log.list()) load(api, l.id, l.mtimeMs, at);
-          },
-        }),
+      addAppListener({
+        actionCreator: agentEnded,
+        effect: ({ payload: { agentId } }) => {
+          log.remove(agentId);
+          offsets.delete(agentId);
+        },
+      }),
+      addAppListener({
+        actionCreator: initialized,
+        effect: ({ payload: { at } }, api) => {
+          for (const l of log.list()) load(api, l.id, l.mtimeMs, at);
+        },
+      }),
     ],
     follow: [
       // 連続した追記はまとめて取り込む
-      (start) => start({ actionCreator: initialized, effect: (_, api) => void log.watch(debounce(() => follow(api), 50)) }),
+      addAppListener({ actionCreator: initialized, effect: (_, api) => void log.watch(debounce(() => follow(api), 50)) }),
       // 見張りが取りこぼしたときの保険
-      (start) => start({ actionCreator: ticked, effect: (_, api) => follow(api) }),
+      addAppListener({ actionCreator: ticked, effect: (_, api) => follow(api) }),
     ],
   };
 }

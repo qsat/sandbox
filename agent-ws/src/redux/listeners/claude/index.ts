@@ -10,7 +10,7 @@
 import { createAction } from "@reduxjs/toolkit";
 import { debounce } from "../../../lib/debounce.ts";
 import { realPath } from "../../../lib/run.ts";
-import type { AppApi, AppListener } from "../../createStore.ts";
+import { type AppApi, type AppListener, addAppListener } from "../../createStore.ts";
 import { selectAgent, selectAgents } from "../../modules/app/agents/selector.ts";
 import { type AgentEvent, agentAttached, agentEnded, turnInterrupted } from "../../modules/app/agents/slice.ts";
 import { isStartOrTick } from "../../modules/app/lifecycle/slice.ts";
@@ -47,16 +47,15 @@ function attachment(input: HookInput, events: AgentEvent[], at: number, parent: 
 
 /** hook の入力をエージェントの出来事に変えて流す。parent: このプロセスの親（その祖先に claude 本体がいる） */
 export const claudeHooks = (o: { parent: Pid }): AppListener[] => [
-  (start) =>
-    start({
-      actionCreator: hookReceived,
-      effect: ({ payload: { input: raw, at } }, api) => {
-        const input = raw as HookInput;
-        const events = toEvents(input, at);
-        const known = selectAgent(api.getState(), input.session_id);
-        for (const e of [...attachment(input, events, at, o.parent, known), ...events]) api.dispatch(e);
-      },
-    }),
+  addAppListener({
+    actionCreator: hookReceived,
+    effect: ({ payload: { input: raw, at } }, api) => {
+      const input = raw as HookInput;
+      const events = toEvents(input, at);
+      const known = selectAgent(api.getState(), input.session_id);
+      for (const e of [...attachment(input, events, at, o.parent, known), ...events]) api.dispatch(e);
+    },
+  }),
 ];
 
 /** 中断を確かめる相手: 実行中・待ちで、会話ログの場所が分かっているエージェント */
@@ -77,7 +76,7 @@ const interrupt = (api: AppApi, agents: Agent[]) => {
 
 /** 起動したとき・時間が経ったときに、hook の届かない中断・拒否を会話ログから拾う */
 export const interruptionChecks = (): AppListener[] => [
-  (start) => start({ matcher: isStartOrTick, effect: (_, api) => interrupt(api, selectAgents(api.getState())) }),
+  addAppListener({ matcher: isStartOrTick, effect: (_, api) => interrupt(api, selectAgents(api.getState())) }),
 ];
 
 /** 見張る会話ログ（会話ログのパス → エージェント）。実行中・待ちのエージェントから決まる */
@@ -110,10 +109,9 @@ export function transcriptWatch(): AppListener[] {
     }
   };
   return [
-    (start) =>
-      start({
-        predicate: (_, current, original) => keyOf(watchedOf(current)) !== keyOf(watchedOf(original)),
-        effect: (_, api) => follow(api),
-      }),
+    addAppListener({
+      predicate: (_, current, original) => keyOf(watchedOf(current)) !== keyOf(watchedOf(original)),
+      effect: (_, api) => follow(api),
+    }),
   ];
 }

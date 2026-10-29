@@ -11,11 +11,10 @@
  *
  * 状態の形（rootReducer・RootState）は rootReducer.ts。modules（slice・selector）は I/O を知らない。thunk は使わない。
  */
-import { configureStore, createListenerMiddleware, type Dispatch, type TypedStartListening, type UnknownAction } from "@reduxjs/toolkit";
+import { addListener, configureStore, createListenerMiddleware, type Dispatch, type UnknownAction } from "@reduxjs/toolkit";
 import { type RootState, rootReducer } from "./rootReducer.ts";
 
 export type AppDispatch = Dispatch<UnknownAction>;
-export type AppStartListening = TypedStartListening<RootState, AppDispatch>;
 
 /** listener の effect が使う Store の窓口 */
 export interface AppApi {
@@ -23,8 +22,13 @@ export interface AppApi {
   getState: () => RootState;
 }
 
-/** listener の登録（Store を作るときに1回呼ばれる）。listener ごとの状態は、これを作る関数の中に持つ */
-export type AppListener = (startListening: AppStartListening) => void;
+/**
+ * listener を登録する出来事（RTK の addListener を、この Store の状態とアクションの型にしたもの）。
+ * listener の組は、これの並びとして書く。listener ごとの状態（見張り・debounce）は、組を作る関数の中に持つ。
+ * 同じ条件で同じ effect の listener は1つにまとめられるので、effect は組を作るたびに作る（モジュールの定数を使い回さない）
+ */
+export const addAppListener = addListener.withTypes<RootState, AppDispatch>();
+export type AppListener = ReturnType<typeof addAppListener>;
 
 export interface StoreParts {
   log?: AppListener[]; // 出来事の記録。ほかの listener より先に登録する
@@ -38,8 +42,8 @@ export function createStore({ log = [], listeners = [] }: StoreParts = {}) {
     // 状態もアクションも素の JSON なので、開発時の検査は省く（hook の起動を軽くする）
     middleware: (defaults) => defaults({ thunk: false, serializableCheck: false, immutableCheck: false }).prepend(listener.middleware),
   });
-  const startListening = listener.startListening.withTypes<RootState, AppDispatch>();
-  for (const listen of [...log, ...listeners]) listen(startListening);
+  // 並べた順に登録する（listener は登録した順に呼ばれる）
+  for (const add of [...log, ...listeners]) store.dispatch(add);
   return store;
 }
 

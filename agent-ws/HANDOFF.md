@@ -59,7 +59,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
       commands/       コマンドごとに listener・購読者を選んで Store を作り、出来事を伝える（list・status・seen・jump・hook・watch）。
                       どれも (Command, Context) → Store の形で、文字にはしない。types.ts に Command（判別共用体）と Context、start.ts が Store を作って起動する
       redux/
-        createStore.ts  Store のファクトリ。createStore({ log, listeners })。RTK の createListenerMiddleware に、log・listeners の順で登録する
+        createStore.ts  Store のファクトリ。createStore({ log, listeners })。listener の登録（addAppListener）を log・listeners の順に dispatch する
         rootReducer.ts  状態の形: 各モジュールの reducer を app と ui にまとめる。RootState
         modules/
           app/
@@ -74,7 +74,7 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
             watch/        watch の画面: 開いた（watchOpened）・人が選んだ行（rowSelected）・移動の結果を見せているか・読み直しの操作（reloadPressed）。
                           popup で行き先へ移れたら閉じる（selectShouldClose）。watch は visit を読むが、visit は watch を知らない
         listeners/        外部システムごと。出来事を受けて、自分の判断で I/O し、結果を出来事として戻す（RTK の listener）。
-                          関心ごとに listener の組（AppListener[]）を返す関数にし、どれを組むかはコマンドが選ぶ（オプションで分岐しない）。
+                          関心ごとに listener の組（addAppListener(...) の並び。AppListener[]）を返す関数にし、どれを組むかはコマンドが選ぶ（オプションで分岐しない）。
                           どの出来事に反応するかは actionCreator・matcher・predicate で決め、effect の中で出来事を判断する if は書かない（下の「listener の書き方」）
                           外部システムの出力の解析は、そのシステムのディレクトリの parse.ts に純粋な関数で置く（本物を動かさずにテストできる）
           eventLog/       出来事の記録・流し直し（record）・他のプロセスが書いた分の取り込み（follow）。log.ts がファイルの読み書き
@@ -116,7 +116,8 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
   - 状態の変化 → `predicate(action, current, original)`（記録は「エージェントの状態か確認の状況が変わった」、見張りは「見張る会話ログの組が変わった」、変更件数は「表示する worktree が変わった」）
   - コマンドごとの違い → listener の組を分けてコマンドが選ぶ（processLiveness・processList、repositories・dirtyCounts、eventLog の record・follow、claudeHooks・interruptionChecks・transcriptWatch）
 - effect に残る if は I/O の結果を見るものだけ（ペインが表示中か、会話ログが読めたか など）
-- effect は値を返さない（dispatch の戻り値は `void` で捨てる）。listener ごとの状態（見張り・debounce）は、組を作る関数の中に閉じ込める
+- listener は `addAppListener({ ... })`（addListener.withTypes）で書く。登録も出来事なので、組はただの値の並びになり、Store を作るときに並べた順に dispatch する
+- effect は値を返さない（dispatch の戻り値は `void` で捨てる）。listener ごとの状態（見張り・debounce）は、組を作る関数の中に閉じ込める。同じ条件・同じ effect の listener は1つにまとめられるので、effect をモジュールの定数として使い回さない
 - effect で投げた例外は listener middleware が受け止めて console.error に出す（dispatch には伝わらない）
 
 ## 設計判断とその理由

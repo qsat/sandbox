@@ -10,7 +10,7 @@
 
 import { isAllOf } from "@reduxjs/toolkit";
 import { realPath } from "../../../lib/run.ts";
-import type { AppApi, AppListener } from "../../createStore.ts";
+import { type AppApi, type AppListener, addAppListener } from "../../createStore.ts";
 import { selectAgent, selectAgents } from "../../modules/app/agents/selector.ts";
 import { turnFinished } from "../../modules/app/agents/slice.ts";
 import { selectUnseen } from "../../modules/app/attention/selector.ts";
@@ -62,31 +62,27 @@ const unseenAgents = (st: RootState) => selectAgents(st).filter((a) => a.pid && 
 const isFreshFinish = isAllOf(turnFinished, isFresh);
 
 export const tmux = (): AppListener[] => [
-  (start) =>
-    start({
-      actionCreator: destinationChosen,
-      effect: ({ payload: p }, api) => void api.dispatch(visited(visit(api, p.target, p.create, p.dryRun ?? false))),
-    }),
+  addAppListener({
+    actionCreator: destinationChosen,
+    effect: ({ payload: p }, api) => void api.dispatch(visited(visit(api, p.target, p.create, p.dryRun ?? false))),
+  }),
   // フォーカスのたびに届くので、未確認のエージェントがいるときだけ動く（いなければ ps もしない）
-  (start) =>
-    start({
-      predicate: (action, current): action is ReturnType<typeof paneFocused> =>
-        paneFocused.match(action) && unseenAgents(current).length > 0,
-      effect: ({ payload: { panePid, at } }, api) => {
-        const up = parentOf();
-        const inPane = unseenAgents(api.getState()).filter((a) => ancestry(a.pid, up).some((pid) => pid === panePid));
-        for (const a of inPane) api.dispatch(acknowledged({ agentId: a.id, at }));
-      },
-    }),
+  addAppListener({
+    predicate: (action, current): action is ReturnType<typeof paneFocused> => paneFocused.match(action) && unseenAgents(current).length > 0,
+    effect: ({ payload: { panePid, at } }, api) => {
+      const up = parentOf();
+      const inPane = unseenAgents(api.getState()).filter((a) => ancestry(a.pid, up).some((pid) => pid === panePid));
+      for (const a of inPane) api.dispatch(acknowledged({ agentId: a.id, at }));
+    },
+  }),
   // 完了して未確認になったエージェントのペインが、いま表示中なら、もう見ている
-  (start) =>
-    start({
-      predicate: (action, current): action is ReturnType<typeof turnFinished> =>
-        isFreshFinish(action) && unseenAgents(current).some((a) => a.id === action.payload.agentId),
-      effect: ({ payload: { agentId, at } }, api) => {
-        const pid = selectAgent(api.getState(), agentId)?.pid ?? undefined;
-        const pane = findPane({ title: "", name: "", pid }, cli.listPanes(), parentOf());
-        if (pane?.active) api.dispatch(acknowledged({ agentId, at }));
-      },
-    }),
+  addAppListener({
+    predicate: (action, current): action is ReturnType<typeof turnFinished> =>
+      isFreshFinish(action) && unseenAgents(current).some((a) => a.id === action.payload.agentId),
+    effect: ({ payload: { agentId, at } }, api) => {
+      const pid = selectAgent(api.getState(), agentId)?.pid ?? undefined;
+      const pane = findPane({ title: "", name: "", pid }, cli.listPanes(), parentOf());
+      if (pane?.active) api.dispatch(acknowledged({ agentId, at }));
+    },
+  }),
 ];
