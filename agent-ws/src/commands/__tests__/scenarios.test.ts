@@ -84,14 +84,14 @@ mock.module("../../ui/subscribers/notify.ts", () => ({
 }));
 
 // 差し替えた外部システムを使わせるため、コマンドは差し替えた後に読み込む
-const { hook } = await import("../commands/hook.ts");
-const { status: statusStore } = await import("../commands/status.ts");
-const { list: listStore } = await import("../commands/list.ts");
-const { seen } = await import("../commands/seen.ts");
-const { jump } = await import("../commands/jump.ts");
-const { watch } = await import("../commands/watch.ts");
-const { parseCommand } = await import("../command.ts");
-const { contextOf } = await import("../context.ts");
+const { hook } = await import("../hook.ts");
+const { status: statusStore } = await import("../status.ts");
+const { list: listStore } = await import("../list.ts");
+const { seen } = await import("../seen.ts");
+const { jump } = await import("../jump.ts");
+const { watch } = await import("../watch.ts");
+const { parseCommand } = await import("../../entry/utils/command.ts");
+const { contextOf } = await import("../../entry/utils/context.ts");
 const { statusText } = await import("../../ui/status.ts");
 const { listText } = await import("../../ui/list.ts");
 const { jumpText } = await import("../../ui/jump.ts");

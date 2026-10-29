@@ -2,9 +2,9 @@
  * コマンドライン → Command（何をするか）。引数の解釈はここだけで行う
  */
 import { parseArgs } from "node:util";
-import { attempt } from "../lib/attempt.ts";
-import type { VisitTarget } from "../redux/types/visit.ts";
-import type { Command } from "./commands/types.ts";
+import type { Command } from "../../commands/types.ts";
+import { attempt } from "../../lib/attempt.ts";
+import type { VisitTarget } from "../../redux/types/visit.ts";
 
 export const USAGE = `agent-ws — ghq 管理下のリポジトリ > worktree > エージェント を、応答状況つきで表示する
 

@@ -1,8 +1,8 @@
 /**
  * 依存の向き: 上の層は下の層だけを import する（テストのコードは除く）
  *
- *   entry（境界: cli・context・command）→ entry/commands → ui ──────────┐
- *                                                     └→ redux/middlewares ┴→ redux/createStore・rootReducer → redux/modules → redux/types・utils → lib
+ *   entry（cli と境界の補助 utils）→ commands → ui・redux/middlewares → redux/createStore・rootReducer → redux/modules → redux/types・utils → lib
+ *   （ui と redux/middlewares は互いに知らない）
  *
  * 例外は1つ: modules の selector は rootReducer.ts の RootState を型としてだけ読んでよい（状態の形は rootReducer が決めるため）。
  * 型だけなので実行時の依存は無く、slice は selector を読まないのでファイル単位の循環にもならない
@@ -21,7 +21,7 @@ type Layer = (typeof LAYERS)[number];
 
 /** ファイル → 層 */
 const LAYER_OF: [RegExp, Layer][] = [
-  [/^entry\/commands\//, "commands"],
+  [/^commands\//, "commands"],
   [/^entry\//, "entry"],
   [/^ui\//, "ui"],
   [/^redux\/middlewares\//, "middlewares"],

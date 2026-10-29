@@ -4,10 +4,10 @@
  */
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
-import type { Pid } from "../redux/types/agent.ts";
-import { isNoticeKind } from "../redux/types/attention.ts";
-import type { ColorMode, Display } from "../ui/terminal.ts";
-import type { Context } from "./commands/types.ts";
+import type { Context } from "../../commands/types.ts";
+import type { Pid } from "../../redux/types/agent.ts";
+import { isNoticeKind } from "../../redux/types/attention.ts";
+import type { ColorMode, Display } from "../../ui/terminal.ts";
 
 type Env = Record<string, string | undefined>;
 

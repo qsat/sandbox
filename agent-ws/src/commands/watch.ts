@@ -1,13 +1,13 @@
-import type { AppStore } from "../../redux/createStore.ts";
-import { claude } from "../../redux/middlewares/claude/index.ts";
-import { clock } from "../../redux/middlewares/clock/index.ts";
-import { git } from "../../redux/middlewares/git/index.ts";
-import { processes } from "../../redux/middlewares/processes/index.ts";
-import { tmux } from "../../redux/middlewares/tmux/index.ts";
-import { destinationChosen } from "../../redux/modules/ui/visit/slice.ts";
-import { reloadPressed, rowSelected, watchOpened } from "../../redux/modules/ui/watch/slice.ts";
-import type { VisitTarget } from "../../redux/types/visit.ts";
-import { statusLine } from "../../ui/subscribers/statusLine.ts";
+import type { AppStore } from "../redux/createStore.ts";
+import { claude } from "../redux/middlewares/claude/index.ts";
+import { clock } from "../redux/middlewares/clock/index.ts";
+import { git } from "../redux/middlewares/git/index.ts";
+import { processes } from "../redux/middlewares/processes/index.ts";
+import { tmux } from "../redux/middlewares/tmux/index.ts";
+import { destinationChosen } from "../redux/modules/ui/visit/slice.ts";
+import { reloadPressed, rowSelected, watchOpened } from "../redux/modules/ui/watch/slice.ts";
+import type { VisitTarget } from "../redux/types/visit.ts";
+import { statusLine } from "../ui/subscribers/statusLine.ts";
 import { start } from "./start.ts";
 import type { Context, Of } from "./types.ts";
 

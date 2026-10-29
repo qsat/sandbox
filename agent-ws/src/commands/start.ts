@@ -3,10 +3,10 @@
  * 起動したときに何をするか（ログの読み込み・スキャンなど）は、組まれた middleware がそれぞれ決める。
  * 人に見せるもの（ステータスライン・通知）は、ログから状態を組み立て終えた後に購読させる（それより後の変化だけを映す）
  */
-import { type AppMiddleware, type AppStore, createStore } from "../../redux/createStore.ts";
-import { eventLog } from "../../redux/middlewares/eventLog/index.ts";
-import { initialized } from "../../redux/modules/app/lifecycle/slice.ts";
-import type { AppSubscriber } from "../../ui/subscribers/observe.ts";
+import { type AppMiddleware, type AppStore, createStore } from "../redux/createStore.ts";
+import { eventLog } from "../redux/middlewares/eventLog/index.ts";
+import { initialized } from "../redux/modules/app/lifecycle/slice.ts";
+import type { AppSubscriber } from "../ui/subscribers/observe.ts";
 import type { Context } from "./types.ts";
 
 export interface StartOptions {

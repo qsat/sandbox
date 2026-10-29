@@ -1,7 +1,7 @@
-import type { AppStore } from "../../redux/createStore.ts";
-import { tmux } from "../../redux/middlewares/tmux/index.ts";
-import { destinationChosen } from "../../redux/modules/ui/visit/slice.ts";
-import { statusLine } from "../../ui/subscribers/statusLine.ts";
+import type { AppStore } from "../redux/createStore.ts";
+import { tmux } from "../redux/middlewares/tmux/index.ts";
+import { destinationChosen } from "../redux/modules/ui/visit/slice.ts";
+import { statusLine } from "../ui/subscribers/statusLine.ts";
 import { start } from "./start.ts";
 import type { Context, Of } from "./types.ts";
 

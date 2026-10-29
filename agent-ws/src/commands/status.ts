@@ -1,6 +1,6 @@
-import type { AppStore } from "../../redux/createStore.ts";
-import { claude } from "../../redux/middlewares/claude/index.ts";
-import { processes } from "../../redux/middlewares/processes/index.ts";
+import type { AppStore } from "../redux/createStore.ts";
+import { claude } from "../redux/middlewares/claude/index.ts";
+import { processes } from "../redux/middlewares/processes/index.ts";
 import { start } from "./start.ts";
 import type { Context } from "./types.ts";
 

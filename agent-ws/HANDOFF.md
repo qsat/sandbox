@@ -35,8 +35,8 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 「session」は Claude Code の用語として、claude の middleware の中（`session_id` など）だけで使う。
 
 ## 構成（Redux Toolkit・re-ducks。依存は矢印の向きだけ。src/__tests__/layers.test.ts で確かめている）
-    src/entry（境界: cli・context・command。引数・環境変数・標準入出力・終了コード・いまの時刻・このプロセス）
-       └→ src/entry/commands/*（コマンドごとに middleware・購読者を選んで Store を作り、出来事を伝える。結果は状態で返す）
+    src/entry（入口の cli と、境界の補助 utils。引数・環境変数・標準入出力・終了コード・いまの時刻・このプロセス）
+       └→ src/commands/*（コマンドごとに middleware・購読者を選んで Store を作り、出来事を伝える。結果は状態で返す）
              ├→ src/ui/*（人に見せる: 状態 → 文字・画面、ステータスラインの描き直し・通知）
              └→ src/redux/middlewares/*（外部システムとのやりとり。I/O の実装もそれぞれの隣に置く）
                    └→（ui も）src/redux/createStore.ts・rootReducer.ts → src/redux/modules/{app,ui}/*（ドメイン: slice・selector。I/O を知らない）
@@ -51,11 +51,12 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
     State: { app: { agents, attention, workspace, lifecycle }, ui: { visit, watch } }
 
     src/
-      entry/          ① プロセスの境界と ② コマンド
+      entry/          プロセスの境界。直下には入口だけを置く
         cli.ts        引数・環境変数・標準入力を読み、Command を match で実行し、標準出力と終了コードに書く。TUI に端末を渡す
-        context.ts    環境変数・いまの時刻・このプロセス（pid・ppid・OS）→ Context、端末 → Display。ここより内側は process も Date.now() も見ない（clock を除く）
-        command.ts    コマンドライン → Command。引数の解釈はここだけ
-        commands/     コマンドごとに middleware・購読者を選んで Store を作り、出来事を伝える（list・status・seen・jump・hook・watch）。
+        utils/        境界の補助（純粋な関数）
+          command.ts  コマンドライン → Command。引数の解釈はここだけ
+          context.ts  環境変数・いまの時刻・このプロセス（pid・ppid・OS）→ Context、端末 → Display。ここより内側は process も Date.now() も見ない（clock を除く）
+      commands/       コマンドごとに middleware・購読者を選んで Store を作り、出来事を伝える（list・status・seen・jump・hook・watch）。
                       どれも (Command, Context) → Store の形で、文字にはしない。types.ts に Command（判別共用体）と Context、start.ts が Store を作って起動する
       redux/
         createStore.ts  Store のファクトリ。createStore({ log, effects })。addAppListener・listen
@@ -180,11 +181,11 @@ waiting・asking・ready・error への遷移で通知する（tmux の display-
 | 層 | 場所 | 動かし方 | 本物 | 差し替え |
 |---|---|---|---|---|
 | 単体 | 各モジュールの `__tests__/` | `bun run check`（`bun test`） | slice・selector・middleware・描画 | middleware ごとの I/O |
-| A. シナリオ | `src/entry/__tests__/scenarios.test.ts` | `bun run check` | entry から eventLog（一時ディレクトリ）まで全部 | tmux・ps・git・通知（`mock.module`） |
+| A. シナリオ | `src/commands/__tests__/scenarios.test.ts` | `bun run check` | コマンドから eventLog（一時ディレクトリ）まで全部 | tmux・ps・git・通知（`mock.module`） |
 | B. 端末込みの E2E | `src/entry/__tests__/e2e/` | `bun run e2e`（AGENT_WS_E2E=1。check では飛ばす） | tmux（script で接続したクライアントつき）・ps・git・hooks-config | claude（記録した hook 入力を流す偽物） |
 | C. スモーク | `scripts/smoke-claude.sh` | `bun run smoke [--dist] [--keep]`（手で動かす） | Claude Code も含めて全部 | なし（モデルを呼ぶ） |
 
-- A は、本物の Claude Code から記録した hook 入力（`src/redux/middlewares/claude/__tests__/fixtures/claude-code-2.1.309-turns.jsonl` と、中断を書いた会話ログ `transcript-deny.jsonl`・`transcript-esc.jsonl`）を entry のコマンド（commands/*）に流して ui の表示で読み、印・一覧・通知・jump の行き先・popup が閉じるかを確かめる。1つのセッションの流れを、起動 → 完了 → フォーカスで確認 → 許可 → 表示中の完了 → 拒否 → 質問 → Esc → 終了の順にたどる
+- A は、本物の Claude Code から記録した hook 入力（`src/redux/middlewares/claude/__tests__/fixtures/claude-code-2.1.309-turns.jsonl` と、中断を書いた会話ログ `transcript-deny.jsonl`・`transcript-esc.jsonl`）をコマンド（commands/*）に流して ui の表示で読み、印・一覧・通知・jump の行き先・popup が閉じるかを確かめる。1つのセッションの流れを、起動 → 完了 → フォーカスで確認 → 許可 → 表示中の完了 → 拒否 → 質問 → Esc → 終了の順にたどる
 - B の偽の claude（`fake-claude.ts`）は `claude` という名前のシンボリックリンクから起動する。ps からは `bun …/claude` に見えるので本物と同じくエージェントとして見つかり、hook はその子として動くので本体の pid も本物と同じく祖先から分かる。hooks は `hooks-config` の出力を settings.json に置き、その matcher どおりに流す。tmux の設定は「セットアップ」と同じ。ステータスラインは status-right を `SR[…]` で囲み、クライアントの端末に描かれた中身から読む
   - 壊したら落ちることを確かめた: `refresh-client -S` を呼ばない → ステータスラインが消えない（A でも落ちる）、popup を閉じない → 閉じない
   - tmux の癖: `display-popup` はポップアップが閉じるまで戻らない。新しいペインのシェルはログインシェルなので /etc/profile が PATH を上書きする（default-command で避けている）
