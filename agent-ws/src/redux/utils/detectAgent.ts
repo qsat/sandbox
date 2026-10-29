@@ -1,0 +1,19 @@
+import { basename } from "node:path";
+import type { AgentKind } from "../types/agent.ts";
+
+/** 見つけるエージェント（今は claude だけ。増やすときは AgentKind とここに足す） */
+const AGENTS: [AgentKind, RegExp][] = [["claude", /^claude$|@anthropic-ai\/claude-code|\/claude\/versions\//]];
+const RUNTIMES = /^(node|bun|deno|npx)$/;
+
+/** 実行ファイル名でエージェントを判定する。node 等のランタイム経由ならスクリプトのパスで判定 */
+export function detectAgent(command: string): AgentKind | null {
+  const target = scriptOf(command);
+  return AGENTS.find(([, re]) => re.test(target) || re.test(basename(target)))?.[0] ?? null;
+}
+
+/** 実行したもの: ランタイム経由ならスクリプトのパス、そうでなければ実行ファイル */
+function scriptOf(command: string): string {
+  const [exe = "", ...args] = command.split(/\s+/);
+  if (!RUNTIMES.test(basename(exe))) return exe;
+  return args.find((a) => !a.startsWith("-")) ?? "";
+}
