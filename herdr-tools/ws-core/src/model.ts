@@ -4,6 +4,11 @@
 // 事実の出どころは herdr-core（エージェント）と git / ghq（作業場所）。ここではそれを正規化した形だけを扱う。
 // どう見せるか・どう入るか（tmux / Herdr app）は知らない。
 
+import { basename } from "@herdr-tools/utils/basename";
+import { dirname } from "@herdr-tools/utils/dirname";
+import { isUnderPath } from "@herdr-tools/utils/is-under-path";
+import { trimTrailingSlash } from "@herdr-tools/utils/trim-trailing-slash";
+
 export type AgentStatus = "working" | "blocked" | "idle" | "done" | "error" | "unknown";
 
 /** 実行環境（AgentRuntime）が報告するエージェントの事実 */
@@ -100,50 +105,17 @@ export function attentionRank(a: { status: AgentStatus; needsResume: boolean }):
 }
 
 // ---------------------------------------------------------------------------
-// パス
+// パス（ドメインに関わるものだけ。汎用のパス操作は utils）
 // ---------------------------------------------------------------------------
-
-export function basename(p: string): string {
-  const t = p.replace(/\/+$/g, "");
-  const i = t.lastIndexOf("/");
-  return i < 0 ? t : t.slice(i + 1);
-}
-
-export function dirname(p: string): string {
-  const t = p.replace(/\/+$/g, "");
-  const i = t.lastIndexOf("/");
-  if (i < 0) return ".";
-  if (i === 0) return "/";
-  return t.slice(0, i);
-}
-
-/**
- * child が base そのものか base/ 配下か。
- * 単純な前方一致だと ~/ghq/x/repo と ~/ghq/x/repo=branch が混ざるので、境界で判定する。
- */
-export function isUnderPath(child: string, base: string): boolean {
-  const b = base.replace(/\/+$/g, "");
-  return child === b || child.startsWith(b + "/");
-}
-
-/** candidates のうち p を含む最も深いもの */
-export function findContainingPath(p: string, candidates: Iterable<string>): string | undefined {
-  let best: string | undefined;
-  for (const c of candidates) {
-    if (isUnderPath(p, c) && (!best || c.length > best.length)) best = c;
-  }
-  return best;
-}
 
 /** git common dir から本体リポジトリのパスを出す（.git の親。bare ならそのもの） */
 export function workspacePathFromCommonDir(commonDir: string): string {
   return basename(commonDir) === ".git" ? dirname(commonDir) : commonDir;
 }
 
+/** 一覧での workspace の名前（ghq root からの相対、無理なら ~ 表記） */
 export function displayName(path: string, root: string | undefined, home: string | undefined): string {
-  if (root && isUnderPath(path, root) && path !== root.replace(/\/+$/g, "")) {
-    return path.slice(root.replace(/\/+$/g, "").length + 1);
-  }
-  if (home && isUnderPath(path, home)) return "~" + path.slice(home.replace(/\/+$/g, "").length);
+  if (root && isUnderPath(path, root) && path !== trimTrailingSlash(root)) return path.slice(trimTrailingSlash(root).length + 1);
+  if (home && isUnderPath(path, home)) return "~" + path.slice(trimTrailingSlash(home).length);
   return path;
 }

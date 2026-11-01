@@ -1,10 +1,11 @@
 // 木の組み立てと参照の解決。I/O なし。
 
+import { findContainingPath } from "@herdr-tools/utils/find-containing-path";
+import { isUnderPath } from "@herdr-tools/utils/is-under-path";
+import { trimTrailingSlash } from "@herdr-tools/utils/trim-trailing-slash";
 import {
   attentionRank,
   displayName,
-  findContainingPath,
-  isUnderPath,
   needsResume,
   workspacePathFromCommonDir,
   type AgentNode,
@@ -68,7 +69,7 @@ export function buildTree(input: BuildInput): Tree {
   const keyOf = (p: string): { key: string; info?: PathInfo } => {
     const info = infoByPath.get(p);
     if (info?.exists && info.toplevel) return { key: info.toplevel, info };
-    return { key: p.replace(/\/+$/g, "") || p, info };
+    return { key: trimTrailingSlash(p), info };
   };
 
   const ensure = (p: string, fallbackWorkspace?: string): WtAcc => {
@@ -166,8 +167,7 @@ export function makeLocator(tree: Tree, infos: PathInfo[]): Locate {
   const byPath = new Map<string, Located>();
   for (const workspace of tree.workspaces) for (const worktree of workspace.worktrees) byPath.set(worktree.path, { workspace, worktree });
   return (path: string) => {
-    const p = path.replace(/\/+$/g, "") || path;
-    const key = infoByPath.get(path)?.toplevel ?? p;
+    const key = infoByPath.get(path)?.toplevel ?? trimTrailingSlash(path);
     const hit = byPath.get(key);
     if (hit) return hit;
     const containing = findContainingPath(key, byPath.keys());

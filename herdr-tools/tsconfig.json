@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "types": ["bun"]
   },
-  "include": ["ws-core", "tmux", "ws", "test"]
+  "include": ["utils", "ws-core", "tmux", "herdr-app", "ws", "test"]
 }

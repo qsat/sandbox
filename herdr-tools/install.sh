@@ -13,14 +13,15 @@ run() { echo "+ $*"; [ "$DRY" = 1 ] || "$@"; }
 BIN_DIR="${WS_BIN_DIR:-$HOME/.local/bin}"
 APP_DIR="${HERDR_APP_DIR:-$HOME/.config/herdr-app}"
 
-echo "== ws をビルドして $BIN_DIR/ws に置く"
+echo "== ws と mod をビルドする（dist/ws、dist/mods/agent-board/）"
 run bash -c "cd '$HERE' && bun install --frozen-lockfile >/dev/null && bun run build"
+echo "== ws を $BIN_DIR/ws に置く"
 run mkdir -p "$BIN_DIR"
 run cp "$HERE/dist/ws" "$BIN_DIR/ws"
 
-echo "== mod を $APP_DIR/mods/agent-board に置く"
+echo "== mod（バンドル済みの main.js と mod.json）を $APP_DIR/mods/agent-board に置く"
 run mkdir -p "$APP_DIR/mods/agent-board" "$APP_DIR/layouts"
-run cp "$HERE/herdr-app/mod/agent-board/main.js" "$HERE/herdr-app/mod/agent-board/mod.json" "$APP_DIR/mods/agent-board/"
+run cp "$HERE/dist/mods/agent-board/main.js" "$HERE/dist/mods/agent-board/mod.json" "$APP_DIR/mods/agent-board/"
 if [ -e "$APP_DIR/layouts/agents.json" ]; then
   echo "  (layouts/agents.json は既にあるので触らない)"
 else

@@ -1,0 +1,11 @@
+{
+  "name": "@herdr-tools/herdr-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Herdr app の mod（agent-board）。ws を exec するクライアントで、bun build で1ファイルにまとめて配る",
+  "dependencies": {
+    "@herdr-tools/utils": "workspace:*",
+    "@herdr-tools/ws-core": "workspace:*"
+  }
+}

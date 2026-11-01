@@ -9,12 +9,25 @@
         "typescript": "^7.0.2",
       },
     },
+    "herdr-app": {
+      "name": "@herdr-tools/herdr-app",
+      "version": "0.1.0",
+      "dependencies": {
+        "@herdr-tools/utils": "workspace:*",
+        "@herdr-tools/ws-core": "workspace:*",
+      },
+    },
     "tmux": {
       "name": "@herdr-tools/tmux",
       "version": "0.1.0",
       "dependencies": {
+        "@herdr-tools/utils": "workspace:*",
         "@herdr-tools/ws-core": "workspace:*",
       },
+    },
+    "utils": {
+      "name": "@herdr-tools/utils",
+      "version": "0.1.0",
     },
     "ws": {
       "name": "@herdr-tools/ws",
@@ -24,16 +37,24 @@
       },
       "dependencies": {
         "@herdr-tools/tmux": "workspace:*",
+        "@herdr-tools/utils": "workspace:*",
         "@herdr-tools/ws-core": "workspace:*",
       },
     },
     "ws-core": {
       "name": "@herdr-tools/ws-core",
       "version": "0.1.0",
+      "dependencies": {
+        "@herdr-tools/utils": "workspace:*",
+      },
     },
   },
   "packages": {
+    "@herdr-tools/herdr-app": ["@herdr-tools/herdr-app@workspace:herdr-app"],
+
     "@herdr-tools/tmux": ["@herdr-tools/tmux@workspace:tmux"],
+
+    "@herdr-tools/utils": ["@herdr-tools/utils@workspace:utils"],
 
     "@herdr-tools/ws": ["@herdr-tools/ws@workspace:ws"],
 

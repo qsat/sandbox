@@ -4,15 +4,11 @@
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { expandHome } from "@herdr-tools/utils/expand-home";
+import { mapLimit } from "@herdr-tools/utils/map-limit";
+import { run } from "@herdr-tools/utils/run";
 import type { PathInfo } from "../model";
 import type { WorkspaceSource } from "../ports";
-import { mapLimit, run } from "../util/exec";
-
-export function expandHome(p: string): string {
-  if (p === "~") return homedir();
-  if (p.startsWith("~/")) return join(homedir(), p.slice(2));
-  return p;
-}
 
 function isDir(p: string): boolean {
   try {

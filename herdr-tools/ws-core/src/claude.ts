@@ -1,6 +1,6 @@
 // エージェントプログラム（Claude Code）についての知識。
 
-import { shellQuote } from "./util/exec";
+import { shellQuote } from "@herdr-tools/utils/shell-quote";
 
 /** 会話を再開するコマンド */
 export function resumeCommand(bin: string, sessionId: string): string {

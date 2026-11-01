@@ -1,8 +1,10 @@
 // 依存の向きの検査:
-//   ws-core    … 外部パッケージに依存しない。事実の出どころ（herdr-core、git / ghq）は知ってよいが、
+//   utils      … どのパッケージにも依存しない共通関数（1ファイル1関数）
+//   ws-core    … utils だけ。事実の出どころ（herdr-core、git / ghq）は知ってよいが、
 //                クライアント（tmux、Herdr app）の名前は出さない
-//   tmux       … ws-core だけ。herdr-core（hc）を直接触らない
-//   herdr-app  … Herdr app の mod。ws を exec するだけで、このリポジトリのコードを import しない
+//   tmux       … ws-core と utils。herdr-core（hc）を直接触らない
+//   herdr-app  … Herdr app の mod。ws-core の純粋なモデルと utils だけを使い、ws とは exec で話す。
+//                バンドル結果（main.js）は Herdr app の API（herdr / gpui-kit）以外を import しない
 //   ws（CLI）  … すべてをつなぐ
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -40,7 +42,7 @@ function check(pkg: string, allowed: string[]) {
   for (const f of files(join(ROOT, pkg, "src"))) {
     for (const spec of imports(readFileSync(f, "utf8"))) {
       if (spec.startsWith(".") || BUILTIN.test(spec)) continue;
-      if (!allowed.includes(spec)) bad.push(`${relative(ROOT, f)}: ${spec}`);
+      if (!allowed.some((a) => (a.endsWith("/*") ? spec.startsWith(a.slice(0, -1)) : spec === a))) bad.push(`${relative(ROOT, f)}: ${spec}`);
     }
   }
   return bad;
@@ -57,9 +59,14 @@ function codeHits(dir: string, pattern: RegExp): string[] {
   return hits;
 }
 
+const UTILS = "@herdr-tools/utils/*";
+
 describe("依存の向き", () => {
-  test("ws-core は外部パッケージに依存しない", () => expect(check("ws-core", [])).toEqual([]));
-  test("tmux は ws-core だけ", () => expect(check("tmux", ["@herdr-tools/ws-core"])).toEqual([]));
+  test("utils はどこにも依存しない", () => expect(check("utils", [])).toEqual([]));
+  test("ws-core は utils だけ", () => expect(check("ws-core", [UTILS])).toEqual([]));
+  test("tmux は ws-core と utils だけ", () => expect(check("tmux", ["@herdr-tools/ws-core", UTILS])).toEqual([]));
+  test("herdr-app は ws-core の純粋なモデルと utils、Herdr app の API だけ", () =>
+    expect(check("herdr-app", ["@herdr-tools/ws-core/model", UTILS, "herdr", "gpui-kit"])).toEqual([]));
 
   test("ws-core のコードにクライアント（tmux / Herdr app）が出てこない", () => {
     expect(codeHits(join(ROOT, "ws-core", "src"), /tmux|herdr-app|gpui|agent-board/i)).toEqual([]);
@@ -69,10 +76,25 @@ describe("依存の向き", () => {
     expect(codeHits(join(ROOT, "tmux", "src"), /\bhc\b|HC_|herdr(?!-tools)|HerdrRuntime/i)).toEqual([]);
   });
 
-  test("Herdr app の mod は Herdr app の API だけを import する（ws とは exec で話す）", () => {
+  test("utils は1ファイル1関数（型だけのファイルは可）", () => {
     const bad: string[] = [];
-    for (const f of files(join(ROOT, "herdr-app", "mod", "agent-board")))
-      for (const spec of imports(readFileSync(f, "utf8"))) if (!["herdr", "gpui-kit"].includes(spec)) bad.push(`${relative(ROOT, f)}: ${spec}`);
+    for (const f of files(join(ROOT, "utils", "src"))) {
+      const n = (readFileSync(f, "utf8").match(/^export (async )?function /gm) ?? []).length;
+      if (n > 1) bad.push(`${relative(ROOT, f)}: ${n} functions`);
+    }
     expect(bad).toEqual([]);
+  });
+
+  test("mod のバンドルは Herdr app の API だけを import し、Node / Bun の API を含まない", async () => {
+    const out = await Bun.build({
+      entrypoints: [join(ROOT, "herdr-app", "src", "agent-board", "main.ts")],
+      format: "esm",
+      target: "browser",
+      external: ["herdr", "gpui-kit"],
+    });
+    expect(out.success).toBe(true);
+    const code = await out.outputs[0]!.text();
+    expect([...new Set(imports(code))].sort()).toEqual(["gpui-kit", "herdr"]);
+    expect(code).not.toMatch(/\bBun\.|process\.|require\(|node:/);
   });
 });

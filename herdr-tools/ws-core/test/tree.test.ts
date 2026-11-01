@@ -2,8 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   buildTree,
   collectCandidatePaths,
-  findContainingPath,
-  isUnderPath,
   makeLocator,
   needsResume,
   planPrune,
@@ -39,18 +37,6 @@ const agents: AgentRecord[] = [
 
 const tree = (opts: { all?: boolean; include?: string[] } = {}) =>
   buildTree({ agents, infos, entries: [API, FEAT, WEB], root: "/Users/me/ghq", home: "/Users/me", all: !!opts.all, include: opts.include });
-
-describe("パス境界", () => {
-  test("repo と repo=branch を混ぜない", () => {
-    expect(isUnderPath(FEAT, API)).toBe(false);
-    expect(isUnderPath(`${API}/src`, API)).toBe(true);
-    expect(isUnderPath(API, API)).toBe(true);
-  });
-  test("最も深いものを選ぶ", () => {
-    expect(findContainingPath(`${FEAT}/src/x`, [API, FEAT])).toBe(FEAT);
-    expect(findContainingPath("/tmp/x", [API])).toBeUndefined();
-  });
-});
 
 describe("要再開", () => {
   const base = agent({ id: "t1", sessionId: "abc", programLost: true });

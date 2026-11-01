@@ -3,7 +3,8 @@
 // 判断と herdr-core の扱いは ws-core に、tmux での移動と表示は tmux/ にある。ここはつなぐだけ。
 
 import { resolve as resolvePath } from "node:path";
-import { expandHome, looksLikePath } from "@herdr-tools/ws-core";
+import { expandHome } from "@herdr-tools/utils/expand-home";
+import { looksLikePath } from "@herdr-tools/ws-core";
 import { renderText, runUi, withTmux } from "@herdr-tools/tmux";
 import { compose } from "./src/compose";
 

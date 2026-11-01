@@ -1,6 +1,8 @@
 // tmux コマンドとの境界。ペインオプションに 3.0 以上、display-popup に 3.2 以上が必要。
 
-import { run, runOk, runInteractive } from "@herdr-tools/ws-core";
+import { run } from "@herdr-tools/utils/run";
+import { runInteractive } from "@herdr-tools/utils/run-interactive";
+import { runOk } from "@herdr-tools/utils/run-ok";
 import { AGENT_PANE_OPTION, type TmuxClient, type TmuxFacts, type TmuxPane, type TmuxSession } from "./model";
 
 // tmux は -F の出力中のタブなど制御文字を _ に置き換えるので、印字可能な区切りを使う

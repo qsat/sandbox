@@ -6,6 +6,5 @@ export * from "./tree";
 export * from "./ports";
 export * from "./claude";
 export * from "./service";
-export { GitWorkspaceSource, expandHome, type GitSourceOptions } from "./adapters/git";
+export { GitWorkspaceSource, type GitSourceOptions } from "./adapters/git";
 export { HerdrRuntime, type HerdrRuntimeOptions } from "./herdr-core/runtime";
-export { run, runOk, runInteractive } from "./util/exec";

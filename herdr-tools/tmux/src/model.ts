@@ -2,7 +2,8 @@
 // ws-core の木（Workspace > Worktree > Agent）に、tmux の事実（セッション・ペイン・クライアント）を索引で添える。
 // 実行環境（herdr-core など）のことは知らない。会話に入るコマンドや再開は呼び出し側から渡される。
 
-import { basename, byAttention, type AgentNode, type Locate, type Resolved, type Tree, type WorktreeNode } from "@herdr-tools/ws-core";
+import { basename } from "@herdr-tools/utils/basename";
+import { byAttention, type AgentNode, type Locate, type Resolved, type Tree, type WorktreeNode } from "@herdr-tools/ws-core";
 
 export interface TmuxSession {
   name: string;

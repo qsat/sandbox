@@ -1,7 +1,8 @@
 // AgentRuntime の herdr-core 実装（実行環境は herdr-core に一元化しているので、本番の実装はこれだけ）。
 // ドメインの言葉（workspace / worktree / 会話ID / プログラム喪失）と herdr-core の言葉（ラベル / 端末名 / foreground）の翻訳はここに集める。
 
-import { basename, type AgentRecord } from "../model";
+import { basename } from "@herdr-tools/utils/basename";
+import type { AgentRecord } from "../model";
 import type { AgentRuntime, AgentStartSpec } from "../ports";
 import { Hc, type HcTerminal } from "./hc";
 

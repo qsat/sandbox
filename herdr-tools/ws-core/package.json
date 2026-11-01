@@ -4,5 +4,11 @@
   "private": true,
   "type": "module",
   "description": "Workspace > Worktree > Agent のドメインとユースケース（herdr-core と git の上に立ち、tmux / Herdr app は知らない）",
-  "exports": { ".": "./src/index.ts" }
+  "exports": {
+    ".": "./src/index.ts",
+    "./model": "./src/model.ts"
+  },
+  "dependencies": {
+    "@herdr-tools/utils": "workspace:*"
+  }
 }

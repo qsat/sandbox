@@ -1,6 +1,12 @@
 // 行モデル: 木を「画面の1行ずつ」に平らにする。popup と ws list のテキスト出力で使う。
 
-import { attentionRank, basename, byAttention, type AgentNode, type Tree, type WorktreeNode } from "@herdr-tools/ws-core";
+import { agentTags } from "@herdr-tools/utils/agent-tags";
+import { basename } from "@herdr-tools/utils/basename";
+import { statusIcon } from "@herdr-tools/utils/status-icon";
+import { statusLabel } from "@herdr-tools/utils/status-label";
+import type { Tag } from "@herdr-tools/utils/tag";
+import { worktreeTags } from "@herdr-tools/utils/worktree-tags";
+import { attentionRank, byAttention, type AgentNode, type Tree, type WorktreeNode } from "@herdr-tools/ws-core";
 import type { TmuxIndex } from "../model";
 
 export type Row =
@@ -14,53 +20,33 @@ export interface ViewOptions {
   color: boolean;
 }
 
-const ICON: Record<string, string> = {
-  blocked: "▲",
-  error: "✖",
-  idle: "○",
-  working: "●",
-  done: "✔",
-  unknown: "?",
-};
-
-const COLOR: Record<string, string> = {
-  blocked: "\x1b[33m",
-  error: "\x1b[31m",
-  idle: "\x1b[36m",
-  working: "\x1b[32m",
-  done: "\x1b[90m",
-  unknown: "\x1b[90m",
-};
-const DIM = "\x1b[2m";
+const STATUS_COLOR: Record<string, string> = { blocked: "\x1b[33m", error: "\x1b[31m", idle: "\x1b[36m", working: "\x1b[32m" };
+const TONE: Record<Tag["tone"], string> = { strong: "\x1b[1m", muted: "\x1b[2m", danger: "\x1b[31m" };
+const GRAY = "\x1b[90m";
 const BOLD = "\x1b[1m";
 const RESET = "\x1b[0m";
+
+function paint(color: boolean, code: string, s: string): string {
+  return color ? code + s + RESET : s;
+}
+
+function tagsText(tags: Tag[], color: boolean): string {
+  return tags.map((t) => paint(color, TONE[t.tone], t.text)).join(" ");
+}
 
 function rankOfWorktree(wt: WorktreeNode): number {
   return Math.min(99, ...wt.agents.map(attentionRank));
 }
 
 export function agentLabel(a: AgentNode, idx: TmuxIndex, color: boolean): string {
-  const c = (code: string, s: string) => (color ? code + s + RESET : s);
-  const status = a.status === "blocked" && a.kind ? `blocked(${a.kind})` : a.status;
-  const tags: string[] = [];
-  if (a.needsResume) tags.push(c(BOLD, "要再開"));
-  if (!idx.isAttached(a.id)) tags.push(c(DIM, "未attach"));
-  if (a.missingLocation) tags.push(c(COLOR.error!, "場所消失"));
-  if (a.parent) tags.push(c(DIM, `子:${a.parent}`));
-  if (!a.alive) tags.push(c(DIM, "終了"));
-  const icon = c(COLOR[a.status] ?? "", ICON[a.status] ?? "?");
-  return `${icon} ${a.id.padEnd(4)} ${a.name}  ${c(COLOR[a.status] ?? "", status)}${tags.length ? "  " + tags.join(" ") : ""}`;
+  const sc = STATUS_COLOR[a.status] ?? GRAY;
+  const tags = tagsText(agentTags(a, idx.isAttached(a.id)), color);
+  return `${paint(color, sc, statusIcon(a.status))} ${a.id.padEnd(4)} ${a.name}  ${paint(color, sc, statusLabel(a))}${tags ? "  " + tags : ""}`;
 }
 
 export function worktreeLabel(wt: WorktreeNode, idx: TmuxIndex, color: boolean): string {
-  const c = (code: string, s: string) => (color ? code + s + RESET : s);
   const name = basename(wt.path);
-  const parts = [wt.isMain ? c(BOLD, name) : name];
-  if (wt.branch) parts.push(c(DIM, `[${wt.branch}]`));
-  const session = idx.sessionOf(wt.path);
-  if (session) parts.push(c(DIM, session.attached ? "tmux*" : "tmux"));
-  if (!wt.exists) parts.push(c(COLOR.error!, "場所消失"));
-  return parts.join(" ");
+  return [wt.isMain ? paint(color, BOLD, name) : name, tagsText(worktreeTags(wt, idx.sessionOf(wt.path)), color)].filter(Boolean).join(" ");
 }
 
 export function toRows(tree: Tree, idx: TmuxIndex, opts: ViewOptions): Row[] {

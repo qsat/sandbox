@@ -4,7 +4,8 @@
 // API はプレビュー版（protocol generation 1）なので、返り値の形の揺れは normalizeTerminal で吸収する。
 
 import type { AgentStatus } from "../model";
-import { run, runOk } from "../util/exec";
+import { run } from "@herdr-tools/utils/run";
+import { runOk } from "@herdr-tools/utils/run-ok";
 
 /** herdr-core の端末（terminal.list / terminal.get / hc ls --json を正規化したもの） */
 export interface HcTerminal {

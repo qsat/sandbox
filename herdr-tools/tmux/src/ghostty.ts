@@ -1,7 +1,7 @@
 // Ghostty: tmux を表示する端末（macOS）。セッションの永続は持たない（1.4.0 時点）ので、tmux の窓として扱う。
 
 import { platform } from "node:os";
-import { run } from "@herdr-tools/ws-core";
+import { run } from "@herdr-tools/utils/run";
 
 const isMac = platform() === "darwin";
 

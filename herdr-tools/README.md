@@ -19,10 +19,20 @@
                            事実の出どころ: herdr-core/（hc の JSON-RPC / CLI）、adapters/git.ts（ghq / git）
 ```
 
-依存の向きは `ws → {ws-core, tmux}`、`tmux → ws-core` だけ。Herdr app の mod はコードを共有せず、`ws` を exec するだけ。
-Bun workspaces でパッケージを分け、各パッケージの `node_modules` には宣言した依存しか入らない。
-さらに `test/architecture.test.ts` が import と識別子を検査する（ws-core にクライアントの名前が出てこない、
-tmux が hc を直接触らない、mod が Herdr app の API 以外を import しない）。
+依存の向きは `ws → {ws-core, tmux}`、`tmux → ws-core`、`herdr-app → ws-core/model`（純粋なモデルだけ）、
+そして全員 → `utils`。utils はどこにも依存しない。Herdr app の mod は実行時には `ws` を exec して話す。
+
+- Bun workspaces でパッケージを分け、各パッケージの `node_modules` には宣言した依存しか入らない
+- `test/architecture.test.ts` が import と識別子を検査する（ws-core にクライアントの名前が出てこない、tmux が hc を直接触らない、
+  utils は1ファイル1関数、mod のバンドルは Herdr app の API 以外を import せず Node / Bun の API を含まない）
+
+**utils**（`utils/src/`）は依存を持たない共通関数を1ファイル1関数で置き、`@herdr-tools/utils/<name>` で関数単位に import する
+（パス操作、プロセス実行、クォート、並列 map、表示の部品＝状態アイコン・状態の文言・エージェント／worktree のタグ）。
+表示の部品は tmux の popup と Herdr app の mod が同じものを使うので、両者の見た目の規則が食い違わない。
+注意が要る順（`attentionRank`）はドメインのルールなので ws-core に置き、mod は `@herdr-tools/ws-core/model` から使う。
+
+**mod は TypeScript で書き、`bun build` で1ファイルにまとめる**（`dist/mods/agent-board/main.js`）。
+Herdr app の JavaScript は Node ではないので、`herdr` / `gpui-kit` だけを外部 import として残し、utils と ws-core のモデルは中に取り込む。
 
 ws-core の中の `AgentRuntime` / `WorkspaceSource` はインターフェースだが、本番の実装は ws-core 自身が持つ
 （`herdr-core/runtime.ts` と `adapters/git.ts`）。切ってあるのはユースケースの単体テストで偽物に差し替えるため。
@@ -40,7 +50,11 @@ ws-core の中の `AgentRuntime` / `WorkspaceSource` はインターフェース
 | `ws-core/src/herdr-core/runtime.ts` | `HerdrRuntime`: herdr-core の言葉（ラベル `ws` / `wt` / `claude.session`、端末名規則、foreground がシェル＝プログラム喪失）とドメインの言葉の翻訳 |
 | `ws-core/src/herdr-core/hc.ts` | hc クライアント（`hc connect` の JSON-RPC、CLI、返り値の正規化） |
 | `ws-core/test/stub/` | E2E 用のスタブ herdr-core |
-| `herdr-app/mod/agent-board/`, `herdr-app/layouts/` | Herdr app の mod とレイアウト（`ws list --json` の利用者） |
+| `utils/src/` | 共通関数（1ファイル1関数） |
+| `herdr-app/src/agent-board/board.ts` | mod の純粋なロジック（`ws list --json` に terminals() の即時の状態を重ねて行にする、操作 → ws の呼び出し） |
+| `herdr-app/src/agent-board/main.ts` | mod 本体（Herdr app の API を使うアダプタ）。バンドルして `main.js` になる |
+| `herdr-app/src/herdr-app.d.ts` | `herdr` / `gpui-kit` の仮の型宣言（手元では本物の d.ts に置き換える） |
+| `herdr-app/mod/agent-board/mod.json`, `herdr-app/layouts/` | mod の置き場所の指定とレイアウト |
 | `tmux/src/model.ts` | tmux の事実（セッション・ペイン・クライアント）、木への索引、`ws go` / `ws panes` の計画、tm のセッション名規則 |
 | `tmux/src/navigator.ts` | `TmuxNavigator`: 計画を tmux で実行。再開は `WsCore.resume`、会話ペインのコマンドは `AgentRuntime.attachCommand` から受け取る |
 | `tmux/src/tmux.ts`, `ghostty.ts` | tmux コマンド、Ghostty（tmux を表示する端末） |
@@ -58,7 +72,7 @@ ws-core の中の `AgentRuntime` / `WorkspaceSource` はインターフェース
 2. Herdr app（herdr-core を含む）を入れ、シェルで `hc ls` が動くことを確認する
 3. `./install.sh`（`--dry-run` で内容だけ確認できる）
    - `ws` をビルドして `~/.local/bin/ws` に置く（`bun build --compile` の単一バイナリ）
-   - mod を `~/.config/herdr-app/mods/agent-board/` に、レイアウトを `~/.config/herdr-app/layouts/agents.json` に置く
+   - mod をバンドル（`dist/mods/agent-board/`）して `~/.config/herdr-app/mods/agent-board/` に、レイアウトを `~/.config/herdr-app/layouts/agents.json` に置く
    - `herdr-app` があれば `herdr-app check` を通す
 4. `ws/config/claude-settings.json` の SessionStart hook を `~/.claude/settings.json` に足す
 5. `tmux/config/tmux.conf` のキー（`prefix a` 一覧、`prefix A` 全ペイン表示）を `~/.tmux.conf` に足す
@@ -136,20 +150,21 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 | `terminal.list` の返り値の形 | `ws-core/src/herdr-core/hc.ts` の `normalizeTerminal` で吸収。RPC が失敗したら `hc ls --json` にフォールバックする（その場合ラベルが無く cwd から推定） |
 | `hc run --bg` の出力 | 出力には依存せず、起動後に名前で引き直してアドレスを得る |
 | `open -na Ghostty --args -e tmux attach -t <session>` | `tmux/src/ghostty.ts` の `ghosttyNewWindow` |
-| mod の API（`herdr.d.ts` / `gpui-kit.d.ts`） | `herdr-app/mod/agent-board/main.js` の「[2] アダプタ」だけ直す。判断ロジック（[1]）はテスト済み |
+| mod の API（`herdr.d.ts` / `gpui-kit.d.ts`） | `herdr-app/src/herdr-app.d.ts` を本物の d.ts に置き換え、型エラーが出たら `main.ts` だけ直す。判断ロジック（`board.ts`）はテスト済み |
 
-**mod の注意**: この環境には Herdr app が無いため、`main.js` の描画部分（[2] アダプタ）は設計書に書かれた API 名
+**mod の注意**: この環境には Herdr app が無いため、`main.ts`（アダプタ）は設計書に書かれた API 名
 （`terminals()` / `exec()` / `shared` / `setShared` / cx のタイマー）を元にした下書き。UI 部品の呼び方（`ui.div()…` など）は
-手元の `gpui-kit.d.ts` に合わせて直し、`herdr-app check` を通すこと。行の組み立てと ws の呼び出し方（[1]）はテスト済みで、そのまま使える。
+手元の `gpui-kit.d.ts` に合わせて直し、`bun run build:mod` のあと `herdr-app check` を通すこと。
 
 ## 開発
 
 ```sh
 bun install
-bun test            # ws-core（herdr-core の翻訳を含む）/ tmux / mod / アーキテクチャの検査
+bun test            # utils / ws-core（herdr-core の翻訳を含む）/ tmux / mod / アーキテクチャの検査
 bun run typecheck
 bun run e2e         # スタブの herdr-core と実際の tmux（専用ソケット）で全コマンドを通す
-bun run build       # dist/ws（単一バイナリ）
+bun run build       # dist/ws（単一バイナリ）と dist/mods/agent-board/（バンドルした mod）
+bun run build:mod   # mod だけ
 ```
 
 E2E は `git worktree` で `repo` と `repo=branch` を横並びに作り、tmux のコントロールモードのクライアントを切り替え対象にして、

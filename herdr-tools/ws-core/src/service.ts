@@ -2,7 +2,8 @@
 // どのクライアント（tmux / Herdr app）から呼ばれても同じ答えを返す。
 
 import { parseSessionStart, resumeCommand } from "./claude";
-import { basename, needsResume, workspacePathFromCommonDir, type AgentNode, type Tree } from "./model";
+import { basename } from "@herdr-tools/utils/basename";
+import { needsResume, workspacePathFromCommonDir, type AgentNode, type Tree } from "./model";
 import type { AgentRuntime, WorkspaceSource } from "./ports";
 import { buildTree, collectCandidatePaths, makeLocator, planPrune, resolveRef, type Locate, type Resolved } from "./tree";
 

@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@herdr-tools/ws-core": "workspace:*",
-    "@herdr-tools/tmux": "workspace:*"
+    "@herdr-tools/tmux": "workspace:*",
+    "@herdr-tools/utils": "workspace:*"
   }
 }
