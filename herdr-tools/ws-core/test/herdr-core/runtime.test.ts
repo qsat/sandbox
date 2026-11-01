@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { normalizeTerminal } from "../../src/herdr-core/hc";
+import type { HcTerminal } from "../../src/herdr-core/terminal";
 import { isShell, terminalNameFor, toAgentRecord } from "../../src/herdr-core/runtime";
 
 describe("端末名（core の規則: 英小文字・数字・-・_ の1〜32文字）", () => {
@@ -23,27 +23,32 @@ describe("端末名（core の規則: 英小文字・数字・-・_ の1〜32文
   });
 });
 
-describe("toAgentRecord（herdr-core の言葉 → ws-core の言葉）", () => {
-  const raw = {
+describe("toAgentRecord（herdr-core の言葉 → ドメインの言葉）", () => {
+  const raw: HcTerminal = {
     address: "t7",
     name: "api",
     cwd: "/x",
     labels: { ws: "/repo", wt: "/repo=feat", "claude.session": "abc" },
+    parent: null,
     state: "live",
-    status: { state: "idle" },
+    status: { state: "blocked", kind: "permission", msg: "Allow?" },
     foreground: { name: "-zsh" },
   };
-  test("ラベル → workspace / worktree / 会話ID", () => {
-    expect(toAgentRecord(normalizeTerminal(raw))).toMatchObject({ id: "t7", workspaceHint: "/repo", worktreeHint: "/repo=feat", sessionId: "abc", alive: true });
+  const L = "claude.session";
+  test("ラベル → workspace / worktree / 会話ID、status → 状態", () => {
+    expect(toAgentRecord(raw, L)).toMatchObject({ id: "t7", workspaceHint: "/repo", worktreeHint: "/repo=feat", sessionId: "abc", alive: true, status: "blocked", kind: "permission", msg: "Allow?" });
   });
-  test("前面がシェル → プログラム喪失（--keep の復旧）", () => {
-    expect(toAgentRecord(normalizeTerminal(raw)).programLost).toBe(true);
-    expect(toAgentRecord(normalizeTerminal({ ...raw, foreground: { name: "claude" } })).programLost).toBe(false);
-    expect(toAgentRecord(normalizeTerminal({ ...raw, foreground: undefined })).programLost).toBeUndefined();
+  test("前面がシェル → プログラム喪失（--keep の復旧）。終了後は分からない", () => {
+    expect(toAgentRecord(raw, L).programLost).toBe(true);
+    expect(toAgentRecord({ ...raw, foreground: { name: "claude" } }, L).programLost).toBe(false);
+    expect(toAgentRecord({ ...raw, state: "finished", foreground: null }, L)).toMatchObject({ programLost: undefined, alive: false });
   });
-  test("claude_session キーも読む・終了済みは alive=false", () => {
-    const r = toAgentRecord(normalizeTerminal({ ...raw, state: "finished", labels: { claude_session: "s" } }));
-    expect(r).toMatchObject({ sessionId: "s", alive: false });
+  test("会話IDは設定したキーだけを読み書きする", () => {
+    expect(toAgentRecord(raw, "claude_sid").sessionId).toBeUndefined();
+    expect(toAgentRecord({ ...raw, labels: { claude_sid: "s" } }, "claude_sid").sessionId).toBe("s");
+  });
+  test("名乗っていない状態は unknown、名前が無ければアドレス", () => {
+    expect(toAgentRecord({ ...raw, status: null, name: null }, L)).toMatchObject({ status: "unknown", name: "t7" });
   });
   test("isShell", () => {
     expect(isShell("/bin/bash")).toBe(true);

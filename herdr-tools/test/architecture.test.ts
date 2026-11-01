@@ -3,7 +3,8 @@
 //   ws-core    … utils だけ。事実の出どころ（herdr-core、git / ghq）は知ってよいが、
 //                クライアント（tmux、Herdr app）の名前は出さない
 //   tmux       … ws-core と utils。herdr-core（hc）を直接触らない
-//   herdr-app  … Herdr app の mod。ws-core の純粋なモデルと utils だけを使い、ws とは exec で話す。
+//   herdr-app  … Herdr app の mod。I/O の無いモジュール（ws-core のモデル、ws list --json の型）と utils だけを使い、
+//                ws とは exec で話す。
 //                バンドル結果（main.js）は Herdr app の API（herdr / gpui-kit）以外を import しない
 //   ws（CLI）  … すべてをつなぐ
 import { describe, expect, test } from "bun:test";
@@ -64,9 +65,11 @@ const UTILS = "@herdr-tools/utils/*";
 describe("依存の向き", () => {
   test("utils はどこにも依存しない", () => expect(check("utils", [])).toEqual([]));
   test("ws-core は utils だけ", () => expect(check("ws-core", [UTILS])).toEqual([]));
-  test("tmux は ws-core と utils だけ", () => expect(check("tmux", ["@herdr-tools/ws-core", UTILS])).toEqual([]));
-  test("herdr-app は ws-core の純粋なモデルと utils、Herdr app の API だけ", () =>
-    expect(check("herdr-app", ["@herdr-tools/ws-core/model", UTILS, "herdr", "gpui-kit"])).toEqual([]));
+  test("tmux は ws-core と utils だけ", () => expect(check("tmux", ["@herdr-tools/ws-core", "@herdr-tools/ws-core/model", UTILS])).toEqual([]));
+  test("herdr-app は I/O の無いモジュール（ws-core のモデル・Terminal の型、ws list --json の型）と utils、Herdr app の API だけ", () =>
+    expect(
+      check("herdr-app", ["@herdr-tools/ws-core/model", "@herdr-tools/ws-core/herdr-core/terminal", "@herdr-tools/tmux/json", UTILS, "herdr", "gpui-kit"]),
+    ).toEqual([]));
 
   test("ws-core のコードにクライアント（tmux / Herdr app）が出てこない", () => {
     expect(codeHits(join(ROOT, "ws-core", "src"), /tmux|herdr-app|gpui|agent-board/i)).toEqual([]);

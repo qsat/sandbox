@@ -1,27 +1,27 @@
-// テスト用のスタブ hc。状態は $HC_STUB_STATE の JSON に持ち、操作は log に追記する。
-// 実際の herdr-core の代わりに、ws の判断と tmux 操作を E2E で確かめるためのもの。
+// テスト用のスタブ herdr-core。schema/hc.openrpc.json の形で JSON-RPC（plain mode）に答える。
+// 状態は $HC_STUB_STATE の JSON に持ち、呼ばれたメソッドを log に [method, params] で追記する。
 //
-//   hc ls --json | get <t> --json | run --bg --keep --name n --cwd d --label k=v -- cmd...
-//   hc label <t> k=v | send <t> text | kill <t> | rm <t> | attach <t> | connect (JSON-RPC)
+//   hc connect   … terminal.list / get / run / label / send / kill / rm、events.subscribe
+//   hc attach t  … 会話ペイン用（接続したふりをして待ち続ける）
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 interface StubTerminal {
   address: string;
-  name: string;
+  name: string | null;
   cwd: string;
   argv: string[];
   labels: Record<string, string>;
   parent: string | null;
   state: "live" | "finished";
-  status: { state: string; kind?: string };
-  foreground: { name: string; argv: string[]; cwd: string };
+  status: { state: string; kind?: string | null } | null;
+  foreground: { name: string } | null;
   keep: boolean;
 }
 interface State {
   next: number;
   terminals: StubTerminal[];
-  log: string[][];
+  log: [string, unknown][];
 }
 
 const file = process.env.HC_STUB_STATE;
@@ -29,133 +29,110 @@ if (!file) {
   console.error("HC_STUB_STATE is not set");
   process.exit(2);
 }
+const load = (): State => (existsSync(file!) ? JSON.parse(readFileSync(file!, "utf8")) : { next: 1, terminals: [], log: [] });
+const save = (s: State) => writeFileSync(file!, JSON.stringify(s, null, 2));
+const find = (s: State, ref: string) => s.terminals.find((t) => t.address === ref) ?? s.terminals.find((t) => t.name === ref && t.state === "live");
 
-function load(): State {
-  if (!existsSync(file!)) return { next: 1, terminals: [], log: [] };
-  return JSON.parse(readFileSync(file!, "utf8"));
+class RpcError extends Error {
+  constructor(
+    message: string,
+    readonly kind: string,
+  ) {
+    super(message);
+  }
 }
-function save(s: State) {
-  writeFileSync(file!, JSON.stringify(s, null, 2));
+
+function must(s: State, ref: string): StubTerminal {
+  const t = find(s, ref);
+  if (!t) throw new RpcError(`no terminal ${ref}`, "not_found");
+  return t;
 }
-function find(s: State, ref: string) {
-  return s.terminals.find((t) => t.address === ref) ?? s.terminals.find((t) => t.name === ref && t.state === "live");
+
+function handle(s: State, method: string, p: any): unknown {
+  switch (method) {
+    case "terminal.list":
+      return { terminals: p.all ? s.terminals : s.terminals.filter((t) => t.state === "live"), hidden_finished: 0, machines: [] };
+    case "terminal.get":
+      return must(s, p.terminal);
+    case "terminal.run": {
+      if (!/^[a-z0-9_-]{1,32}$/.test(p.name)) throw new RpcError(`invalid name: ${p.name}`, "invalid");
+      if (s.terminals.some((t) => t.name === p.name && t.state === "live")) throw new RpcError(`name in use: ${p.name}`, "conflict");
+      const t: StubTerminal = {
+        address: `t${s.next++}`,
+        name: p.name,
+        cwd: p.cwd,
+        argv: p.argv,
+        labels: p.labels ?? {},
+        parent: null,
+        state: "live",
+        status: { state: "working" },
+        foreground: { name: p.argv[0] },
+        keep: !!p.keep,
+      };
+      s.terminals.push(t);
+      return t;
+    }
+    case "terminal.label": {
+      const t = must(s, p.terminal);
+      for (const [k, v] of Object.entries(p.labels as Record<string, string>)) {
+        if (v === "") delete t.labels[k];
+        else t.labels[k] = v;
+      }
+      return t;
+    }
+    case "terminal.send": {
+      const t = must(s, p.terminal);
+      if (String(p.text).startsWith("claude --resume")) t.foreground = { name: "claude" };
+      return {};
+    }
+    case "terminal.kill": {
+      const t = must(s, p.terminal);
+      Object.assign(t, { state: "finished", foreground: null, status: null });
+      return t;
+    }
+    case "terminal.rm":
+      must(s, p.terminal);
+      s.terminals = s.terminals.filter((t) => t.address !== p.terminal);
+      return {};
+    case "events.subscribe":
+      return { seq: 0, terminals: s.terminals };
+    default:
+      throw new RpcError(`method not found: ${method}`, "not_found");
+  }
 }
 
 const [cmd, ...args] = process.argv.slice(2);
-const state = load();
-if (cmd !== "connect") {
-  state.log.push([cmd ?? "", ...args]);
-  save(state);
-}
 
-switch (cmd) {
-  case "ls": {
-    // 実物の hc ls の行と同じく、ラベルや foreground は持たない
-    console.log(JSON.stringify(state.terminals.map((t) => ({ address: t.address, name: t.name, parent: t.parent, state: t.state, cwd: t.cwd, status: t.status.state }))));
-    break;
-  }
-  case "get": {
-    const t = find(state, args[0]!);
-    if (!t) {
-      console.error("no such terminal");
-      process.exit(1);
-    }
-    console.log(JSON.stringify(t));
-    break;
-  }
-  case "run": {
-    let name = "";
-    let cwd = process.cwd();
-    const labels: Record<string, string> = {};
-    let i = 0;
-    for (; i < args.length; i++) {
-      const a = args[i]!;
-      if (a === "--") break;
-      if (a === "--name") name = args[++i]!;
-      else if (a === "--cwd") cwd = args[++i]!;
-      else if (a === "--label") {
-        const [k, ...v] = args[++i]!.split("=");
-        labels[k!] = v.join("=");
-      }
-    }
-    const argv = args.slice(i + 1);
-    if (!/^[a-z0-9_-]{1,32}$/.test(name)) {
-      console.error(`invalid name: ${name}`);
-      process.exit(1);
-    }
-    if (state.terminals.some((t) => t.name === name && t.state === "live")) {
-      console.error(`name in use: ${name}`);
-      process.exit(1);
-    }
-    const address = `t${state.next++}`;
-    state.terminals.push({ address, name, cwd, argv, labels, parent: null, state: "live", status: { state: "working" }, foreground: { name: argv[0] ?? "zsh", argv, cwd }, keep: true });
-    save(state);
-    console.log(address);
-    break;
-  }
-  case "label": {
-    const t = find(state, args[0]!);
-    if (!t) process.exit(1);
-    for (const kv of args.slice(1)) {
-      const [k, ...v] = kv.split("=");
-      if (v.join("=") === "") delete t.labels[k!];
-      else t.labels[k!] = v.join("=");
-    }
-    save(state);
-    break;
-  }
-  case "send": {
-    const t = find(state, args[0]!);
-    if (!t) process.exit(1);
-    const text = args[1] ?? "";
-    if (text.startsWith("claude --resume")) t.foreground = { name: "claude", argv: text.split(" "), cwd: t.cwd };
-    save(state);
-    break;
-  }
-  case "kill": {
-    const t = find(state, args[0]!);
-    if (!t) process.exit(1);
-    t.state = "finished";
-    save(state);
-    break;
-  }
-  case "rm": {
-    state.terminals = state.terminals.filter((t) => t.address !== args[0]);
-    save(state);
-    break;
-  }
-  case "attach": {
-    console.log(`[stub] attached to ${args[0]}`);
-    await new Promise(() => {});
-    break;
-  }
-  case "connect": {
-    const decoder = new TextDecoder();
-    let buf = "";
-    for await (const chunk of Bun.stdin.stream()) {
-      buf += decoder.decode(chunk);
-      let nl: number;
-      while ((nl = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, nl);
-        buf = buf.slice(nl + 1);
-        if (!line.trim()) continue;
-        const req = JSON.parse(line);
-        const s = load();
-        let result: unknown;
-        if (req.method === "terminal.list") result = { terminals: s.terminals };
-        else if (req.method === "terminal.get") result = find(s, req.params?.terminal);
-        else if (req.method === "events.subscribe") result = { subscription: 1 };
-        else {
-          console.log(JSON.stringify({ jsonrpc: "2.0", id: req.id, error: { code: -32601, message: "method not found" } }));
-          continue;
-        }
+if (cmd === "attach") {
+  console.log(`[stub] attached to ${args[0]}`);
+  await new Promise(() => {});
+} else if (cmd === "connect") {
+  const s0 = load();
+  s0.log.push(["connect", null]);
+  save(s0);
+  const decoder = new TextDecoder();
+  let buf = "";
+  for await (const chunk of Bun.stdin.stream()) {
+    buf += decoder.decode(chunk);
+    for (let nl = buf.indexOf("\n"); nl >= 0; nl = buf.indexOf("\n")) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      const req = JSON.parse(line);
+      const s = load();
+      s.log.push([req.method, req.params]);
+      try {
+        const result = handle(s, req.method, req.params ?? {});
+        save(s);
         console.log(JSON.stringify({ jsonrpc: "2.0", id: req.id, result }));
-        if (req.method === "events.subscribe") console.log(JSON.stringify({ jsonrpc: "2.0", method: "events.event", params: { type: "snapshot", terminals: s.terminals } }));
+      } catch (e) {
+        save(s);
+        const err = e as RpcError;
+        console.log(JSON.stringify({ jsonrpc: "2.0", id: req.id, error: { code: -32000, message: err.message, data: { kind: err.kind ?? "internal" } } }));
       }
     }
-    break;
   }
-  default:
-    console.error(`stub hc: unknown command ${cmd}`);
-    process.exit(2);
+} else {
+  console.error(`stub hc: unsupported command ${cmd}（ws は connect と attach だけを使う）`);
+  process.exit(2);
 }

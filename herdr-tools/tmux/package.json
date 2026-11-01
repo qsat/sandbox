@@ -5,7 +5,8 @@
   "type": "module",
   "description": "tmux クライアント: セッション・ペインへの移動、popup の一覧",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./json": "./src/json.ts"
   },
   "dependencies": {
     "@herdr-tools/ws-core": "workspace:*",

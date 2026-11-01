@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildTree, makeLocator, resolveRef, type AgentRecord, type PathInfo } from "@herdr-tools/ws-core";
-import { chooseClient, indexTmux, interestingPaths, planGo, planPanes, planPruneSessions, sessionNameFor, withTmux, type TmuxFacts } from "../src/model";
+import { withTmux } from "../src/json";
+import { chooseClient, indexTmux, interestingPaths, planGo, planPanes, planPruneSessions, sessionNameFor, type TmuxFacts } from "../src/model";
 
 const G = "/Users/me/ghq/github.com/o";
 const API = `${G}/api`;
@@ -34,10 +35,11 @@ const facts: TmuxFacts = {
   ],
 };
 
-const tree = buildTree({ agents, infos, entries: [API, FEAT, WEB], root: "/Users/me/ghq", all: false, include: interestingPaths(facts) });
-const idx = indexTmux(makeLocator(tree, infos), facts);
+const tree = buildTree({ agents, infos, root: "/Users/me/ghq", include: interestingPaths(facts) });
+const locate = makeLocator(tree, infos);
+const idx = indexTmux(locate, facts);
 const ctx = { client: { kind: "client", name: "c1" } as const, fromApp: false, fallbackCwd: "/Users/me" };
-const r = (ref: string) => resolveRef(tree, ref)!;
+const r = (ref: string) => resolveRef({ tree, locate }, ref)!;
 
 describe("索引", () => {
   test("セッションの場所は木に出る（エージェントがいなくても）", () => {
@@ -87,15 +89,17 @@ describe("planGo（判断フローの全分岐）", () => {
       { op: "switchClient", client: "c1", target: "api=feat-auth" },
     ]);
   });
-  test("agent・会話ペインあり → そのペインを選ぶ", () => {
+  test("agent・会話ペインあり → 準備（再開の判定）してからそのペインを選ぶ", () => {
     expect(planGo(r("t1"), idx, ctx)).toEqual([
+      { op: "prepareAgent", agent: "t1" },
       { op: "selectPane", paneId: "%5" },
       { op: "switchClient", client: "c1", target: "%5" },
     ]);
   });
-  test("agent・会話ペイン無し → agents ウィンドウに作る", () => {
+  test("agent・会話ペイン無し → agents ウィンドウに作る（要再開かどうかに関わらず準備は毎回）", () => {
     expect(planGo(r("t2"), idx, ctx)).toEqual([
       { op: "newSession", name: "api=feat-auth", cwd: FEAT },
+      { op: "prepareAgent", agent: "t2" },
       { op: "openAgentPane", session: "api=feat-auth", window: "agents", cwd: FEAT, agent: "t2" },
       { op: "switchClient", client: "c1", target: "api=feat-auth:agents" },
     ]);

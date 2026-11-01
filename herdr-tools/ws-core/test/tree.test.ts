@@ -35,8 +35,10 @@ const agents: AgentRecord[] = [
   agent({ id: "t4", name: "child", cwd: FEAT, worktreeHint: FEAT, parent: "t2" }),
 ];
 
+const ENTRIES = [API, FEAT, WEB];
+// snapshot と同じく、--all のときは全エントリを include に足す
 const tree = (opts: { all?: boolean; include?: string[] } = {}) =>
-  buildTree({ agents, infos, entries: [API, FEAT, WEB], root: "/Users/me/ghq", home: "/Users/me", all: !!opts.all, include: opts.include });
+  buildTree({ agents, infos, include: [...(opts.include ?? []), ...(opts.all ? ENTRIES : [])], root: "/Users/me/ghq", home: "/Users/me" });
 
 describe("要再開", () => {
   const base = agent({ id: "t1", sessionId: "abc", programLost: true });
@@ -49,7 +51,7 @@ describe("要再開", () => {
 
 describe("buildTree", () => {
   test("候補パス: エージェントの居場所（記録を優先）と include", () => {
-    const c = collectCandidatePaths({ agents, entries: [API, FEAT, WEB], all: false, include: [WEB] });
+    const c = collectCandidatePaths(agents, [WEB]);
     expect(c.sort()).toEqual([API, `${FEAT}/src`, FEAT, GONE, WEB].sort());
   });
 
@@ -92,14 +94,22 @@ describe("makeLocator", () => {
 });
 
 describe("resolveRef", () => {
+  const LINK = "/Users/me/link-to-api"; // シンボリックリンク（git の toplevel は realpath で API になる）
   const t = tree();
-  test("id", () => expect(resolveRef(t, "t2")?.kind).toBe("agent"));
-  test("名前", () => expect(resolveRef(t, "api-main")).toMatchObject({ kind: "agent", agent: { id: "t1" } }));
+  const snap = { tree: t, locate: makeLocator(t, [...infos, { path: LINK, exists: true, toplevel: API, commonDir: `${API}/.git`, branch: "main" }]) };
+  test("id", () => expect(resolveRef(snap, "t2")?.kind).toBe("agent"));
+  test("名前", () => expect(resolveRef(snap, "api-main")).toMatchObject({ kind: "agent", agent: { id: "t1" } }));
   test("worktree のパス（配下でも）", () => {
-    expect(resolveRef(t, FEAT)).toMatchObject({ kind: "worktree", worktree: { path: FEAT } });
-    expect(resolveRef(t, `${FEAT}/src/x`)).toMatchObject({ kind: "worktree", worktree: { path: FEAT } });
+    expect(resolveRef(snap, FEAT)).toMatchObject({ kind: "worktree", worktree: { path: FEAT } });
+    expect(resolveRef(snap, `${FEAT}/src/x`)).toMatchObject({ kind: "worktree", worktree: { path: FEAT } });
   });
-  test("見つからない", () => expect(resolveRef(t, "t99")).toBeUndefined());
+  test("リンク経由のパスも調べた toplevel で解決する", () => {
+    expect(resolveRef(snap, LINK)).toMatchObject({ kind: "worktree", worktree: { path: API } });
+  });
+  test("見つからない", () => {
+    expect(resolveRef(snap, "t99")).toBeUndefined();
+    expect(resolveRef(snap, "/tmp/x")).toBeUndefined();
+  });
 });
 
 describe("planPrune", () => {

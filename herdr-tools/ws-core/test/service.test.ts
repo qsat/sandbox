@@ -1,6 +1,6 @@
 // WsCore のユースケースを、メモリ上の偽の実行環境と作業場所で検査する。
 import { describe, expect, test } from "bun:test";
-import { WsCore, type AgentRecord, type AgentRuntime, type AgentStartSpec, type PathInfo, type WorkspaceSource } from "../src";
+import { planPrune, WsCore, type AgentRecord, type AgentRuntime, type AgentStartSpec, type PathInfo, type WorkspaceSource } from "../src";
 
 class FakeRuntime implements AgentRuntime {
   agents: AgentRecord[] = [];
@@ -113,7 +113,7 @@ describe("WsCore", () => {
     const rt = new FakeRuntime();
     rt.agents.push({ id: "x", name: "x", cwd: "/", status: "idle", alive: true, parent: null, worktreeHint: "/g/o/api=gone" });
     const core = new WsCore(rt, source());
-    const plan = core.prunePlan(await core.snapshot());
+    const plan = planPrune((await core.snapshot()).tree);
     expect(plan.map((a) => a.id)).toEqual(["x"]);
     await core.pruneAgents(plan);
     expect(rt.agents).toEqual([]);

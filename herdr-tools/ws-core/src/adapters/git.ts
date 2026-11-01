@@ -34,7 +34,14 @@ export class GitWorkspaceSource implements WorkspaceSource {
     this.ghq = opts.ghqBin ?? "ghq";
   }
 
-  async root(): Promise<string> {
+  private rootCache?: Promise<string>;
+
+  /** ghq root（プロセスの中では変わらないので1回だけ調べる） */
+  root(): Promise<string> {
+    return (this.rootCache ??= this.findRoot());
+  }
+
+  private async findRoot(): Promise<string> {
     if (this.opts.root) return expandHome(this.opts.root);
     const r = await run(this.ghq, ["root"]);
     if (r.code === 0 && r.stdout.trim()) return r.stdout.trim().split("\n")[0]!;

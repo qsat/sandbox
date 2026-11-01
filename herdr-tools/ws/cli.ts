@@ -4,8 +4,8 @@
 
 import { resolve as resolvePath } from "node:path";
 import { expandHome } from "@herdr-tools/utils/expand-home";
-import { looksLikePath } from "@herdr-tools/ws-core";
-import { renderText, runUi, withTmux } from "@herdr-tools/tmux";
+import { looksLikePath, planPrune } from "@herdr-tools/ws-core";
+import { planPruneSessions, renderText, runUi, withTmux } from "@herdr-tools/tmux";
 import { compose } from "./src/compose";
 
 const USAGE = `ws - エージェントを workspace > worktree > agent で一覧・移動する
@@ -145,8 +145,8 @@ async function main(argv: string[]): Promise<number> {
     }
     case "prune": {
       const view = await nav.view();
-      const sessions = nav.prunePlan(view);
-      const agents = core.prunePlan(view.snap);
+      const sessions = planPruneSessions(view.snap.tree, view.idx);
+      const agents = planPrune(view.snap.tree);
       if (sessions.length === 0 && agents.length === 0) {
         process.stdout.write("片付けるものはありません\n");
         return 0;

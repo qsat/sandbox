@@ -7,30 +7,14 @@ import { statusIcon } from "@herdr-tools/utils/status-icon";
 import { statusLabel } from "@herdr-tools/utils/status-label";
 import type { Tag } from "@herdr-tools/utils/tag";
 import { worktreeTags } from "@herdr-tools/utils/worktree-tags";
-import { attentionRank, type AgentNode, type AgentStatus, type WorkspaceNode, type WorktreeNode } from "@herdr-tools/ws-core/model";
+import type { ListedAgent, ListedTree } from "@herdr-tools/tmux/json";
+import type { HcTerminal } from "@herdr-tools/ws-core/herdr-core/terminal";
+import { byAttention, type AgentStatus } from "@herdr-tools/ws-core/model";
 
 export const WS = "ws";
 
-/** ws list --json の形（ws-core の木に、tmux クライアントの情報が tmux キーで添えられている） */
-export interface ListedAgent extends AgentNode {
-  tmux?: { attached: boolean; panes: string[] };
-}
-export interface ListedWorktree extends Omit<WorktreeNode, "agents"> {
-  tmux?: { session: { name: string; attached: boolean } | null };
-  agents: ListedAgent[];
-}
-export interface ListedWorkspace extends Omit<WorkspaceNode, "worktrees"> {
-  worktrees: ListedWorktree[];
-}
-export interface ListedTree {
-  workspaces: ListedWorkspace[];
-}
-
-/** terminals() の要素（hc ls --json と同じ形。status は単語かオブジェクト） */
-export interface LiveTerminal {
-  address?: string;
-  status?: string | { state?: string; kind?: string };
-}
+/** terminals() の要素（herdr-core の Terminal と同じ形） */
+export type LiveTerminal = Pick<HcTerminal, "address" | "status">;
 
 export type BoardRow =
   | { kind: "workspace"; key: string; label: string; waiting: number; collapsed: boolean }
@@ -39,9 +23,10 @@ export type BoardRow =
 
 export type BoardAction = "go" | "new" | "resume";
 
-function overlay(a: ListedAgent, live: Map<string, { status?: string; kind?: string }>): ListedAgent {
-  const l = live.get(a.id);
-  return l?.status ? { ...a, status: l.status as AgentStatus, kind: l.kind ?? a.kind } : a;
+/** ws list の結果に、terminals() の即時の状態を重ねる */
+function overlay(a: ListedAgent, live: Map<string, LiveTerminal>): ListedAgent {
+  const st = live.get(a.id)?.status;
+  return st ? { ...a, status: st.state as AgentStatus, kind: st.kind ?? undefined } : a;
 }
 
 /**
@@ -50,24 +35,19 @@ function overlay(a: ListedAgent, live: Map<string, { status?: string; kind?: str
  * @param collapsed 折り畳んだ workspace のパス
  */
 export function boardRows(tree: ListedTree, live: LiveTerminal[], collapsed: string[]): BoardRow[] {
-  const liveBy = new Map<string, { status?: string; kind?: string }>();
-  for (const t of live) {
-    if (!t?.address) continue;
-    const st = typeof t.status === "object" && t.status ? t.status : { state: t.status };
-    liveBy.set(t.address, { status: st.state, kind: st.kind });
-  }
+  const liveBy = new Map(live.map((t) => [t.address, t]));
   const folded = new Set(collapsed);
   const rows: BoardRow[] = [];
   for (const ws of tree.workspaces) {
     const worktrees = ws.worktrees.map((wt) => ({
       ...wt,
-      agents: wt.agents.map((a) => overlay(a, liveBy)).sort((x, y) => attentionRank(x) - attentionRank(y) || x.name.localeCompare(y.name)),
+      agents: wt.agents.map((a) => overlay(a, liveBy)).sort(byAttention),
     }));
     const waiting = worktrees.reduce((n, wt) => n + wt.agents.filter((a) => a.status === "blocked" || a.needsResume).length, 0);
     rows.push({ kind: "workspace", key: ws.path, label: ws.name, waiting, collapsed: folded.has(ws.path) });
     if (folded.has(ws.path)) continue;
     for (const wt of worktrees) {
-      rows.push({ kind: "worktree", key: wt.path, label: basename(wt.path), tags: worktreeTags(wt, wt.tmux?.session), isMain: wt.isMain, exists: wt.exists });
+      rows.push({ kind: "worktree", key: wt.path, label: basename(wt.path), tags: worktreeTags(wt, wt.tmux.session), isMain: wt.isMain, exists: wt.exists });
       for (const a of wt.agents) {
         rows.push({
           kind: "agent",
@@ -76,7 +56,7 @@ export function boardRows(tree: ListedTree, live: LiveTerminal[], collapsed: str
           icon: statusIcon(a.status),
           status: statusLabel(a),
           rawStatus: a.status,
-          tags: agentTags(a, a.tmux?.attached),
+          tags: agentTags(a, a.tmux.attached),
           canResume: a.needsResume,
           worktree: wt.path,
         });

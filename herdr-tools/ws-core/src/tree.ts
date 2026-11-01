@@ -1,12 +1,11 @@
 // 木の組み立てと参照の解決。I/O なし。
 
 import { findContainingPath } from "@herdr-tools/utils/find-containing-path";
-import { isUnderPath } from "@herdr-tools/utils/is-under-path";
 import { trimTrailingSlash } from "@herdr-tools/utils/trim-trailing-slash";
 import {
-  attentionRank,
+  byName,
   displayName,
-  needsResume,
+  toAgentNode,
   workspacePathFromCommonDir,
   type AgentNode,
   type AgentRecord,
@@ -21,36 +20,21 @@ export function agentAnchor(a: AgentRecord): string {
   return a.worktreeHint || a.cwd;
 }
 
-export interface CandidateInput {
-  agents: AgentRecord[];
-  entries: string[];
-  all: boolean;
-  /** クライアントが「これも見たい」と渡すパス（クライアントが開いている作業場所など） */
-  include?: string[];
-}
-
-/** WorkspaceSource で調べる必要のあるパス */
-export function collectCandidatePaths(input: CandidateInput): string[] {
-  const s = new Set<string>();
-  for (const a of input.agents) {
-    const p = agentAnchor(a);
-    if (p) s.add(p);
-  }
-  for (const p of input.include ?? []) if (p) s.add(p);
-  if (input.all) for (const e of input.entries) s.add(e);
-  return [...s];
+/**
+ * WorkspaceSource で調べる必要のあるパス。
+ * @param include エージェントがいなくても木に出す場所（クライアントが開いている作業場所、--all のときの全エントリ）
+ */
+export function collectCandidatePaths(agents: AgentRecord[], include: string[]): string[] {
+  return [...new Set([...agents.map(agentAnchor), ...include].filter(Boolean))];
 }
 
 export interface BuildInput {
   agents: AgentRecord[];
   infos: PathInfo[];
-  /** 作業場所の全エントリ（ghq list） */
-  entries: string[];
+  /** エージェントがいなくても木に出す場所 */
+  include: string[];
   root?: string;
   home?: string;
-  all: boolean;
-  /** エージェントがいなくても必ず含めるパス */
-  include?: string[];
 }
 
 interface WtAcc {
@@ -59,21 +43,15 @@ interface WtAcc {
   exists: boolean;
   workspace: string;
   agents: AgentRecord[];
-  included: boolean;
 }
 
 export function buildTree(input: BuildInput): Tree {
   const infoByPath = new Map(input.infos.map((i) => [i.path, i]));
   const wts = new Map<string, WtAcc>();
 
-  const keyOf = (p: string): { key: string; info?: PathInfo } => {
-    const info = infoByPath.get(p);
-    if (info?.exists && info.toplevel) return { key: info.toplevel, info };
-    return { key: trimTrailingSlash(p), info };
-  };
-
   const ensure = (p: string, fallbackWorkspace?: string): WtAcc => {
-    const { key, info } = keyOf(p);
+    const info = infoByPath.get(p);
+    const key = info?.exists && info.toplevel ? info.toplevel : trimTrailingSlash(p);
     let acc = wts.get(key);
     if (!acc) {
       acc = {
@@ -82,31 +60,17 @@ export function buildTree(input: BuildInput): Tree {
         exists: info ? info.exists : true,
         workspace: info?.commonDir ? workspacePathFromCommonDir(info.commonDir) : fallbackWorkspace || key,
         agents: [],
-        included: false,
       };
       wts.set(key, acc);
     }
     return acc;
   };
 
-  for (const a of input.agents) {
-    const anchor = agentAnchor(a);
-    // 調べられなかった cwd は、既知の作業場所のどれかに境界判定で含める
-    if (!infoByPath.has(anchor) && !a.worktreeHint) {
-      const known = findContainingPath(anchor, [...wts.keys(), ...input.entries]);
-      if (known) {
-        ensure(known, a.workspaceHint).agents.push(a);
-        continue;
-      }
-    }
-    ensure(anchor, a.workspaceHint).agents.push(a);
-  }
-  for (const p of input.include ?? []) if (p) ensure(p).included = true;
-  if (input.all) for (const e of input.entries) if (infoByPath.get(e)?.exists !== false) ensure(e);
+  for (const a of input.agents) ensure(agentAnchor(a), a.workspaceHint).agents.push(a);
+  for (const p of input.include) if (p) ensure(p);
 
   const workspaces = new Map<string, WorkspaceNode>();
   for (const acc of wts.values()) {
-    if (!input.all && !acc.included && acc.agents.length === 0) continue;
     let ws = workspaces.get(acc.workspace);
     if (!ws) {
       ws = { path: acc.workspace, name: displayName(acc.workspace, input.root, input.home), worktrees: [] };
@@ -126,30 +90,6 @@ export function buildTree(input: BuildInput): Tree {
   return { workspaces: out };
 }
 
-export function byName(a: AgentNode, b: AgentNode): number {
-  return a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
-}
-
-export function byAttention(a: AgentNode, b: AgentNode): number {
-  return attentionRank(a) - attentionRank(b) || byName(a, b);
-}
-
-function toAgentNode(a: AgentRecord, wtExists: boolean): AgentNode {
-  return {
-    id: a.id,
-    name: a.name,
-    status: a.status,
-    kind: a.kind,
-    msg: a.msg,
-    alive: a.alive,
-    parent: a.parent,
-    cwd: a.cwd,
-    sessionId: a.sessionId,
-    needsResume: needsResume(a),
-    missingLocation: !!a.worktreeHint && !wtExists,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // 場所の特定と参照の解決
 // ---------------------------------------------------------------------------
@@ -161,17 +101,14 @@ export interface Located {
 
 export type Locate = (path: string) => Located | undefined;
 
-/** 生のパス（クライアントが持っているもの）から木の worktree を引く */
+/** 生のパス（クライアントが持っているもの）から木の worktree を引く。調べ済みのパスは toplevel で正規化する */
 export function makeLocator(tree: Tree, infos: PathInfo[]): Locate {
   const infoByPath = new Map(infos.map((i) => [i.path, i]));
   const byPath = new Map<string, Located>();
   for (const workspace of tree.workspaces) for (const worktree of workspace.worktrees) byPath.set(worktree.path, { workspace, worktree });
-  return (path: string) => {
+  return (path) => {
     const key = infoByPath.get(path)?.toplevel ?? trimTrailingSlash(path);
-    const hit = byPath.get(key);
-    if (hit) return hit;
-    const containing = findContainingPath(key, byPath.keys());
-    return containing ? byPath.get(containing) : undefined;
+    return byPath.get(key) ?? byPath.get(findContainingPath(key, byPath.keys()) ?? "");
   };
 }
 
@@ -181,25 +118,18 @@ export function looksLikePath(ref: string): boolean {
   return ref.startsWith("/") || ref.startsWith("~") || ref.startsWith(".");
 }
 
-/** ref はエージェントの id（または名前）か、worktree のパス（絶対パス化済み） */
-export function resolveRef(tree: Tree, ref: string): Resolved | undefined {
-  if (!looksLikePath(ref)) {
-    for (const match of [(a: AgentNode) => a.id === ref, (a: AgentNode) => a.name === ref])
-      for (const workspace of tree.workspaces)
-        for (const worktree of workspace.worktrees)
-          for (const agent of worktree.agents) if (match(agent)) return { kind: "agent", agent, worktree, workspace };
+/** ref はエージェントの id（または名前）か、worktree のパス（絶対パス化済み。snapshot の include に入れておく） */
+export function resolveRef(snap: { tree: Tree; locate: Locate }, ref: string): Resolved | undefined {
+  if (looksLikePath(ref)) {
+    const hit = snap.locate(ref);
+    return hit && { kind: "worktree", ...hit };
   }
-  let best: Resolved | undefined;
-  for (const workspace of tree.workspaces)
-    for (const worktree of workspace.worktrees)
-      if (isUnderPath(ref, worktree.path) && (!best || worktree.path.length > best.worktree.path.length))
-        best = { kind: "worktree", worktree, workspace };
-  return best;
+  for (const match of [(a: AgentNode) => a.id === ref, (a: AgentNode) => a.name === ref])
+    for (const workspace of snap.tree.workspaces)
+      for (const worktree of workspace.worktrees)
+        for (const agent of worktree.agents) if (match(agent)) return { kind: "agent", agent, worktree, workspace };
+  return undefined;
 }
-
-// ---------------------------------------------------------------------------
-// 片付けの計画
-// ---------------------------------------------------------------------------
 
 /** 場所が消えた worktree に残っているエージェント */
 export function planPrune(tree: Tree): AgentNode[] {

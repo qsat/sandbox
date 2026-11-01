@@ -2,19 +2,17 @@
 // ドメインの言葉（workspace / worktree / 会話ID / プログラム喪失）と herdr-core の言葉（ラベル / 端末名 / foreground）の翻訳はここに集める。
 
 import { basename } from "@herdr-tools/utils/basename";
-import type { AgentRecord } from "../model";
+import type { AgentRecord, AgentStatus } from "../model";
 import type { AgentRuntime, AgentStartSpec } from "../ports";
-import { Hc, type HcTerminal } from "./hc";
+import { Hc } from "./hc";
+import type { HcTerminal } from "./terminal";
 
 export const LABEL_WS = "ws";
 export const LABEL_WT = "wt";
-/** 実機確認でラベルのキーに . が使えなければ claude_session にする（読むときは両方見る） */
-export const SESSION_LABEL_CANDIDATES = ["claude.session", "claude_session"] as const;
+/** 会話IDを記録するラベルの既定のキー（実機でキーに . が使えなければ WS_SESSION_LABEL で変える） */
+export const DEFAULT_SESSION_LABEL = "claude.session";
 
-export function sessionIdOf(labels: Record<string, string>): string | undefined {
-  for (const k of SESSION_LABEL_CANDIDATES) if (labels[k]) return labels[k];
-  return undefined;
-}
+const STATUSES = new Set(["working", "blocked", "idle", "done", "error"]);
 
 const SHELLS = new Set(["bash", "zsh", "fish", "sh", "dash", "ksh", "mksh", "tcsh", "csh", "nu", "pwsh", "elvish", "xonsh"]);
 
@@ -46,21 +44,22 @@ export function terminalNameFor(repo: string, branch: string | null | undefined,
   }
 }
 
-/** herdr-core の端末 → ws-core のエージェント */
-export function toAgentRecord(t: HcTerminal): AgentRecord {
+/** herdr-core の端末 → ドメインのエージェント */
+export function toAgentRecord(t: HcTerminal, sessionLabel: string): AgentRecord {
+  const state = t.status?.state;
   return {
     id: t.address,
-    name: t.name,
+    name: t.name ?? t.address,
     cwd: t.cwd,
-    status: t.status,
-    kind: t.kind,
-    msg: t.msg,
+    status: state && STATUSES.has(state) ? (state as AgentStatus) : "unknown",
+    kind: t.status?.kind ?? undefined,
+    msg: t.status?.msg || undefined,
     alive: t.state === "live",
     parent: t.parent,
     workspaceHint: t.labels[LABEL_WS] || undefined,
     worktreeHint: t.labels[LABEL_WT] || undefined,
-    sessionId: sessionIdOf(t.labels),
-    // --keep の端末はプログラムを失うとシェルに置き換わる。foreground が無ければ分からない
+    sessionId: t.labels[sessionLabel] || undefined,
+    // --keep の端末はプログラムを失うとシェルに置き換わる（終了後は foreground が null）
     programLost: t.foreground ? isShell(t.foreground.name) : undefined,
   };
 }
@@ -77,31 +76,27 @@ export class HerdrRuntime implements AgentRuntime {
 
   constructor(opts: HerdrRuntimeOptions = {}) {
     this.hc = new Hc(opts.hcBin ?? "hc");
-    this.sessionLabel = opts.sessionLabel ?? SESSION_LABEL_CANDIDATES[0];
+    this.sessionLabel = opts.sessionLabel ?? DEFAULT_SESSION_LABEL;
   }
 
   async list(): Promise<AgentRecord[]> {
-    return (await this.hc.list()).map(toAgentRecord);
+    return (await this.hc.list()).map((t) => toAgentRecord(t, this.sessionLabel));
   }
 
   async get(id: string): Promise<AgentRecord | undefined> {
     const t = await this.hc.get(id);
-    return t ? toAgentRecord(t) : undefined;
+    return t ? toAgentRecord(t, this.sessionLabel) : undefined;
   }
 
   async start(spec: AgentStartSpec): Promise<{ id: string; name: string }> {
-    const live = (await this.hc.list()).filter((t) => t.state === "live");
-    const name = terminalNameFor(spec.repo, spec.branch, live.map((t) => t.name));
-    const out = await this.hc.run({ name, cwd: spec.worktree, labels: { [LABEL_WS]: spec.workspace, [LABEL_WT]: spec.worktree }, command: spec.command });
-    // hc run の出力形式に依存しないよう、名前で引き直す（名前は生きている端末の中で一意）
-    const again = await this.hc.list();
-    const id = again.find((t) => t.name === name && t.state === "live")?.address ?? /^\s*(t\d+)\s*$/m.exec(out)?.[1];
-    if (!id) throw new Error(`起動した端末が見つかりません: ${name}`);
+    const taken = (await this.hc.list()).flatMap((t) => (t.state === "live" && t.name ? [t.name] : []));
+    const name = terminalNameFor(spec.repo, spec.branch, taken);
+    const id = await this.hc.run({ name, cwd: spec.worktree, labels: { [LABEL_WS]: spec.workspace, [LABEL_WT]: spec.worktree }, argv: spec.command });
     return { id, name };
   }
 
   async recordSession(id: string, sessionId: string): Promise<void> {
-    await this.hc.label(id, this.sessionLabel, sessionId);
+    await this.hc.label(id, { [this.sessionLabel]: sessionId });
   }
 
   send(id: string, text: string): Promise<void> {
@@ -127,6 +122,6 @@ export class HerdrRuntime implements AgentRuntime {
   }
 
   subscribe(onChange: () => void): () => void {
-    return this.hc.subscribe({}, onChange, () => {});
+    return this.hc.subscribe(onChange);
   }
 }

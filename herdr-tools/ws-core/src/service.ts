@@ -5,7 +5,7 @@ import { parseSessionStart, resumeCommand } from "./claude";
 import { basename } from "@herdr-tools/utils/basename";
 import { needsResume, workspacePathFromCommonDir, type AgentNode, type Tree } from "./model";
 import type { AgentRuntime, WorkspaceSource } from "./ports";
-import { buildTree, collectCandidatePaths, makeLocator, planPrune, resolveRef, type Locate, type Resolved } from "./tree";
+import { buildTree, collectCandidatePaths, makeLocator, type Locate } from "./tree";
 
 export interface CoreOptions {
   home?: string;
@@ -28,7 +28,7 @@ export class WsCore {
   private readonly claudeBin: string;
 
   constructor(
-    readonly runtime: AgentRuntime,
+    private readonly runtime: AgentRuntime,
     private readonly source: WorkspaceSource,
     private readonly opts: CoreOptions = {},
   ) {
@@ -37,20 +37,26 @@ export class WsCore {
 
   /**
    * Workspace > Worktree > Agent の木。
-   * @param all     作業場所の全エントリを出す（既定はエージェントか include があるものだけ）
+   * @param all     作業場所の全エントリも出す（既定はエージェントか include があるものだけ。全エントリはこのときだけ取る）
    * @param include クライアントが見たいパス（クライアントが開いている作業場所など）。エージェントがいなくても出す
    */
   async snapshot(opts: { all?: boolean; include?: string[] } = {}): Promise<Snapshot> {
     const root = await this.source.root();
-    const [agents, entries] = await Promise.all([this.runtime.list(), this.source.entries(root)]);
-    const include = opts.include ?? [];
-    const infos = await this.source.inspect(collectCandidatePaths({ agents, entries, all: !!opts.all, include }));
-    const tree = buildTree({ agents, infos, entries, root, home: this.opts.home, all: !!opts.all, include });
+    const [agents, entries] = await Promise.all([this.runtime.list(), opts.all ? this.source.entries(root) : []]);
+    const include = [...(opts.include ?? []), ...entries];
+    const infos = await this.source.inspect(collectCandidatePaths(agents, include));
+    const tree = buildTree({ agents, infos, include, root, home: this.opts.home });
     return { tree, locate: makeLocator(tree, infos) };
   }
 
-  resolve(snap: Snapshot, ref: string): Resolved | undefined {
-    return resolveRef(snap.tree, ref);
+  /** 会話に入るためのコマンド（クライアントが自分の端末で実行する） */
+  attachCommand(id: string): string {
+    return this.runtime.attachCommand(id);
+  }
+
+  /** エージェントに変化があるたびに onChange を呼ぶ。戻り値で購読をやめる */
+  subscribe(onChange: () => void): () => void {
+    return this.runtime.subscribe(onChange);
   }
 
   /**
@@ -94,11 +100,7 @@ export class WsCore {
     return { recorded: true };
   }
 
-  /** 場所が消えた worktree に残っているエージェント */
-  prunePlan(snap: Snapshot): AgentNode[] {
-    return planPrune(snap.tree);
-  }
-
+  /** 場所が消えた worktree に残っていたエージェント（planPrune の結果）を止めて消す */
   async pruneAgents(agents: AgentNode[]): Promise<void> {
     for (const a of agents) {
       if (a.alive) await this.runtime.stop(a.id).catch(() => {});

@@ -12,7 +12,8 @@
 import { exec, setShared, shared, terminals } from "herdr";
 import * as ui from "gpui-kit";
 import type { Tag } from "@herdr-tools/utils/tag";
-import { boardRows, commandFor, parseList, toggleCollapsed, WS, type BoardAction, type BoardRow, type ListedTree } from "./board";
+import type { ListedTree } from "@herdr-tools/tmux/json";
+import { boardRows, commandFor, parseList, toggleCollapsed, WS, type BoardAction, type BoardRow } from "./board";
 
 const REFRESH_MS = 4000;
 

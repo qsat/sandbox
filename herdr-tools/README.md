@@ -16,7 +16,7 @@
           ws go / ws panes の計画   ▼
                          ws-core: Workspace > Worktree > Agent
                            状態の導出・参照の解決・再開・起動・会話IDの記録・片付け
-                           事実の出どころ: herdr-core/（hc の JSON-RPC / CLI）、adapters/git.ts（ghq / git）
+                           事実の出どころ: herdr-core/（hc connect の JSON-RPC）、adapters/git.ts（ghq / git）
 ```
 
 依存の向きは `ws → {ws-core, tmux}`、`tmux → ws-core`、`herdr-app → ws-core/model`（純粋なモデルだけ）、
@@ -44,12 +44,13 @@ ws-core の中の `AgentRuntime` / `WorkspaceSource` はインターフェース
 | `ws-core/src/model.ts` | ドメインの型（`AgentRecord` / `AgentNode` / `WorktreeNode` / `WorkspaceNode`）と純粋なルール（要再開・注意の順・パス境界） |
 | `ws-core/src/tree.ts` | 木の組み立て、生のパスからの worktree 特定（`makeLocator`）、参照の解決、片付けの計画 |
 | `ws-core/src/ports.ts` | `AgentRuntime`（起動・一覧・送信・会話IDの記録・購読・会話に入るコマンド）と `WorkspaceSource`。テスト用の継ぎ目 |
-| `ws-core/src/service.ts` | `WsCore`: snapshot / resolve / resume / newAgent / recordSessionFromHook / prune |
+| `ws-core/src/service.ts` | `WsCore`: snapshot / resume / newAgent / recordSessionFromHook / pruneAgents、クライアント向けの attachCommand / subscribe |
+| `ws-core/src/herdr-core/terminal.ts` | herdr-core の `Terminal` の型（`schema/hc.openrpc.json` のうち使う項目）。I/O なしで mod からも使う |
 | `ws-core/src/claude.ts` | Claude Code の知識（`claude --resume <id>`、SessionStart hook の入力） |
 | `ws-core/src/adapters/git.ts` | `WorkspaceSource` の ghq / git 実装 |
 | `ws-core/src/herdr-core/runtime.ts` | `HerdrRuntime`: herdr-core の言葉（ラベル `ws` / `wt` / `claude.session`、端末名規則、foreground がシェル＝プログラム喪失）とドメインの言葉の翻訳 |
 | `ws-core/src/herdr-core/hc.ts` | hc クライアント（`hc connect` の JSON-RPC、CLI、返り値の正規化） |
-| `ws-core/test/stub/` | E2E 用のスタブ herdr-core |
+| `ws-core/test/stub/` | E2E 用のスタブ herdr-core（API 仕様どおりの JSON-RPC に答える） |
 | `utils/src/` | 共通関数（1ファイル1関数） |
 | `herdr-app/src/agent-board/board.ts` | mod の純粋なロジック（`ws list --json` に terminals() の即時の状態を重ねて行にする、操作 → ws の呼び出し） |
 | `herdr-app/src/agent-board/main.ts` | mod 本体（Herdr app の API を使うアダプタ）。バンドルして `main.js` になる |
@@ -65,6 +66,7 @@ ws-core の中の `AgentRuntime` / `WorkspaceSource` はインターフェース
 | `ws/test/e2e.sh` | スタブ herdr-core と実際の tmux での E2E |
 
 会話ペインの印は tmux のペインオプション `@ws_agent`（値はエージェントの id）。`ws list --json` は ws-core の木に、tmux の情報を `tmux` キーで添えて出す（`worktree.tmux.session`、`agent.tmux.attached` / `agent.tmux.panes`）。
+その型（`ListedTree`）は `tmux/src/json.ts` に1つだけあり、mod は型だけを import する。ws-core の木（`Tree`）は型引数でクライアントの情報を足せる。
 
 ## セットアップ（手元の Mac）
 
@@ -113,7 +115,7 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 設計書の判断フローをそのまま `tmux/src/model.ts` の `planGo` が手順のリストにし、`TmuxNavigator.execute` が実行する（`--dry-run` で手順だけ見られる）。
 
 1. セッションを用意（無ければ tm 規則 = basename、`.`→`_` で作る。同名があればそれを使う）
-2. agent なら: 要再開なら再開（C。`WsCore.resume`）→ `@ws_agent` が一致する生きたペインがあればそれを選ぶ／無ければ `agents` ウィンドウに `hc attach` ペインを作る（無ければウィンドウごと）
+2. agent なら: 再開の準備（C。`WsCore.resume` を毎回呼ぶ。要再開かどうかは再開する側が最新の状態で判定するので、何度呼んでも安全）→ `@ws_agent` が一致する生きたペインがあればそれを選ぶ／無ければ `agents` ウィンドウに `hc attach` ペインを作る（無ければウィンドウごと）
 3. tmux クライアントを切り替える: `--client` 指定 > `--from-app` なら最後に使われたクライアント > tmux 内なら呼び出し元 > tmux の外ならその場で `tmux attach`
 4. app からなら Ghostty を前面へ（クライアントが1つも無ければ Ghostty の新しいウィンドウで attach）
 
@@ -144,11 +146,10 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 
 | 確認項目 | 結果が想定と違ったら |
 | --- | --- |
-| ラベルのキーに `.` を使える | 使えなければ `WS_SESSION_LABEL=claude_session`（読む側は両方見る） |
+| ラベルのキーに `.` を使える | 使えなければ `WS_SESSION_LABEL=claude_session`（読み書きともこのキーだけを使う。既に記録した会話IDは引き継がれない） |
 | kill -9 後もラベルが残り `foreground.name` がシェルになる | 残らなければセッションIDをファイルに保存する方式に変える（`HerdrRuntime.recordSession` / `toAgentRecord`） |
 | hook から `$HC_TERMINAL_ID` が見える | 見えなければ hook は何もしない（`WS_DEBUG=1` で理由を stderr に出す） |
-| `terminal.list` の返り値の形 | `ws-core/src/herdr-core/hc.ts` の `normalizeTerminal` で吸収。RPC が失敗したら `hc ls --json` にフォールバックする（その場合ラベルが無く cwd から推定） |
-| `hc run --bg` の出力 | 出力には依存せず、起動後に名前で引き直してアドレスを得る |
+| API の形 | `schema/hc.openrpc.json`（herdr-core リポジトリ）どおりに書いてある（`ws-core/src/herdr-core/terminal.ts`）。実機で違えばそこと `hc.ts` を直す。hc とは `hc connect` の JSON-RPC だけで話し、接続は1本を使い回す。起動した端末のアドレスは `terminal.run` の返り値から取る |
 | `open -na Ghostty --args -e tmux attach -t <session>` | `tmux/src/ghostty.ts` の `ghosttyNewWindow` |
 | mod の API（`herdr.d.ts` / `gpui-kit.d.ts`） | `herdr-app/src/herdr-app.d.ts` を本物の d.ts に置き換え、型エラーが出たら `main.ts` だけ直す。判断ロジック（`board.ts`）はテスト済み |
 

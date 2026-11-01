@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { boardRows, commandFor, parseList, toggleCollapsed, type BoardRow, type ListedTree } from "../src/agent-board/board";
+import type { ListedTree } from "@herdr-tools/tmux/json";
+import { boardRows, commandFor, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
 
 const agent = (p: { id: string; name: string; status: "working" | "idle"; needsResume: boolean; attached: boolean }) => ({
   id: p.id,
@@ -53,8 +54,8 @@ describe("boardRows", () => {
     expect(find(rows, "t2")).toMatchObject({ tags: [{ text: "要再開", tone: "strong" }, { text: "未attach", tone: "muted" }] });
   });
 
-  test("hc ls 形式（status が単語）でも重ねられる", () => {
-    expect(find(boardRows(tree, [{ address: "t2", status: "error" }], []), "t2")).toMatchObject({ rawStatus: "error" });
+  test("名乗っていない（status が null）なら ws list の状態のまま", () => {
+    expect(find(boardRows(tree, [{ address: "t2", status: null }], []), "t2")).toMatchObject({ rawStatus: "idle" });
   });
 
   test("折り畳んだ workspace は中身を出さない", () => {

@@ -51,38 +51,31 @@ export interface PathInfo {
 // 木
 // ---------------------------------------------------------------------------
 
-export interface AgentNode {
-  id: string;
-  name: string;
-  status: AgentStatus;
-  kind?: string;
-  msg?: string;
-  alive: boolean;
-  parent: string | null;
-  cwd: string;
-  sessionId?: string;
+/** 木の中のエージェント: 事実から居場所の手がかりを除き、導出した状態を足したもの */
+export type AgentNode = Omit<AgentRecord, "workspaceHint" | "worktreeHint" | "programLost"> & {
   /** 会話を再開すべき状態（実行環境は生きている・プログラムを失った・会話IDがある） */
   needsResume: boolean;
   /** 記録した worktree のディレクトリが存在しない（直接削除された worktree） */
   missingLocation: boolean;
-}
+};
 
-export interface WorktreeNode {
+export interface WorktreeNode<A extends AgentNode = AgentNode> {
   path: string;
   branch: string | null;
   exists: boolean;
   isMain: boolean;
-  agents: AgentNode[];
+  agents: A[];
 }
 
-export interface WorkspaceNode {
+export interface WorkspaceNode<W extends WorktreeNode<any> = WorktreeNode> {
   path: string;
   name: string;
-  worktrees: WorktreeNode[];
+  worktrees: W[];
 }
 
-export interface Tree {
-  workspaces: WorkspaceNode[];
+/** Workspace > Worktree > Agent の木。クライアントは型引数で自分の情報を足した木を作れる（ws list --json など） */
+export interface Tree<W extends WorktreeNode<any> = WorktreeNode> {
+  workspaces: WorkspaceNode<W>[];
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +84,11 @@ export interface Tree {
 
 export function needsResume(a: AgentRecord): boolean {
   return a.alive && a.programLost === true && !!a.sessionId;
+}
+
+export function toAgentNode(a: AgentRecord, worktreeExists: boolean): AgentNode {
+  const { workspaceHint: _ws, worktreeHint, programLost: _lost, ...rest } = a;
+  return { ...rest, needsResume: needsResume(a), missingLocation: !!worktreeHint && !worktreeExists };
 }
 
 /** 人の注意が要る順。小さいほど先 */
@@ -102,6 +100,15 @@ export function attentionRank(a: { status: AgentStatus; needsResume: boolean }):
   if (a.status === "working") return 4;
   if (a.status === "done") return 5;
   return 6;
+}
+
+export function byName(a: { name: string; id: string }, b: { name: string; id: string }): number {
+  return a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
+}
+
+/** 注意が要る順、同じなら名前・id の順 */
+export function byAttention(a: AgentNode, b: AgentNode): number {
+  return attentionRank(a) - attentionRank(b) || byName(a, b);
 }
 
 // ---------------------------------------------------------------------------

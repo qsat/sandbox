@@ -81,23 +81,6 @@ export function indexTmux(locate: Locate, facts: TmuxFacts): TmuxIndex {
   };
 }
 
-/** ws list --json 用: 木に tmux の情報を tmux キーで添える（Herdr app の mod もこれを読む） */
-export function withTmux(tree: Tree, idx: TmuxIndex) {
-  return {
-    workspaces: tree.workspaces.map((ws) => ({
-      ...ws,
-      worktrees: ws.worktrees.map((wt) => {
-        const s = idx.sessionOf(wt.path);
-        return {
-          ...wt,
-          tmux: { session: s ? { name: s.name, attached: s.attached } : null },
-          agents: wt.agents.map((a) => ({ ...a, tmux: { attached: idx.isAttached(a.id), panes: idx.panesOf(a.id).map((p) => p.paneId) } })),
-        };
-      }),
-    })),
-  };
-}
-
 // ---------------------------------------------------------------------------
 // 移動に使うクライアント
 // ---------------------------------------------------------------------------
@@ -127,7 +110,7 @@ export function chooseClient(opts: { explicit?: string; fromApp: boolean; inside
 
 export type Step =
   | { op: "newSession"; name: string; cwd: string }
-  /** 会話に入る前の準備（要再開なら再開）。中身は呼び出し側が持つ */
+  /** 会話に入る前の準備（要再開なら再開。何度やっても安全なので毎回行う）。中身は呼び出し側が持つ */
   | { op: "prepareAgent"; agent: string }
   | { op: "selectPane"; paneId: string }
   | { op: "openAgentPane"; session: string; window: string; cwd: string; agent: string }
@@ -163,8 +146,8 @@ export function planGo(target: Resolved, idx: TmuxIndex, ctx: GoContext): Step[]
   let switchTarget = session;
   if (target.kind === "agent") {
     const a = target.agent;
-    // 2) 要再開なら再開（C）
-    if (a.needsResume) steps.push({ op: "prepareAgent", agent: a.id });
+    // 2) 要再開なら再開（C）。判定は再開する側が最新の状態で行うので、木の needsResume には頼らない
+    steps.push({ op: "prepareAgent", agent: a.id });
     // 3) 会話ペインがあればそれ、無ければ作る（同じエージェントを二重に開かない）
     const existing = idx.panesOf(a.id)[0];
     if (existing) {

@@ -13,6 +13,7 @@
       "name": "@herdr-tools/herdr-app",
       "version": "0.1.0",
       "dependencies": {
+        "@herdr-tools/tmux": "workspace:*",
         "@herdr-tools/utils": "workspace:*",
         "@herdr-tools/ws-core": "workspace:*",
       },

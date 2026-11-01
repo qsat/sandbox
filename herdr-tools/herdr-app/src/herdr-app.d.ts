@@ -3,7 +3,8 @@
 // 手元ではこのファイルを消し、それらを herdr-app/src/ に置き換えて型チェックを通すこと。
 
 declare module "herdr" {
-  export function terminals(): Array<{ address?: string; status?: string | { state?: string; kind?: string } }>;
+  /** herdr-core の Terminal と同じ形（使う項目だけ） */
+  export function terminals(): Array<{ address: string; status: { state: string; kind?: string | null } | null }>;
   export function exec(cmd: string, args: string[], opts?: { cwd?: string }): Promise<{ code: number; stdout: string; stderr: string }>;
   export const shared: Record<string, unknown> | undefined;
   export function setShared(value: Record<string, unknown>): void;

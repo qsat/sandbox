@@ -66,7 +66,7 @@ out="$(cd "$FEAT/" && ws new)"
 check "ws new は <address> <name>" "$out" "$(printf 't1\tapi-feat-auth')"
 check "ラベル ws" "$(state '.terminals[0].labels.ws')" "$API"
 check "ラベル wt" "$(state '.terminals[0].labels.wt')" "$FEAT"
-check "--keep で起動" "$(state '.log[] | select(.[0]=="run") | index("--keep") != null' | head -1)" "true"
+check "--keep で、待たずに起動" "$(state '[.log[] | select(.[0]=="terminal.run")][0][1] | "\(.keep) \(.wait)"')" "true false"
 echo '{"session_id":"sess-1","source":"startup"}' | HC_TERMINAL_ID=t1 ws hook session-start
 check "hook がセッションIDを記録" "$(state '.terminals[0].labels["claude.session"]')" "sess-1"
 check "hook は core の外では何もしない" "$(echo '{"session_id":"x"}' | ws hook session-start; echo $?)" "0"
@@ -99,10 +99,10 @@ echo "resume（claude を失って --keep のシェルに置き換わった状�
 jq '.terminals[0].foreground = {"name":"zsh","argv":["zsh"],"cwd":"/"}' "$HC_STUB_STATE" >"$TMP/s" && mv "$TMP/s" "$HC_STUB_STATE"
 check "要再開と判定" "$(ws list --json | jq '.workspaces[0].worktrees[].agents[] | .needsResume')" "true"
 ws go t1 --client "$CLIENT"
-check "go の中で claude --resume を送る" "$(state '[.log[] | select(.[0]=="send")][0][2]')" "claude --resume sess-1"
+check "go の中で claude --resume を送る" "$(state '[.log[] | select(.[0]=="terminal.send")][0][1].text')" "claude --resume sess-1"
 check "再開後は要再開でない" "$(ws list --json | jq '.workspaces[0].worktrees[].agents[] | .needsResume')" "false"
 check "2回目の resume は何もしない" "$(ws resume t1)" "skip t1: running"
-check "send は1回だけ" "$(state '[.log[] | select(.[0]=="send")] | length')" "1"
+check "send は1回だけ" "$(state '[.log[] | select(.[0]=="terminal.send")] | length')" "1"
 
 echo "go --dry-run"
 check "計画だけ出す" "$(ws go "$API" --client "$CLIENT" --dry-run | jq -r '.[0].op')" "switchClient"
@@ -118,7 +118,10 @@ check "もう開くものは無い" "$(ws panes -a --pane "$PANE")" "ws panes: 0
 check "agents ウィンドウに3ペイン" "$(t list-panes -t '=api=feat-auth:agents' | wc -l | tr -d ' ')" "3"
 
 echo "new --attach"
+BEFORE="$(state '.log | length')"
 (cd "$API" && ws new --attach --client "$CLIENT")
+check "hc への接続は1本を使い回す" "$(state ".log[$BEFORE:] | map(select(.[0]==\"connect\")) | length")" "1"
+check "一覧は名前決めと移動先の木の2回だけ（起動後に引き直さない）" "$(state ".log[$BEFORE:] | map(select(.[0]==\"terminal.list\")) | length")" "2"
 check "起動して会話ペインへ" "$(client_session)" "api"
 check "api の agents ウィンドウに t4" "$(t list-panes -a -F '#{session_name}:#{window_name} #{@ws_agent}' | grep -c '^api:agents t4$')" "1"
 

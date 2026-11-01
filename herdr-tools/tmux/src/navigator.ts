@@ -2,9 +2,9 @@
 // 実行環境（herdr-core など）は WsCore の AgentRuntime ポートの向こうにいて、ここからは見えない。
 
 import { homedir } from "node:os";
-import { looksLikePath, type Resolved, type Snapshot, type WorktreeNode, type WsCore } from "@herdr-tools/ws-core";
+import { looksLikePath, resolveRef, type Resolved, type Snapshot, type WorktreeNode, type WsCore } from "@herdr-tools/ws-core";
 import { focusGhostty, ghosttyNewWindow } from "./ghostty";
-import { AGENTS_WINDOW, chooseClient, indexTmux, interestingPaths, planGo, planPanes, planPruneSessions, workingDir, type Step, type TmuxIndex } from "./model";
+import { AGENTS_WINDOW, chooseClient, indexTmux, interestingPaths, planGo, planPanes, workingDir, type Step, type TmuxIndex } from "./model";
 import { Tmux } from "./tmux";
 
 export interface TmuxView {
@@ -58,7 +58,7 @@ export class TmuxNavigator {
   /** ref（worktree のパスかエージェントの id／名前）へ移動する */
   async goRef(ref: string, opts: GoOptions = {}): Promise<Step[]> {
     const view = await this.view({ include: looksLikePath(ref) ? [ref] : [] });
-    const t = this.core.resolve(view.snap, ref);
+    const t = resolveRef(view.snap, ref);
     if (!t) throw new Error(`見つかりません: ${ref}`);
     return this.go(t, view, opts);
   }
@@ -82,7 +82,7 @@ export class TmuxNavigator {
           await this.tmux.selectPane(s.paneId);
           break;
         case "openAgentPane":
-          await this.tmux.openAgentPane(s.session, s.window, s.cwd, s.agent, this.core.runtime.attachCommand(s.agent));
+          await this.tmux.openAgentPane(s.session, s.window, s.cwd, s.agent, this.core.attachCommand(s.agent));
           break;
         case "switchClient":
           await this.tmux.switchClient(s.client, target(s.target));
@@ -111,16 +111,11 @@ export class TmuxNavigator {
     const plan = planPanes(wt, view.idx, opts);
     const opened: string[] = [];
     for (const a of plan.open) {
-      if (a.needsResume) await this.core.resume(a.id);
-      await this.tmux.openAgentPane(info.session, AGENTS_WINDOW, workingDir(wt, this.fallbackCwd), a.id, this.core.runtime.attachCommand(a.id));
+      await this.core.resume(a.id);
+      await this.tmux.openAgentPane(info.session, AGENTS_WINDOW, workingDir(wt, this.fallbackCwd), a.id, this.core.attachCommand(a.id));
       opened.push(a.id);
     }
     return { session: info.session, opened, skipped: plan.skipped.map((a) => a.id), alreadyAttached: wt.agents.filter((a) => view.idx.isAttached(a.id)).length };
-  }
-
-  /** 場所が消えた worktree のセッション */
-  prunePlan(view: TmuxView): string[] {
-    return planPruneSessions(view.snap.tree, view.idx);
   }
 
   async killSessions(names: string[]): Promise<void> {

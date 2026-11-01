@@ -1,270 +1,132 @@
-// herdr-core（hc）クライアント。
-// - 読み取りと購読は JSON-RPC（hc connect: stdin/stdout で1行1メッセージ）。ソケットのパス解決は hc に任せる
-// - 一回きりの操作（run / label / send / kill / rm）は CLI
-// API はプレビュー版（protocol generation 1）なので、返り値の形の揺れは normalizeTerminal で吸収する。
+// herdr-core（hc）の JSON-RPC クライアント。`hc connect` の stdin/stdout に1行1メッセージ（plain mode）で話す。
+// 形は schema/hc.openrpc.json のとおり。接続はプロセスの中で1本を使い回し、切れたら次の呼び出しで張り直す。
 
-import type { AgentStatus } from "../model";
-import { run } from "@herdr-tools/utils/run";
-import { runOk } from "@herdr-tools/utils/run-ok";
+import type { HcTerminal } from "./terminal";
 
-/** herdr-core の端末（terminal.list / terminal.get / hc ls --json を正規化したもの） */
-export interface HcTerminal {
-  address: string; // t7 など。この core で不変
-  name: string;
-  cwd: string;
-  labels: Record<string, string>;
-  parent: string | null;
-  state: "live" | "finished";
-  status: AgentStatus;
-  kind?: string;
-  msg?: string;
-  /** 今の前面プロセス名。terminal.list に含まれないこともある */
-  foreground?: { name: string };
-}
-
-const STATUSES = new Set<AgentStatus>(["working", "blocked", "idle", "done", "error"]);
-
-function asStatus(v: unknown): AgentStatus {
-  return typeof v === "string" && STATUSES.has(v as AgentStatus) ? (v as AgentStatus) : "unknown";
-}
-
-function asLabels(v: unknown): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (Array.isArray(v)) {
-    for (const x of v) {
-      if (typeof x !== "string") continue;
-      const i = x.indexOf("=");
-      if (i > 0) out[x.slice(0, i)] = x.slice(i + 1);
-    }
-  } else if (v && typeof v === "object") {
-    for (const [k, val] of Object.entries(v as Record<string, unknown>)) if (val != null) out[k] = String(val);
-  }
-  return out;
-}
-
-/** terminal.list / terminal.get / hc ls --json / hc get --json のどれでも受ける */
-export function normalizeTerminal(raw: any): HcTerminal {
-  const st = raw?.status;
-  const statusObj = st && typeof st === "object" ? st : undefined;
-  const fg = raw?.foreground;
-  return {
-    address: String(raw?.address ?? raw?.id ?? ""),
-    name: String(raw?.name ?? ""),
-    cwd: String(raw?.cwd ?? fg?.cwd ?? ""),
-    labels: asLabels(raw?.labels),
-    parent: raw?.parent ? String(raw.parent) : null,
-    state: raw?.state === "finished" ? "finished" : "live",
-    status: asStatus(statusObj ? statusObj.state : st),
-    kind: statusObj?.kind ?? raw?.kind ?? undefined,
-    msg: statusObj?.msg ?? undefined,
-    foreground: fg && typeof fg === "object" ? { name: String(fg.name ?? "") } : undefined,
-  };
-}
-
-function terminalsFromResult(result: any): any[] {
-  if (Array.isArray(result)) return result;
-  if (Array.isArray(result?.terminals)) return result.terminals;
-  if (Array.isArray(result?.items)) return result.items;
-  return [];
-}
-
-function parseJsonList(text: string): any[] {
-  const t = text.trim();
-  if (!t) return [];
-  try {
-    return terminalsFromResult(JSON.parse(t));
-  } catch {
-    // JSON Lines の可能性
-    return t.split("\n").flatMap((l) => {
-      try {
-        return [JSON.parse(l)];
-      } catch {
-        return [];
-      }
-    });
-  }
-}
-
-// ---------------------------------------------------------------------------
-// JSON-RPC over `hc connect`
-// ---------------------------------------------------------------------------
-
-export class HcRpc {
-  private proc: ReturnType<typeof Bun.spawn> | undefined;
+class Connection {
+  private readonly proc: ReturnType<typeof Bun.spawn>;
   private nextId = 1;
   private pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
-  private closed = false;
-  onNotification: (msg: any) => void = () => {};
-  onClose: () => void = () => {};
+  closed = false;
 
-  constructor(private readonly bin: string) {}
-
-  start(): void {
-    this.proc = Bun.spawn([this.bin, "connect"], { stdin: "pipe", stdout: "pipe", stderr: "ignore" });
-    void this.readLoop();
+  constructor(bin: string, onNotification: (msg: { method: string; params?: any }) => void = () => {}) {
+    this.proc = Bun.spawn([bin, "connect"], { stdin: "pipe", stdout: "pipe", stderr: "ignore" });
+    void this.read(onNotification);
   }
 
-  private async readLoop(): Promise<void> {
+  private async read(onNotification: (msg: { method: string; params?: any }) => void): Promise<void> {
     const decoder = new TextDecoder();
     let buf = "";
     try {
-      for await (const chunk of this.proc!.stdout as ReadableStream<Uint8Array>) {
+      for await (const chunk of this.proc.stdout as ReadableStream<Uint8Array>) {
         buf += decoder.decode(chunk, { stream: true });
-        let nl: number;
-        while ((nl = buf.indexOf("\n")) >= 0) {
+        for (let nl = buf.indexOf("\n"); nl >= 0; nl = buf.indexOf("\n")) {
           const line = buf.slice(0, nl).trim();
           buf = buf.slice(nl + 1);
-          if (line) this.dispatch(line);
+          if (!line) continue;
+          const msg = JSON.parse(line);
+          const p = typeof msg.id === "number" ? this.pending.get(msg.id) : undefined;
+          if (p) {
+            this.pending.delete(msg.id);
+            if (msg.error) p.reject(Object.assign(new Error(msg.error.message), { kind: msg.error.data?.kind }));
+            else p.resolve(msg.result);
+          } else if (msg.method) onNotification(msg);
         }
       }
     } catch {
-      // stream closed
+      // 切れた
     }
     this.closed = true;
     for (const p of this.pending.values()) p.reject(new Error("hc connect closed"));
     this.pending.clear();
-    this.onClose();
   }
 
-  private dispatch(line: string): void {
-    let msg: any;
-    try {
-      msg = JSON.parse(line);
-    } catch {
-      return;
-    }
-    if (msg && typeof msg.id === "number" && this.pending.has(msg.id) && !msg.method) {
-      const p = this.pending.get(msg.id)!;
-      this.pending.delete(msg.id);
-      if (msg.error) p.reject(new Error(`hc rpc error: ${msg.error.message ?? JSON.stringify(msg.error)}`));
-      else p.resolve(msg.result);
-      return;
-    }
-    this.onNotification(msg);
-  }
-
-  call(method: string, params: Record<string, unknown> = {}, timeoutMs = 5000): Promise<any> {
-    if (!this.proc) this.start();
+  call(method: string, params: Record<string, unknown>): Promise<any> {
     if (this.closed) return Promise.reject(new Error("hc connect closed"));
     const id = this.nextId++;
-    const payload = JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n";
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`hc rpc timeout: ${method}`));
-      }, timeoutMs);
-      this.pending.set(id, {
-        resolve: (v) => (clearTimeout(timer), resolve(v)),
-        reject: (e) => (clearTimeout(timer), reject(e)),
-      });
-      const sink = this.proc!.stdin as import("bun").FileSink;
-      sink.write(payload);
+      this.pending.set(id, { resolve, reject });
+      const sink = this.proc.stdin as import("bun").FileSink;
+      sink.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
       sink.flush();
     });
   }
 
   close(): void {
     try {
-      (this.proc?.stdin as import("bun").FileSink | undefined)?.end();
-    } catch {}
-    try {
-      this.proc?.kill();
+      (this.proc.stdin as import("bun").FileSink).end();
+      this.proc.kill();
     } catch {}
   }
 }
-
-// ---------------------------------------------------------------------------
-// hc の操作
-// ---------------------------------------------------------------------------
 
 export interface HcRunSpec {
   name: string;
   cwd: string;
   labels: Record<string, string>;
-  command: string[];
+  argv: string[];
 }
 
 export class Hc {
+  private conn?: Connection;
+
   constructor(readonly bin = "hc") {}
 
-  private async withRpc<T>(fn: (rpc: HcRpc) => Promise<T>): Promise<T> {
-    const rpc = new HcRpc(this.bin);
-    rpc.start();
-    try {
-      return await fn(rpc);
-    } finally {
-      rpc.close();
-    }
+  private call(method: string, params: Record<string, unknown>): Promise<any> {
+    if (!this.conn || this.conn.closed) this.conn = new Connection(this.bin);
+    return this.conn.call(method, params);
   }
 
-  /** 端末一覧。RPC が使えなければ hc ls --json にフォールバック（その場合ラベルは無いことがある） */
+  /** 終了済みも含めて全部 */
   async list(): Promise<HcTerminal[]> {
+    return (await this.call("terminal.list", { all: true })).terminals;
+  }
+
+  async get(terminal: string): Promise<HcTerminal | undefined> {
     try {
-      const result = await this.withRpc((rpc) => rpc.call("terminal.list", {}));
-      return terminalsFromResult(result).map(normalizeTerminal).filter((t) => t.address);
-    } catch {
-      const r = await run(this.bin, ["ls", "--json"]);
-      if (r.code !== 0) {
-        if (r.code === 127) return []; // hc が無い
-        throw new Error(`hc ls --json failed: ${r.stderr.trim()}`);
-      }
-      return parseJsonList(r.stdout).map(normalizeTerminal).filter((t) => t.address);
+      return await this.call("terminal.get", { terminal });
+    } catch (e) {
+      if ((e as { kind?: string }).kind === "not_found") return undefined;
+      throw e;
     }
   }
 
-  async get(ref: string): Promise<HcTerminal | undefined> {
-    const r = await run(this.bin, ["get", ref, "--json"]);
-    if (r.code !== 0) return undefined;
-    try {
-      const raw = JSON.parse(r.stdout);
-      return normalizeTerminal(raw?.terminal ?? raw);
-    } catch {
-      return undefined;
-    }
-  }
-
+  /** --keep で、待たずに起動する。アドレスを返す */
   async run(spec: HcRunSpec): Promise<string> {
-    const args = ["run", "--bg", "--keep", "--name", spec.name, "--cwd", spec.cwd];
-    for (const [k, v] of Object.entries(spec.labels)) args.push("--label", `${k}=${v}`);
-    args.push("--", ...spec.command);
-    return (await runOk(this.bin, args)).trim();
+    const r = await this.call("terminal.run", { ...spec, keep: true, wait: false });
+    return r.address;
   }
 
-  async label(ref: string, key: string, value: string): Promise<void> {
-    await runOk(this.bin, ["label", ref, `${key}=${value}`]);
+  async label(terminal: string, labels: Record<string, string>): Promise<void> {
+    await this.call("terminal.label", { terminal, labels });
   }
 
-  async send(ref: string, text: string): Promise<void> {
-    await runOk(this.bin, ["send", ref, text]);
+  async send(terminal: string, text: string): Promise<void> {
+    await this.call("terminal.send", { terminal, text });
   }
 
-  async kill(ref: string): Promise<void> {
-    await runOk(this.bin, ["kill", ref]);
+  async kill(terminal: string): Promise<void> {
+    await this.call("terminal.kill", { terminal });
   }
 
-  async rm(ref: string): Promise<void> {
-    await runOk(this.bin, ["rm", ref]);
+  async rm(terminal: string): Promise<void> {
+    await this.call("terminal.rm", { terminal });
   }
 
   /**
-   * events.subscribe を張り、イベントが来るたびに onEvent を呼ぶ（heartbeat は除く）。
-   * 最初のスナップショットや missed も「変化の可能性」として扱い、呼び出し側で間引く。
+   * events.subscribe（plain mode では、その接続は以後通知だけを運ぶので専用の接続を張る）。
+   * event と missed のたびに onChange を呼ぶ（heartbeat は除く）。
    */
-  subscribe(params: Record<string, unknown>, onEvent: (msg: any) => void, onClose: () => void): () => void {
-    const rpc = new HcRpc(this.bin);
-    rpc.onNotification = (msg) => {
-      const method: string = msg?.method ?? "";
-      if (method.includes("heartbeat") || msg?.params?.type === "heartbeat") return;
-      onEvent(msg);
-    };
-    rpc.onClose = onClose;
+  subscribe(onChange: () => void): () => void {
+    let conn: Connection;
     try {
-      rpc.start();
+      conn = new Connection(this.bin, (msg) => {
+        if (msg.method === "event" || msg.method === "missed") onChange();
+      });
     } catch {
-      onClose();
       return () => {};
     }
-    rpc.call("events.subscribe", params, 10000).catch(() => onClose());
-    return () => rpc.close();
+    conn.call("events.subscribe", {}).catch(() => {});
+    return () => conn.close();
   }
 }

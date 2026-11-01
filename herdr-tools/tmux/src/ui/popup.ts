@@ -79,7 +79,7 @@ export async function runUi(nav: TmuxNavigator, opts: UiOptions): Promise<void> 
 
   let unsubscribe: () => void = () => {};
   try {
-    unsubscribe = nav.core.runtime.subscribe(scheduleReload);
+    unsubscribe = nav.core.subscribe(scheduleReload);
   } catch {
     // 実行環境に繋がらなくても一覧自体は出す
   }

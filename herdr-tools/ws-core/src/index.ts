@@ -8,3 +8,4 @@ export * from "./claude";
 export * from "./service";
 export { GitWorkspaceSource, type GitSourceOptions } from "./adapters/git";
 export { HerdrRuntime, type HerdrRuntimeOptions } from "./herdr-core/runtime";
+export type { HcTerminal, HcStatus } from "./herdr-core/terminal";

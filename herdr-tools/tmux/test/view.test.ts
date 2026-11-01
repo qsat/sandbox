@@ -11,7 +11,7 @@ const infos: PathInfo[] = [
   { path: A, exists: true, toplevel: A, commonDir: `${A}/.git`, branch: "main" },
   { path: B, exists: true, toplevel: B, commonDir: `${B}/.git`, branch: "main" },
 ];
-const tree = buildTree({ agents: [t("t1", A, "working"), t("t2", B, "idle"), t("t3", B, "blocked")], infos, entries: [], root: "/g", all: false });
+const tree = buildTree({ agents: [t("t1", A, "working"), t("t2", B, "idle"), t("t3", B, "blocked")], infos, include: [], root: "/g" });
 const idx = indexTmux(makeLocator(tree, infos), {
   sessions: [{ name: "a", path: A, attached: true }],
   panes: [{ paneId: "%1", agent: "t1", dead: false }],
