@@ -1,9 +1,3 @@
-export interface RunResult {
-  code: number;
-  stdout: string;
-  stderr: string;
-}
-
 export interface RunOptions {
   cwd?: string;
   input?: string;
@@ -11,7 +5,7 @@ export interface RunOptions {
 }
 
 /** 子プロセスを実行して終了コードと出力を返す。コマンドが無ければ 127 */
-export async function run(cmd: string, args: string[], opts: RunOptions = {}): Promise<RunResult> {
+export async function run(cmd: string, args: string[], opts: RunOptions = {}) {
   let proc;
   try {
     proc = Bun.spawn([cmd, ...args], {

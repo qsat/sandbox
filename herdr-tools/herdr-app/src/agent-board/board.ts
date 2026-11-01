@@ -5,7 +5,6 @@ import { agentTags } from "@herdr-tools/utils/agent-tags";
 import { basename } from "@herdr-tools/utils/basename";
 import { statusIcon } from "@herdr-tools/utils/status-icon";
 import { statusLabel } from "@herdr-tools/utils/status-label";
-import type { Tag } from "@herdr-tools/utils/tag";
 import { worktreeTags } from "@herdr-tools/utils/worktree-tags";
 import type { ListedAgent, ListedTree } from "@herdr-tools/tmux/json";
 import type { HcTerminal } from "@herdr-tools/ws-core/herdr-core/terminal";
@@ -16,15 +15,10 @@ export const WS = "ws";
 /** terminals() の要素（herdr-core の Terminal と同じ形） */
 export type LiveTerminal = Pick<HcTerminal, "address" | "status">;
 
-export type BoardRow =
-  | { kind: "workspace"; key: string; label: string; waiting: number; collapsed: boolean }
-  | { kind: "worktree"; key: string; label: string; tags: Tag[]; isMain: boolean; exists: boolean }
-  | { kind: "agent"; key: string; label: string; icon: string; status: string; rawStatus: AgentStatus; tags: Tag[]; canResume: boolean; worktree: string };
-
 export type BoardAction = "go" | "new" | "resume";
 
 /** ws list の結果に、terminals() の即時の状態を重ねる */
-function overlay(a: ListedAgent, live: Map<string, LiveTerminal>): ListedAgent {
+function overlay(a: ListedAgent, live: Map<string, LiveTerminal>) {
   const st = live.get(a.id)?.status;
   return st ? { ...a, status: st.state as AgentStatus, kind: st.kind ?? undefined } : a;
 }
@@ -34,23 +28,20 @@ function overlay(a: ListedAgent, live: Map<string, LiveTerminal>): ListedAgent {
  * @param live      terminals() の結果。address は ws のエージェント id と同じ
  * @param collapsed 折り畳んだ workspace のパス
  */
-export function boardRows(tree: ListedTree, live: LiveTerminal[], collapsed: string[]): BoardRow[] {
+export function boardRows(tree: ListedTree, live: LiveTerminal[], collapsed: string[]) {
   const liveBy = new Map(live.map((t) => [t.address, t]));
   const folded = new Set(collapsed);
-  const rows: BoardRow[] = [];
-  for (const ws of tree.workspaces) {
-    const worktrees = ws.worktrees.map((wt) => ({
-      ...wt,
-      agents: wt.agents.map((a) => overlay(a, liveBy)).sort(byAttention),
-    }));
-    const waiting = worktrees.reduce((n, wt) => n + wt.agents.filter((a) => a.status === "blocked" || a.needsResume).length, 0);
-    rows.push({ kind: "workspace", key: ws.path, label: ws.name, waiting, collapsed: folded.has(ws.path) });
-    if (folded.has(ws.path)) continue;
-    for (const wt of worktrees) {
-      rows.push({ kind: "worktree", key: wt.path, label: basename(wt.path), tags: worktreeTags(wt, wt.tmux.session), isMain: wt.isMain, exists: wt.exists });
-      for (const a of wt.agents) {
-        rows.push({
-          kind: "agent",
+  return tree.workspaces.flatMap((ws) => {
+    const worktrees = ws.worktrees.map((wt) => ({ ...wt, agents: wt.agents.map((a) => overlay(a, liveBy)).sort(byAttention) }));
+    const waiting = worktrees.flatMap((wt) => wt.agents).filter((a) => a.status === "blocked" || a.needsResume).length;
+    const header = { kind: "workspace" as const, key: ws.path, label: ws.name, waiting, collapsed: folded.has(ws.path) };
+    if (folded.has(ws.path)) return [header];
+    return [
+      header,
+      ...worktrees.flatMap((wt) => [
+        { kind: "worktree" as const, key: wt.path, label: basename(wt.path), tags: worktreeTags(wt, wt.tmux.session), isMain: wt.isMain, exists: wt.exists },
+        ...wt.agents.map((a) => ({
+          kind: "agent" as const,
           key: a.id,
           label: `${a.id} ${a.name}`,
           icon: statusIcon(a.status),
@@ -59,12 +50,13 @@ export function boardRows(tree: ListedTree, live: LiveTerminal[], collapsed: str
           tags: agentTags(a, a.tmux.attached),
           canResume: a.needsResume,
           worktree: wt.path,
-        });
-      }
-    }
-  }
-  return rows;
+        })),
+      ]),
+    ];
+  });
 }
+
+export type BoardRow = ReturnType<typeof boardRows>[number];
 
 /** 行の操作 → ws の呼び出し（[コマンド, 引数]） */
 export function commandFor(row: BoardRow, action: BoardAction): [string, string[]] | null {
@@ -79,7 +71,7 @@ export function commandFor(row: BoardRow, action: BoardAction): [string, string[
   }
 }
 
-export function toggleCollapsed(collapsed: string[], key: string): string[] {
+export function toggleCollapsed(collapsed: string[], key: string) {
   const s = new Set(collapsed);
   if (s.has(key)) s.delete(key);
   else s.add(key);

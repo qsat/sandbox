@@ -3,26 +3,17 @@
 
 import { parseSessionStart, resumeCommand } from "./claude";
 import { basename } from "@herdr-tools/utils/basename";
-import { needsResume, workspacePathFromCommonDir, type AgentNode, type Tree } from "./model";
+import { needsResume, workspacePathFromCommonDir, type AgentNode } from "./model";
 import type { AgentRuntime, WorkspaceSource } from "./ports";
-import { buildTree, collectCandidatePaths, makeLocator, type Locate } from "./tree";
+import { buildTree, collectCandidatePaths, makeLocator } from "./tree";
 
-export interface CoreOptions {
+interface CoreOptions {
   home?: string;
   /** エージェントとして起動するコマンド */
   claudeBin?: string;
   /** 再開を送ったあと、プログラムが戻るのを待つ上限 */
   resumeWaitMs?: number;
 }
-
-export interface Snapshot {
-  tree: Tree;
-  locate: Locate;
-}
-
-export type ResumeResult = { resumed: true; sessionId: string } | { resumed: false; reason: "not-found" | "finished" | "no-session-id" | "running" };
-
-export type HookResult = { recorded: true } | { recorded: false; reason: "not-in-runtime" | "no-session-id" };
 
 export class WsCore {
   private readonly claudeBin: string;
@@ -40,7 +31,7 @@ export class WsCore {
    * @param all     作業場所の全エントリも出す（既定はエージェントか include があるものだけ。全エントリはこのときだけ取る）
    * @param include クライアントが見たいパス（クライアントが開いている作業場所など）。エージェントがいなくても出す
    */
-  async snapshot(opts: { all?: boolean; include?: string[] } = {}): Promise<Snapshot> {
+  async snapshot(opts: { all?: boolean; include?: string[] } = {}) {
     const root = await this.source.root();
     const [agents, entries] = await Promise.all([this.runtime.list(), opts.all ? this.source.entries(root) : []]);
     const include = [...(opts.include ?? []), ...entries];
@@ -50,7 +41,7 @@ export class WsCore {
   }
 
   /** 会話に入るためのコマンド（クライアントが自分の端末で実行する） */
-  attachCommand(id: string): string {
+  attachCommand(id: string) {
     return this.runtime.attachCommand(id);
   }
 
@@ -63,13 +54,13 @@ export class WsCore {
    * 要再開なら会話の再開コマンドを送る。何度呼んでも安全（対象外なら何もしない）。
    * 送ったあとはプログラムが戻るまで少し待つ（続けて会話に入ったとき素のシェルを見せないため）。
    */
-  async resume(id: string): Promise<ResumeResult> {
+  async resume(id: string) {
     const a = await this.runtime.get(id);
-    if (!a) return { resumed: false, reason: "not-found" };
+    if (!a) return { resumed: false, reason: "not-found" } as const;
     if (!needsResume(a)) {
-      if (!a.alive) return { resumed: false, reason: "finished" };
-      if (!a.sessionId) return { resumed: false, reason: "no-session-id" };
-      return { resumed: false, reason: "running" };
+      if (!a.alive) return { resumed: false, reason: "finished" } as const;
+      if (!a.sessionId) return { resumed: false, reason: "no-session-id" } as const;
+      return { resumed: false, reason: "running" } as const;
     }
     await this.runtime.send(a.id, resumeCommand(this.claudeBin, a.sessionId!));
     const deadline = Date.now() + (this.opts.resumeWaitMs ?? 3000);
@@ -78,7 +69,7 @@ export class WsCore {
       const now = await this.runtime.get(a.id);
       if (!now || now.programLost !== true) break;
     }
-    return { resumed: true, sessionId: a.sessionId! };
+    return { resumed: true, sessionId: a.sessionId! } as const;
   }
 
   /** worktree でエージェントを起動する */
@@ -91,17 +82,17 @@ export class WsCore {
   }
 
   /** Claude Code の SessionStart hook: 会話IDを実行環境に記録する */
-  async recordSessionFromHook(stdin: string, env: Record<string, string | undefined>): Promise<HookResult> {
+  async recordSessionFromHook(stdin: string, env: Record<string, string | undefined>) {
     const id = this.runtime.currentAgentId(env);
-    if (!id) return { recorded: false, reason: "not-in-runtime" };
+    if (!id) return { recorded: false, reason: "not-in-runtime" } as const;
     const sessionId = parseSessionStart(stdin);
-    if (!sessionId) return { recorded: false, reason: "no-session-id" };
+    if (!sessionId) return { recorded: false, reason: "no-session-id" } as const;
     await this.runtime.recordSession(id, sessionId);
-    return { recorded: true };
+    return { recorded: true } as const;
   }
 
   /** 場所が消えた worktree に残っていたエージェント（planPrune の結果）を止めて消す */
-  async pruneAgents(agents: AgentNode[]): Promise<void> {
+  async pruneAgents(agents: AgentNode[]) {
     for (const a of agents) {
       if (a.alive) await this.runtime.stop(a.id).catch(() => {});
       await this.runtime.remove(a.id).catch(() => {});

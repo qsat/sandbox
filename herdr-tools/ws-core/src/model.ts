@@ -59,40 +59,40 @@ export type AgentNode = Omit<AgentRecord, "workspaceHint" | "worktreeHint" | "pr
   missingLocation: boolean;
 };
 
-export interface WorktreeNode<A extends AgentNode = AgentNode> {
+export interface WorktreeNode {
   path: string;
   branch: string | null;
   exists: boolean;
   isMain: boolean;
-  agents: A[];
+  agents: AgentNode[];
 }
 
-export interface WorkspaceNode<W extends WorktreeNode<any> = WorktreeNode> {
+export interface WorkspaceNode {
   path: string;
   name: string;
-  worktrees: W[];
+  worktrees: WorktreeNode[];
 }
 
-/** Workspace > Worktree > Agent の木。クライアントは型引数で自分の情報を足した木を作れる（ws list --json など） */
-export interface Tree<W extends WorktreeNode<any> = WorktreeNode> {
-  workspaces: WorkspaceNode<W>[];
+/** Workspace > Worktree > Agent の木 */
+export interface Tree {
+  workspaces: WorkspaceNode[];
 }
 
 // ---------------------------------------------------------------------------
 // 状態の導出
 // ---------------------------------------------------------------------------
 
-export function needsResume(a: AgentRecord): boolean {
+export function needsResume(a: AgentRecord) {
   return a.alive && a.programLost === true && !!a.sessionId;
 }
 
-export function toAgentNode(a: AgentRecord, worktreeExists: boolean): AgentNode {
+export function toAgentNode(a: AgentRecord, worktreeExists: boolean) {
   const { workspaceHint: _ws, worktreeHint, programLost: _lost, ...rest } = a;
   return { ...rest, needsResume: needsResume(a), missingLocation: !!worktreeHint && !worktreeExists };
 }
 
 /** 人の注意が要る順。小さいほど先 */
-export function attentionRank(a: { status: AgentStatus; needsResume: boolean }): number {
+export function attentionRank(a: { status: AgentStatus; needsResume: boolean }) {
   if (a.status === "blocked") return 0;
   if (a.needsResume) return 1;
   if (a.status === "error") return 2;
@@ -102,12 +102,12 @@ export function attentionRank(a: { status: AgentStatus; needsResume: boolean }):
   return 6;
 }
 
-export function byName(a: { name: string; id: string }, b: { name: string; id: string }): number {
+export function byName(a: { name: string; id: string }, b: { name: string; id: string }) {
   return a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
 }
 
 /** 注意が要る順、同じなら名前・id の順 */
-export function byAttention(a: AgentNode, b: AgentNode): number {
+export function byAttention(a: AgentNode, b: AgentNode) {
   return attentionRank(a) - attentionRank(b) || byName(a, b);
 }
 
@@ -116,12 +116,12 @@ export function byAttention(a: AgentNode, b: AgentNode): number {
 // ---------------------------------------------------------------------------
 
 /** git common dir から本体リポジトリのパスを出す（.git の親。bare ならそのもの） */
-export function workspacePathFromCommonDir(commonDir: string): string {
+export function workspacePathFromCommonDir(commonDir: string) {
   return basename(commonDir) === ".git" ? dirname(commonDir) : commonDir;
 }
 
 /** 一覧での workspace の名前（ghq root からの相対、無理なら ~ 表記） */
-export function displayName(path: string, root: string | undefined, home: string | undefined): string {
+export function displayName(path: string, root: string | undefined, home: string | undefined) {
   if (root && isUnderPath(path, root) && path !== trimTrailingSlash(root)) return path.slice(trimTrailingSlash(root).length + 1);
   if (home && isUnderPath(path, home)) return "~" + path.slice(trimTrailingSlash(home).length);
   return path;

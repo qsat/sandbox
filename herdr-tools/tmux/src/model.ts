@@ -34,12 +34,12 @@ export const AGENT_PANE_OPTION = "@ws_agent";
 export const AGENTS_WINDOW = "agents";
 
 /** tm 規則: パスの basename、. と : は _（tmux はセッション名の . と : を嫌う） */
-export function sessionNameFor(path: string): string {
+export function sessionNameFor(path: string) {
   return basename(path).replace(/[.:]/g, "_");
 }
 
 /** ws-core に「これも見たい」と渡すパス（セッションの場所） */
-export function interestingPaths(facts: TmuxFacts): string[] {
+export function interestingPaths(facts: TmuxFacts) {
   return facts.sessions.map((s) => s.path).filter(Boolean);
 }
 
@@ -47,61 +47,50 @@ export function interestingPaths(facts: TmuxFacts): string[] {
 // 索引: worktree → セッション、エージェント → ペイン
 // ---------------------------------------------------------------------------
 
-export interface TmuxIndex {
-  facts: TmuxFacts;
-  sessionOf(worktreePath: string): TmuxSession | undefined;
-  panesOf(agentId: string): TmuxPane[];
-  isAttached(agentId: string): boolean;
-}
-
-export function indexTmux(locate: Locate, facts: TmuxFacts): TmuxIndex {
-  const sessionsByWt = new Map<string, TmuxSession[]>();
-  for (const s of facts.sessions) {
-    const hit = s.path ? locate(s.path) : undefined;
-    if (!hit) continue;
-    const arr = sessionsByWt.get(hit.worktree.path) ?? [];
-    arr.push(s);
-    sessionsByWt.set(hit.worktree.path, arr);
-  }
-  const panesByAgent = new Map<string, TmuxPane[]>();
-  for (const p of facts.panes) {
-    if (!p.agent || p.dead) continue;
-    const arr = panesByAgent.get(p.agent) ?? [];
-    arr.push(p);
-    panesByAgent.set(p.agent, arr);
-  }
+export function indexTmux(locate: Locate, facts: TmuxFacts) {
+  const sessionsByWt = Map.groupBy(facts.sessions, (s) => locate(s.path)?.worktree.path);
+  const panesByAgent = Map.groupBy(
+    facts.panes.filter((p) => p.agent && !p.dead),
+    (p) => p.agent,
+  );
+  const panesOf = (agentId: string) => panesByAgent.get(agentId) ?? [];
   return {
     facts,
-    sessionOf: (wt) => {
-      const arr = sessionsByWt.get(wt) ?? [];
-      return arr.find((s) => s.name === sessionNameFor(wt)) ?? arr[0];
+    /** worktree のセッション（tm 規則の名前のものを優先） */
+    sessionOf: (worktreePath: string) => {
+      const arr = sessionsByWt.get(worktreePath) ?? [];
+      return arr.find((s) => s.name === sessionNameFor(worktreePath)) ?? arr[0];
     },
-    panesOf: (id) => panesByAgent.get(id) ?? [],
-    isAttached: (id) => (panesByAgent.get(id)?.length ?? 0) > 0,
+    panesOf,
+    isAttached: (agentId: string) => panesOf(agentId).length > 0,
   };
 }
+
+export type TmuxIndex = ReturnType<typeof indexTmux>;
 
 // ---------------------------------------------------------------------------
 // 移動に使うクライアント
 // ---------------------------------------------------------------------------
 
-export type ClientChoice =
-  | { kind: "client"; name: string } // 既存クライアントを switch-client
-  | { kind: "attach" } // tmux の外のシェルから: その場で tmux attach
-  | { kind: "ghostty-new" }; // app から、クライアントが1つも無い: Ghostty の新しいウィンドウで attach
-
-export function pickRecentClient(clients: TmuxClient[]): TmuxClient | undefined {
+export function pickRecentClient(clients: TmuxClient[]) {
   return [...clients].sort((a, b) => b.activity - a.activity)[0];
 }
 
-export function chooseClient(opts: { explicit?: string; fromApp: boolean; insideTmuxClient?: string; clients: TmuxClient[] }): ClientChoice {
-  if (opts.explicit) return { kind: "client", name: opts.explicit };
+/**
+ * 移動に使う tmux クライアント:
+ *   client … 既存クライアントを switch-client
+ *   attach … tmux の外のシェルから: その場で tmux attach
+ *   ghostty-new … app から、クライアントが1つも無い: Ghostty の新しいウィンドウで attach
+ */
+export function chooseClient(opts: { explicit?: string; fromApp: boolean; insideTmuxClient?: string; clients: TmuxClient[] }) {
+  const client = (name: string) => ({ kind: "client" as const, name });
+  if (opts.explicit) return client(opts.explicit);
   if (opts.fromApp) {
     const c = pickRecentClient(opts.clients);
-    return c ? { kind: "client", name: c.name } : { kind: "ghostty-new" };
+    return c ? client(c.name) : { kind: "ghostty-new" as const };
   }
-  if (opts.insideTmuxClient) return { kind: "client", name: opts.insideTmuxClient };
-  return { kind: "attach" };
+  if (opts.insideTmuxClient) return client(opts.insideTmuxClient);
+  return { kind: "attach" as const };
 }
 
 // ---------------------------------------------------------------------------
@@ -119,19 +108,19 @@ export type Step =
   | { op: "ghosttyNewWindow"; target: string }
   | { op: "focusGhostty" };
 
-export interface GoContext {
-  client: ClientChoice;
+interface GoContext {
+  client: ReturnType<typeof chooseClient>;
   fromApp: boolean;
   /** 場所が消えた worktree のときにセッションを作るディレクトリ */
   fallbackCwd: string;
 }
 
 /** worktree で作業するディレクトリ（場所が消えていれば fallback） */
-export function workingDir(wt: WorktreeNode, fallback: string): string {
+export function workingDir(wt: WorktreeNode, fallback: string) {
   return wt.exists ? wt.path : fallback;
 }
 
-export function planGo(target: Resolved, idx: TmuxIndex, ctx: GoContext): Step[] {
+export function planGo(target: Resolved, idx: TmuxIndex, ctx: GoContext) {
   const steps: Step[] = [];
   const wt = target.worktree;
   const cwd = workingDir(wt, ctx.fallbackCwd);
@@ -179,7 +168,7 @@ export function planGo(target: Resolved, idx: TmuxIndex, ctx: GoContext): Step[]
 // ws panes の計画
 // ---------------------------------------------------------------------------
 
-export interface PanesOptions {
+interface PanesOptions {
   includeChildren: boolean;
   max: number;
 }
@@ -198,12 +187,11 @@ export function planPanes(wt: WorktreeNode, idx: TmuxIndex, opts: PanesOptions):
 // ---------------------------------------------------------------------------
 
 /** 場所が消えた worktree のセッション */
-export function planPruneSessions(tree: Tree, idx: TmuxIndex): string[] {
-  const out: string[] = [];
-  for (const ws of tree.workspaces)
-    for (const wt of ws.worktrees) {
-      const s = !wt.exists ? idx.sessionOf(wt.path) : undefined;
-      if (s) out.push(s.name);
-    }
-  return out;
+export function planPruneSessions(tree: Tree, idx: TmuxIndex) {
+  return tree.workspaces
+    .flatMap((ws) => ws.worktrees)
+    .flatMap((wt) => {
+      const s = wt.exists ? undefined : idx.sessionOf(wt.path);
+      return s ? [s.name] : [];
+    });
 }

@@ -8,7 +8,7 @@ import { AGENT_PANE_OPTION, type TmuxClient, type TmuxFacts, type TmuxPane, type
 // tmux は -F の出力中のタブなど制御文字を _ に置き換えるので、印字可能な区切りを使う
 const SEP = "|@@|";
 
-export interface TmuxOptions {
+interface TmuxOptions {
   bin?: string;
   /** 別サーバを使う（-L name）。テスト用 */
   socket?: string;
@@ -23,27 +23,27 @@ export class Tmux {
     this.socket = opts.socket;
   }
 
-  private argv(args: string[]): string[] {
+  private argv(args: string[]) {
     return this.socket ? ["-L", this.socket, ...args] : args;
   }
 
-  private exec(args: string[]): Promise<string> {
+  private exec(args: string[]) {
     return runOk(this.bin, this.argv(args));
   }
 
   /** サーバが動いていなければ空として扱う */
-  private async lines(args: string[]): Promise<string[]> {
+  private async lines(args: string[]) {
     const r = await run(this.bin, this.argv(args));
     if (r.code !== 0) return [];
     return r.stdout.split("\n").filter((l) => l.length > 0);
   }
 
-  async facts(): Promise<TmuxFacts> {
+  async facts() {
     const [sessions, panes] = await Promise.all([this.listSessions(), this.listPanes()]);
     return { sessions, panes };
   }
 
-  async listSessions(): Promise<TmuxSession[]> {
+  async listSessions() {
     const lines = await this.lines(["list-sessions", "-F", ["#{session_name}", "#{session_path}", "#{session_attached}"].join(SEP)]);
     return lines.map((l) => {
       const [name = "", path = "", attached = "0"] = l.split(SEP);
@@ -51,7 +51,7 @@ export class Tmux {
     });
   }
 
-  async listPanes(): Promise<TmuxPane[]> {
+  async listPanes() {
     const lines = await this.lines(["list-panes", "-a", "-F", ["#{pane_id}", `#{${AGENT_PANE_OPTION}}`, "#{pane_dead}"].join(SEP)]);
     return lines.map((l) => {
       const [paneId = "", agent = "", dead = "0"] = l.split(SEP);
@@ -59,7 +59,7 @@ export class Tmux {
     });
   }
 
-  async listClients(): Promise<TmuxClient[]> {
+  async listClients() {
     const lines = await this.lines(["list-clients", "-F", ["#{client_activity}", "#{client_name}"].join(SEP)]);
     return lines.map((l) => {
       const [activity = "0", name = ""] = l.split(SEP);
@@ -68,7 +68,7 @@ export class Tmux {
   }
 
   /** tmux の中から呼ばれたとき、その端末のクライアント名 */
-  async currentClient(env: Record<string, string | undefined>): Promise<string | undefined> {
+  async currentClient(env: Record<string, string | undefined>) {
     if (!env.TMUX) return undefined;
     const r = await run(this.bin, this.argv(["display-message", "-p", "#{client_name}"]));
     const name = r.stdout.trim();
@@ -82,16 +82,16 @@ export class Tmux {
     return { session, currentPath };
   }
 
-  async newSession(name: string, cwd: string): Promise<void> {
+  async newSession(name: string, cwd: string) {
     await this.exec(["new-session", "-d", "-s", name, "-c", cwd]);
   }
 
-  async hasWindow(session: string, window: string): Promise<boolean> {
+  async hasWindow(session: string, window: string) {
     return (await this.lines(["list-windows", "-t", `=${session}`, "-F", "#{window_name}"])).includes(window);
   }
 
   /** 会話ペインを作る（ウィンドウが無ければウィンドウごと）。@ws_agent を付けてペインIDを返す */
-  async openAgentPane(session: string, window: string, cwd: string, agent: string, command: string): Promise<string> {
+  async openAgentPane(session: string, window: string, cwd: string, agent: string, command: string) {
     let paneId: string;
     if (await this.hasWindow(session, window)) {
       paneId = (await this.exec(["split-window", "-d", "-t", `=${session}:${window}`, "-c", cwd, "-P", "-F", "#{pane_id}", command])).trim();
@@ -104,24 +104,24 @@ export class Tmux {
     return paneId;
   }
 
-  async selectPane(paneId: string): Promise<void> {
+  async selectPane(paneId: string) {
     await this.exec(["select-window", "-t", paneId]);
     await this.exec(["select-pane", "-t", paneId]);
   }
 
-  async switchClient(client: string, target: string): Promise<void> {
+  async switchClient(client: string, target: string) {
     await this.exec(["switch-client", "-c", client, "-t", target]);
   }
 
-  attach(target: string): Promise<number> {
+  attach(target: string) {
     return runInteractive(this.bin, this.argv(["attach-session", "-t", target]));
   }
 
-  attachArgv(target: string): string[] {
+  attachArgv(target: string) {
     return [this.bin, ...this.argv(["attach-session", "-t", target])];
   }
 
-  async killSession(name: string): Promise<void> {
+  async killSession(name: string) {
     await this.exec(["kill-session", "-t", `=${name}`]);
   }
 }

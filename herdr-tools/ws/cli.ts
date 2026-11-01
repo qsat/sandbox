@@ -23,15 +23,9 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
   ws prune [--dry-run] [--yes]                     場所が消えた worktree のセッション・エージェントを片付ける
 `;
 
-interface Parsed {
-  positional: string[];
-  flags: Map<string, string | true>;
-  rest: string[];
-}
-
 const VALUE_FLAGS = new Set(["--client", "--pane", "--max"]);
 
-function parseArgs(argv: string[]): Parsed {
+function parseArgs(argv: string[]) {
   const positional: string[] = [];
   const flags = new Map<string, string | true>();
   let rest: string[] = [];
@@ -57,29 +51,31 @@ function parseArgs(argv: string[]): Parsed {
   return { positional, flags, rest };
 }
 
-const str = (p: Parsed, k: string): string | undefined => {
+type Parsed = ReturnType<typeof parseArgs>;
+
+const str = (p: Parsed, k: string) => {
   const v = p.flags.get(k);
   return typeof v === "string" ? v : undefined;
 };
 const has = (p: Parsed, ...ks: string[]) => ks.some((k) => p.flags.has(k));
 
 /** カレントディレクトリ基準の絶対パス（~ も展開） */
-function absPath(p: string): string {
+function absPath(p: string) {
   return resolvePath(process.cwd(), expandHome(p));
 }
 
-async function readStdin(): Promise<string> {
+async function readStdin() {
   if (process.stdin.isTTY) return "";
   return await new Response(Bun.stdin.stream()).text();
 }
 
-async function confirm(question: string): Promise<boolean> {
+async function confirm(question: string) {
   process.stderr.write(`${question} [y/N] `);
   for await (const line of console) return /^y(es)?$/i.test(line.trim());
   return false;
 }
 
-async function main(argv: string[]): Promise<number> {
+async function main(argv: string[]) {
   const [cmd, ...restArgs] = argv;
   if (!cmd || cmd === "-h" || cmd === "--help" || cmd === "help") {
     process.stdout.write(USAGE);

@@ -14,7 +14,7 @@ class Connection {
     void this.read(onNotification);
   }
 
-  private async read(onNotification: (msg: { method: string; params?: any }) => void): Promise<void> {
+  private async read(onNotification: (msg: { method: string; params?: any }) => void) {
     const decoder = new TextDecoder();
     let buf = "";
     try {
@@ -41,10 +41,10 @@ class Connection {
     this.pending.clear();
   }
 
-  call(method: string, params: Record<string, unknown>): Promise<any> {
+  call<T>(method: string, params: Record<string, unknown>) {
     if (this.closed) return Promise.reject(new Error("hc connect closed"));
     const id = this.nextId++;
-    return new Promise((resolve, reject) => {
+    return new Promise<T>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
       const sink = this.proc.stdin as import("bun").FileSink;
       sink.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
@@ -52,7 +52,7 @@ class Connection {
     });
   }
 
-  close(): void {
+  close() {
     try {
       (this.proc.stdin as import("bun").FileSink).end();
       this.proc.kill();
@@ -60,31 +60,25 @@ class Connection {
   }
 }
 
-export interface HcRunSpec {
-  name: string;
-  cwd: string;
-  labels: Record<string, string>;
-  argv: string[];
-}
-
 export class Hc {
   private conn?: Connection;
 
   constructor(readonly bin = "hc") {}
 
-  private call(method: string, params: Record<string, unknown>): Promise<any> {
+  /** T は schema/hc.openrpc.json のそのメソッドの result */
+  private call<T = unknown>(method: string, params: Record<string, unknown>) {
     if (!this.conn || this.conn.closed) this.conn = new Connection(this.bin);
-    return this.conn.call(method, params);
+    return this.conn.call<T>(method, params);
   }
 
   /** 終了済みも含めて全部 */
-  async list(): Promise<HcTerminal[]> {
-    return (await this.call("terminal.list", { all: true })).terminals;
+  async list() {
+    return (await this.call<{ terminals: HcTerminal[] }>("terminal.list", { all: true })).terminals;
   }
 
-  async get(terminal: string): Promise<HcTerminal | undefined> {
+  async get(terminal: string) {
     try {
-      return await this.call("terminal.get", { terminal });
+      return await this.call<HcTerminal>("terminal.get", { terminal });
     } catch (e) {
       if ((e as { kind?: string }).kind === "not_found") return undefined;
       throw e;
@@ -92,24 +86,24 @@ export class Hc {
   }
 
   /** --keep で、待たずに起動する。アドレスを返す */
-  async run(spec: HcRunSpec): Promise<string> {
-    const r = await this.call("terminal.run", { ...spec, keep: true, wait: false });
+  async run(spec: { name: string; cwd: string; labels: Record<string, string>; argv: string[] }) {
+    const r = await this.call<HcTerminal>("terminal.run", { ...spec, keep: true, wait: false });
     return r.address;
   }
 
-  async label(terminal: string, labels: Record<string, string>): Promise<void> {
+  async label(terminal: string, labels: Record<string, string>) {
     await this.call("terminal.label", { terminal, labels });
   }
 
-  async send(terminal: string, text: string): Promise<void> {
+  async send(terminal: string, text: string) {
     await this.call("terminal.send", { terminal, text });
   }
 
-  async kill(terminal: string): Promise<void> {
+  async kill(terminal: string) {
     await this.call("terminal.kill", { terminal });
   }
 
-  async rm(terminal: string): Promise<void> {
+  async rm(terminal: string) {
     await this.call("terminal.rm", { terminal });
   }
 

@@ -16,7 +16,7 @@ const STATUSES = new Set(["working", "blocked", "idle", "done", "error"]);
 
 const SHELLS = new Set(["bash", "zsh", "fish", "sh", "dash", "ksh", "mksh", "tcsh", "csh", "nu", "pwsh", "elvish", "xonsh"]);
 
-export function isShell(name: string | undefined | null): boolean {
+export function isShell(name: string | undefined | null) {
   if (!name) return false;
   return SHELLS.has(basename(name.replace(/^-/, "")));
 }
@@ -27,7 +27,7 @@ const NAME_MAX = 32;
  * core の端末名規則: 英小文字・数字・-・_ の1〜32文字、生きている端末の中で一意。
  * <repo>-<branch> を slug 化し、重複時は -2, -3 … を付ける。
  */
-export function terminalNameFor(repo: string, branch: string | null | undefined, taken: Iterable<string>): string {
+export function terminalNameFor(repo: string, branch: string | null | undefined, taken: Iterable<string>) {
   const raw = branch && branch !== repo ? `${repo}-${branch}` : repo;
   let base = raw
     .toLowerCase()
@@ -45,7 +45,7 @@ export function terminalNameFor(repo: string, branch: string | null | undefined,
 }
 
 /** herdr-core の端末 → ドメインのエージェント */
-export function toAgentRecord(t: HcTerminal, sessionLabel: string): AgentRecord {
+export function toAgentRecord(t: HcTerminal, sessionLabel: string) {
   const state = t.status?.state;
   return {
     id: t.address,
@@ -64,7 +64,7 @@ export function toAgentRecord(t: HcTerminal, sessionLabel: string): AgentRecord 
   };
 }
 
-export interface HerdrRuntimeOptions {
+interface HerdrRuntimeOptions {
   hcBin?: string;
   /** 会話IDを記録するラベルのキー */
   sessionLabel?: string;
@@ -79,11 +79,11 @@ export class HerdrRuntime implements AgentRuntime {
     this.sessionLabel = opts.sessionLabel ?? DEFAULT_SESSION_LABEL;
   }
 
-  async list(): Promise<AgentRecord[]> {
+  async list() {
     return (await this.hc.list()).map((t) => toAgentRecord(t, this.sessionLabel));
   }
 
-  async get(id: string): Promise<AgentRecord | undefined> {
+  async get(id: string) {
     const t = await this.hc.get(id);
     return t ? toAgentRecord(t, this.sessionLabel) : undefined;
   }
@@ -95,29 +95,29 @@ export class HerdrRuntime implements AgentRuntime {
     return { id, name };
   }
 
-  async recordSession(id: string, sessionId: string): Promise<void> {
+  async recordSession(id: string, sessionId: string) {
     await this.hc.label(id, { [this.sessionLabel]: sessionId });
   }
 
-  send(id: string, text: string): Promise<void> {
+  send(id: string, text: string) {
     return this.hc.send(id, text);
   }
 
-  stop(id: string): Promise<void> {
+  stop(id: string) {
     return this.hc.kill(id);
   }
 
-  remove(id: string): Promise<void> {
+  remove(id: string) {
     return this.hc.rm(id);
   }
 
   /** core の端末内で動くプロセスには $HC_TERMINAL_ID に自分のアドレスが入る */
-  currentAgentId(env: Record<string, string | undefined>): string | undefined {
+  currentAgentId(env: Record<string, string | undefined>) {
     return env.HC_TERMINAL_ID || undefined;
   }
 
   /** 会話に入るコマンド。切り離しは Ctrl+\ */
-  attachCommand(id: string): string {
+  attachCommand(id: string) {
     return `${this.hc.bin} attach ${id}`;
   }
 

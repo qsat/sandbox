@@ -2,27 +2,15 @@
 // 実行環境（herdr-core など）は WsCore の AgentRuntime ポートの向こうにいて、ここからは見えない。
 
 import { homedir } from "node:os";
-import { looksLikePath, resolveRef, type Resolved, type Snapshot, type WorktreeNode, type WsCore } from "@herdr-tools/ws-core";
+import { looksLikePath, resolveRef, type Resolved, type WsCore } from "@herdr-tools/ws-core";
 import { focusGhostty, ghosttyNewWindow } from "./ghostty";
-import { AGENTS_WINDOW, chooseClient, indexTmux, interestingPaths, planGo, planPanes, workingDir, type Step, type TmuxIndex } from "./model";
+import { AGENTS_WINDOW, chooseClient, indexTmux, interestingPaths, planGo, planPanes, workingDir, type Step } from "./model";
 import { Tmux } from "./tmux";
 
-export interface TmuxView {
-  snap: Snapshot;
-  idx: TmuxIndex;
-}
-
-export interface GoOptions {
+interface GoOptions {
   client?: string;
   fromApp?: boolean;
   dryRun?: boolean;
-}
-
-export interface PanesResult {
-  session: string;
-  opened: string[];
-  skipped: string[];
-  alreadyAttached: number;
 }
 
 export class TmuxNavigator {
@@ -36,14 +24,14 @@ export class TmuxNavigator {
   ) {}
 
   /** ws-core の木に tmux の事実を添える。セッションの場所はエージェントがいなくても木に出す */
-  async view(opts: { all?: boolean; include?: string[] } = {}): Promise<TmuxView> {
+  async view(opts: { all?: boolean; include?: string[] } = {}) {
     const facts = await this.tmux.facts();
     const snap = await this.core.snapshot({ all: opts.all, include: [...interestingPaths(facts), ...(opts.include ?? [])] });
     return { snap, idx: indexTmux(snap.locate, facts) };
   }
 
   /** ws go: どこから呼んでも、最後は1つの tmux クライアントを切り替える */
-  async go(target: Resolved, view: TmuxView, opts: GoOptions = {}): Promise<Step[]> {
+  async go(target: Resolved, view: TmuxView, opts: GoOptions = {}) {
     const client = chooseClient({
       explicit: opts.client,
       fromApp: !!opts.fromApp,
@@ -56,7 +44,7 @@ export class TmuxNavigator {
   }
 
   /** ref（worktree のパスかエージェントの id／名前）へ移動する */
-  async goRef(ref: string, opts: GoOptions = {}): Promise<Step[]> {
+  async goRef(ref: string, opts: GoOptions = {}) {
     const view = await this.view({ include: looksLikePath(ref) ? [ref] : [] });
     const t = resolveRef(view.snap, ref);
     if (!t) throw new Error(`見つかりません: ${ref}`);
@@ -69,7 +57,7 @@ export class TmuxNavigator {
     return { ...r, steps: await this.goRef(r.id, opts) };
   }
 
-  async execute(steps: Step[]): Promise<void> {
+  async execute(steps: Step[]) {
     for (const s of steps) {
       switch (s.op) {
         case "newSession":
@@ -101,7 +89,7 @@ export class TmuxNavigator {
   }
 
   /** ws panes: ペインの worktree のエージェントを agents ウィンドウに並べる */
-  async panes(paneId: string, opts: { includeChildren: boolean; max: number }): Promise<PanesResult> {
+  async panes(paneId: string, opts: { includeChildren: boolean; max: number }) {
     const info = await this.tmux.paneInfo(paneId);
     if (!info) throw new Error(`ペインがありません: ${paneId}`);
     const view = await this.view({ include: [info.currentPath] });
@@ -109,26 +97,26 @@ export class TmuxNavigator {
     if (!wt) throw new Error("このペインの worktree が分かりません");
 
     const plan = planPanes(wt, view.idx, opts);
-    const opened: string[] = [];
     for (const a of plan.open) {
       await this.core.resume(a.id);
       await this.tmux.openAgentPane(info.session, AGENTS_WINDOW, workingDir(wt, this.fallbackCwd), a.id, this.core.attachCommand(a.id));
-      opened.push(a.id);
     }
-    return { session: info.session, opened, skipped: plan.skipped.map((a) => a.id), alreadyAttached: wt.agents.filter((a) => view.idx.isAttached(a.id)).length };
+    return { session: info.session, opened: plan.open.map((a) => a.id), skipped: plan.skipped.map((a) => a.id), alreadyAttached: wt.agents.filter((a) => view.idx.isAttached(a.id)).length };
   }
 
-  async killSessions(names: string[]): Promise<void> {
+  async killSessions(names: string[]) {
     for (const n of names) await this.tmux.killSession(n).catch(() => {});
   }
 
-  private worktreeOfSession(view: TmuxView, session: string): WorktreeNode | undefined {
+  private worktreeOfSession(view: TmuxView, session: string) {
     for (const ws of view.snap.tree.workspaces) for (const wt of ws.worktrees) if (view.idx.sessionOf(wt.path)?.name === session) return wt;
     return undefined;
   }
 }
 
+type TmuxView = Awaited<ReturnType<TmuxNavigator["view"]>>;
+
 /** %12 はペイン。セッション名は前方一致で別セッションに当たらないよう = を付ける */
-function target(t: string): string {
+function target(t: string) {
   return t.startsWith("%") || t.startsWith("=") ? t : `=${t}`;
 }

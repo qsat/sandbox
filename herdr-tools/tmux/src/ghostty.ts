@@ -5,13 +5,13 @@ import { run } from "@herdr-tools/utils/run";
 
 const isMac = platform() === "darwin";
 
-export async function focusGhostty(): Promise<void> {
+export async function focusGhostty() {
   if (!isMac) return;
   await run("open", ["-a", "Ghostty"]);
 }
 
 /** tmux クライアントが1つも無いとき: Ghostty の新しいウィンドウで tmux attach（引数の渡し方は実機で確認） */
-export async function ghosttyNewWindow(argv: string[]): Promise<void> {
+export async function ghosttyNewWindow(argv: string[]) {
   if (!isMac) throw new Error(`Ghostty の起動は macOS のみ対応です。手で実行してください: ${argv.join(" ")}`);
   await run("open", ["-na", "Ghostty", "--args", "-e", ...argv]);
 }

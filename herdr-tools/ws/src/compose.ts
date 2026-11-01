@@ -4,12 +4,7 @@ import { homedir } from "node:os";
 import { GitWorkspaceSource, HerdrRuntime, WsCore } from "@herdr-tools/ws-core";
 import { Tmux, TmuxNavigator } from "@herdr-tools/tmux";
 
-export interface Composition {
-  core: WsCore;
-  nav: TmuxNavigator;
-}
-
-export function compose(env: Record<string, string | undefined> = process.env): Composition {
+export function compose(env: Record<string, string | undefined> = process.env) {
   const runtime = new HerdrRuntime({ hcBin: env.HC_BIN || "hc", sessionLabel: env.WS_SESSION_LABEL || undefined });
   const source = new GitWorkspaceSource({ gitBin: env.GIT_BIN || undefined, ghqBin: env.GHQ_BIN || undefined, root: env.GHQ_ROOT || undefined });
   const core = new WsCore(runtime, source, { home: homedir(), claudeBin: env.WS_CLAUDE_BIN || "claude" });

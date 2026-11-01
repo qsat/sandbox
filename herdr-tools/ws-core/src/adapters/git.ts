@@ -10,7 +10,7 @@ import { run } from "@herdr-tools/utils/run";
 import type { PathInfo } from "../model";
 import type { WorkspaceSource } from "../ports";
 
-function isDir(p: string): boolean {
+function isDir(p: string) {
   try {
     return statSync(p).isDirectory();
   } catch {
@@ -18,7 +18,7 @@ function isDir(p: string): boolean {
   }
 }
 
-export interface GitSourceOptions {
+interface GitSourceOptions {
   gitBin?: string;
   ghqBin?: string;
   /** 指定があれば ghq root の代わりに使う */
@@ -37,11 +37,11 @@ export class GitWorkspaceSource implements WorkspaceSource {
   private rootCache?: Promise<string>;
 
   /** ghq root（プロセスの中では変わらないので1回だけ調べる） */
-  root(): Promise<string> {
+  root() {
     return (this.rootCache ??= this.findRoot());
   }
 
-  private async findRoot(): Promise<string> {
+  private async findRoot() {
     if (this.opts.root) return expandHome(this.opts.root);
     const r = await run(this.ghq, ["root"]);
     if (r.code === 0 && r.stdout.trim()) return r.stdout.trim().split("\n")[0]!;
@@ -49,7 +49,7 @@ export class GitWorkspaceSource implements WorkspaceSource {
   }
 
   /** ghq の全エントリ。ghq が無い環境では root/<host>/<owner>/<repo> の3階層を走査する */
-  async entries(root: string): Promise<string[]> {
+  async entries(root: string) {
     const r = await run(this.ghq, ["list", "--full-path"]);
     if (r.code === 0) return r.stdout.split("\n").filter(Boolean);
     if (!existsSync(root)) return [];
@@ -60,17 +60,17 @@ export class GitWorkspaceSource implements WorkspaceSource {
         return [];
       }
     };
-    const out: string[] = [];
-    for (const h of dirs(root)) for (const o of dirs(join(root, h.name))) for (const repo of dirs(join(root, h.name, o.name))) out.push(join(root, h.name, o.name, repo.name));
-    return out;
+    // <host>/<owner>/<repo>
+    const below = (paths: string[]) => paths.flatMap((p) => dirs(p).map((d) => join(p, d.name)));
+    return below(below(below([root])));
   }
 
-  inspect(paths: string[]): Promise<PathInfo[]> {
+  inspect(paths: string[]) {
     return mapLimit(paths, 16, (p) => this.inspectOne(p));
   }
 
   /** 1プロセスで toplevel / common dir / ブランチを取る */
-  private async inspectOne(path: string): Promise<PathInfo> {
+  private async inspectOne(path: string) {
     if (!isDir(path)) return { path, exists: false };
     const r = await run(this.git, ["-C", path, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir", "--abbrev-ref", "HEAD"]);
     if (r.code !== 0) {

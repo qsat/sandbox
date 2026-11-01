@@ -4,7 +4,7 @@ import type { Tag } from "./tag";
  * エージェントの行に添える印。
  * @param attached 会話ペインが開いているか（クライアントが分からなければ undefined で、印を出さない）
  */
-export function agentTags(a: { needsResume: boolean; missingLocation: boolean; parent: string | null; alive: boolean }, attached?: boolean): Tag[] {
+export function agentTags(a: { needsResume: boolean; missingLocation: boolean; parent: string | null; alive: boolean }, attached?: boolean) {
   const tags: Tag[] = [];
   if (a.needsResume) tags.push({ text: "要再開", tone: "strong" });
   if (attached === false) tags.push({ text: "未attach", tone: "muted" });

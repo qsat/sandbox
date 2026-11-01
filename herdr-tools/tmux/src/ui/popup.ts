@@ -13,11 +13,11 @@ const INVERT = `${ESC}[7m`;
 const RESET = `${ESC}[0m`;
 const DIM = `${ESC}[2m`;
 
-export interface UiOptions {
+interface UiOptions {
   client?: string;
 }
 
-export async function runUi(nav: TmuxNavigator, opts: UiOptions): Promise<void> {
+export async function runUi(nav: TmuxNavigator, opts: UiOptions) {
   const out = process.stdout;
   const stdin = process.stdin;
   if (!stdin.isTTY) throw new Error("ws ui は端末（tmux の popup）から実行してください");
@@ -36,12 +36,10 @@ export async function runUi(nav: TmuxNavigator, opts: UiOptions): Promise<void> 
     const height = (out.rows || 24) - 2;
     const width = out.columns || 80;
     const top = Math.max(0, Math.min(sel - Math.floor(height / 2), rows.length - height));
-    const lines: string[] = [];
-    for (let i = top; i < Math.min(rows.length, top + height); i++) {
-      const r = rows[i]!;
+    const lines = rows.slice(top, top + height).map((r, i) => {
       const text = "  ".repeat(r.depth) + r.text;
-      lines.push(i === sel && isSelectable(r) ? INVERT + stripAnsi(text).slice(0, width) + RESET : text);
-    }
+      return top + i === sel && isSelectable(r) ? INVERT + stripAnsi(text).slice(0, width) + RESET : text;
+    });
     if (rows.length === 0) lines.push(DIM + "（表示するものがありません。a で全 worktree を表示）" + RESET);
     while (lines.length < height) lines.push("");
     const help = `${DIM}Enter:移動  n:新規  R:再開  a:${all ? "絞込" : "全部"}  r:再読込  q:閉じる${RESET}`;
@@ -77,12 +75,8 @@ export async function runUi(nav: TmuxNavigator, opts: UiOptions): Promise<void> 
     debounce = setTimeout(() => void reload(), 200);
   };
 
-  let unsubscribe: () => void = () => {};
-  try {
-    unsubscribe = nav.core.subscribe(scheduleReload);
-  } catch {
-    // 実行環境に繋がらなくても一覧自体は出す
-  }
+  // 実行環境に繋がらなくても一覧自体は出す（購読できなければ何もしない関数が返る）
+  const unsubscribe = nav.core.subscribe(scheduleReload);
   const timer = setInterval(() => void reload(), 3000);
 
   const cleanup = () => {
@@ -185,14 +179,10 @@ export async function runUi(nav: TmuxNavigator, opts: UiOptions): Promise<void> 
 }
 
 /** 入力を1キーずつに分ける（ESC [ A のような矢印キーは1つにまとめる） */
-export function splitKeys(input: string): string[] {
-  const keys: string[] = [];
-  const re = /\x1b\[[0-9;]*[A-Za-z~]|\x1bO[A-Za-z]|[\s\S]/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(input))) keys.push(m[0]);
-  return keys;
+export function splitKeys(input: string) {
+  return input.match(/\x1b\[[0-9;]*[A-Za-z~]|\x1bO[A-Za-z]|[\s\S]/g) ?? [];
 }
 
-function stripAnsi(s: string): string {
+function stripAnsi(s: string) {
   return s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
 }

@@ -23,7 +23,7 @@ let lastFetch = 0;
 let fetching = false;
 let timer: unknown;
 
-async function refresh(): Promise<void> {
+async function refresh() {
   if (fetching) return;
   fetching = true;
   try {
@@ -38,7 +38,7 @@ async function refresh(): Promise<void> {
   }
 }
 
-async function runRow(row: BoardRow, action: BoardAction, cx: ui.Context): Promise<void> {
+async function runRow(row: BoardRow, action: BoardAction, cx: ui.Context) {
   const c = commandFor(row, action);
   if (!c) return;
   try {
@@ -51,7 +51,7 @@ async function runRow(row: BoardRow, action: BoardAction, cx: ui.Context): Promi
   cx.notify();
 }
 
-function collapsedState(): string[] {
+function collapsedState() {
   return (shared?.collapsed as string[] | undefined) ?? [];
 }
 
