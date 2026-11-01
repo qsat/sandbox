@@ -71,7 +71,7 @@ export interface HerdrRuntimeOptions {
 }
 
 export class HerdrRuntime implements AgentRuntime {
-  readonly hc: Hc;
+  private readonly hc: Hc;
   private readonly sessionLabel: string;
 
   constructor(opts: HerdrRuntimeOptions = {}) {

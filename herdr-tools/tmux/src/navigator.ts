@@ -4,7 +4,7 @@
 import { homedir } from "node:os";
 import { looksLikePath, type Resolved, type Snapshot, type WorktreeNode, type WsCore } from "@herdr-tools/ws-core";
 import { focusGhostty, ghosttyNewWindow } from "./ghostty";
-import { AGENTS_WINDOW, chooseClient, indexTmux, interestingPaths, planGo, planPanes, planPruneSessions, type Step, type TmuxIndex } from "./model";
+import { AGENTS_WINDOW, chooseClient, indexTmux, interestingPaths, planGo, planPanes, planPruneSessions, workingDir, type Step, type TmuxIndex } from "./model";
 import { Tmux } from "./tmux";
 
 export interface TmuxView {
@@ -26,6 +26,9 @@ export interface PanesResult {
 }
 
 export class TmuxNavigator {
+  /** 場所が消えた worktree のときに使うディレクトリ */
+  private readonly fallbackCwd = homedir();
+
   constructor(
     readonly core: WsCore,
     readonly tmux: Tmux = new Tmux(),
@@ -36,7 +39,7 @@ export class TmuxNavigator {
   async view(opts: { all?: boolean; include?: string[] } = {}): Promise<TmuxView> {
     const facts = await this.tmux.facts();
     const snap = await this.core.snapshot({ all: opts.all, include: [...interestingPaths(facts), ...(opts.include ?? [])] });
-    return { snap, idx: indexTmux(snap.tree, snap.locate, facts) };
+    return { snap, idx: indexTmux(snap.locate, facts) };
   }
 
   /** ws go: どこから呼んでも、最後は1つの tmux クライアントを切り替える */
@@ -47,7 +50,7 @@ export class TmuxNavigator {
       insideTmuxClient: opts.fromApp ? undefined : await this.tmux.currentClient(this.env),
       clients: await this.tmux.listClients(),
     });
-    const steps = planGo(target, view.idx, { client, fromApp: !!opts.fromApp, fallbackCwd: homedir() });
+    const steps = planGo(target, view.idx, { client, fromApp: !!opts.fromApp, fallbackCwd: this.fallbackCwd });
     if (!opts.dryRun) await this.execute(steps);
     return steps;
   }
@@ -109,7 +112,7 @@ export class TmuxNavigator {
     const opened: string[] = [];
     for (const a of plan.open) {
       if (a.needsResume) await this.core.resume(a.id);
-      await this.tmux.openAgentPane(info.session, AGENTS_WINDOW, wt.exists ? wt.path : homedir(), a.id, this.core.runtime.attachCommand(a.id));
+      await this.tmux.openAgentPane(info.session, AGENTS_WINDOW, workingDir(wt, this.fallbackCwd), a.id, this.core.runtime.attachCommand(a.id));
       opened.push(a.id);
     }
     return { session: info.session, opened, skipped: plan.skipped.map((a) => a.id), alreadyAttached: wt.agents.filter((a) => view.idx.isAttached(a.id)).length };

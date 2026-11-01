@@ -3,6 +3,5 @@
 export * from "./model";
 export * from "./navigator";
 export { Tmux, type TmuxOptions } from "./tmux";
-export { focusGhostty, ghosttyNewWindow } from "./ghostty";
-export { toRows, renderText, type Row, type ViewOptions } from "./ui/view";
-export { runUi, splitKeys, type UiOptions } from "./ui/popup";
+export { renderText } from "./ui/view";
+export { runUi, type UiOptions } from "./ui/popup";

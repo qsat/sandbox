@@ -21,7 +21,7 @@ export class Tmux {
     this.socket = opts.socket;
   }
 
-  argv(args: string[]): string[] {
+  private argv(args: string[]): string[] {
     return this.socket ? ["-L", this.socket, ...args] : args;
   }
 
@@ -50,19 +50,18 @@ export class Tmux {
   }
 
   async listPanes(): Promise<TmuxPane[]> {
-    const fmt = ["#{session_name}", "#{window_index}", "#{window_name}", "#{pane_id}", `#{${AGENT_PANE_OPTION}}`, "#{pane_dead}", "#{pane_current_path}"].join(SEP);
-    const lines = await this.lines(["list-panes", "-a", "-F", fmt]);
+    const lines = await this.lines(["list-panes", "-a", "-F", ["#{pane_id}", `#{${AGENT_PANE_OPTION}}`, "#{pane_dead}"].join(SEP)]);
     return lines.map((l) => {
-      const [session = "", wi = "0", windowName = "", paneId = "", agent = "", dead = "0", currentPath = ""] = l.split(SEP);
-      return { session, windowIndex: Number(wi), windowName, paneId, agent: agent || null, dead: dead === "1", currentPath };
+      const [paneId = "", agent = "", dead = "0"] = l.split(SEP);
+      return { paneId, agent: agent || null, dead: dead === "1" };
     });
   }
 
   async listClients(): Promise<TmuxClient[]> {
-    const lines = await this.lines(["list-clients", "-F", ["#{client_activity}", "#{client_name}", "#{client_session}"].join(SEP)]);
+    const lines = await this.lines(["list-clients", "-F", ["#{client_activity}", "#{client_name}"].join(SEP)]);
     return lines.map((l) => {
-      const [activity = "0", name = "", session = ""] = l.split(SEP);
-      return { activity: Number(activity), name, session };
+      const [activity = "0", name = ""] = l.split(SEP);
+      return { activity: Number(activity), name };
     });
   }
 

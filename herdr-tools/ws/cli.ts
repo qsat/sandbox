@@ -62,9 +62,9 @@ const str = (p: Parsed, k: string): string | undefined => {
 };
 const has = (p: Parsed, ...ks: string[]) => ks.some((k) => p.flags.has(k));
 
-/** パスらしい ref はカレントディレクトリ基準の絶対パスにする */
-function absRef(ref: string): string {
-  return looksLikePath(ref) ? resolvePath(process.cwd(), expandHome(ref)) : ref;
+/** カレントディレクトリ基準の絶対パス（~ も展開） */
+function absPath(p: string): string {
+  return resolvePath(process.cwd(), expandHome(p));
 }
 
 async function readStdin(): Promise<string> {
@@ -98,12 +98,12 @@ async function main(argv: string[]): Promise<number> {
     case "go": {
       const ref = p.positional[0];
       if (!ref) throw new Error("ws go <ref>");
-      const steps = await nav.goRef(absRef(ref), { ...goOpts, dryRun: has(p, "--dry-run") });
+      const steps = await nav.goRef(looksLikePath(ref) ? absPath(ref) : ref, { ...goOpts, dryRun: has(p, "--dry-run") });
       if (has(p, "--dry-run")) process.stdout.write(JSON.stringify(steps, null, 2) + "\n");
       return 0;
     }
     case "new": {
-      const path = resolvePath(process.cwd(), expandHome(p.positional[0] ?? "."));
+      const path = absPath(p.positional[0] ?? ".");
       if (has(p, "--attach")) {
         await nav.newAndGo(path, p.rest, goOpts);
       } else {

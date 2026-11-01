@@ -2,7 +2,7 @@
 // ws-core の木（Workspace > Worktree > Agent）に、tmux の事実（セッション・ペイン・クライアント）を索引で添える。
 // 実行環境（herdr-core など）のことは知らない。会話に入るコマンドや再開は呼び出し側から渡される。
 
-import { attentionRank, basename, byName, type AgentNode, type Locate, type Resolved, type Tree, type WorktreeNode } from "@herdr-tools/ws-core";
+import { basename, byAttention, type AgentNode, type Locate, type Resolved, type Tree, type WorktreeNode } from "@herdr-tools/ws-core";
 
 export interface TmuxSession {
   name: string;
@@ -11,19 +11,14 @@ export interface TmuxSession {
 }
 
 export interface TmuxPane {
-  session: string;
-  windowIndex: number;
-  windowName: string;
   paneId: string; // %12
   /** ペインオプション @ws_agent（このペインで会話しているエージェントの id） */
   agent: string | null;
   dead: boolean;
-  currentPath?: string;
 }
 
 export interface TmuxClient {
   name: string;
-  session: string;
   activity: number;
 }
 
@@ -58,7 +53,7 @@ export interface TmuxIndex {
   isAttached(agentId: string): boolean;
 }
 
-export function indexTmux(tree: Tree, locate: Locate, facts: TmuxFacts): TmuxIndex {
+export function indexTmux(locate: Locate, facts: TmuxFacts): TmuxIndex {
   const sessionsByWt = new Map<string, TmuxSession[]>();
   for (const s of facts.sessions) {
     const hit = s.path ? locate(s.path) : undefined;
@@ -74,7 +69,6 @@ export function indexTmux(tree: Tree, locate: Locate, facts: TmuxFacts): TmuxInd
     arr.push(p);
     panesByAgent.set(p.agent, arr);
   }
-  void tree;
   return {
     facts,
     sessionOf: (wt) => {
@@ -148,10 +142,15 @@ export interface GoContext {
   fallbackCwd: string;
 }
 
+/** worktree で作業するディレクトリ（場所が消えていれば fallback） */
+export function workingDir(wt: WorktreeNode, fallback: string): string {
+  return wt.exists ? wt.path : fallback;
+}
+
 export function planGo(target: Resolved, idx: TmuxIndex, ctx: GoContext): Step[] {
   const steps: Step[] = [];
   const wt = target.worktree;
-  const cwd = wt.exists ? wt.path : ctx.fallbackCwd;
+  const cwd = workingDir(wt, ctx.fallbackCwd);
 
   // 1) セッションを用意（無ければ tm 規則で作る。同名があればそれを使う: 別 owner の同名リポジトリ）
   let session = idx.sessionOf(wt.path)?.name;
@@ -205,7 +204,7 @@ export interface PanesOptions {
 export function planPanes(wt: WorktreeNode, idx: TmuxIndex, opts: PanesOptions): { open: AgentNode[]; skipped: AgentNode[] } {
   const candidates = wt.agents
     .filter((a) => a.alive && (opts.includeChildren || !a.parent) && !idx.isAttached(a.id))
-    .sort((a, b) => attentionRank(a) - attentionRank(b) || byName(a, b));
+    .sort(byAttention);
   const open = candidates.slice(0, Math.max(0, opts.max));
   return { open, skipped: candidates.slice(open.length) };
 }

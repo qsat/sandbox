@@ -2,7 +2,7 @@
 // どのクライアント（tmux / Herdr app）から呼ばれても同じ答えを返す。
 
 import { parseSessionStart, resumeCommand } from "./claude";
-import { basename, needsResume, workspacePathFromCommonDir, type AgentNode, type AgentRecord, type PathInfo, type Tree } from "./model";
+import { basename, needsResume, workspacePathFromCommonDir, type AgentNode, type Tree } from "./model";
 import type { AgentRuntime, WorkspaceSource } from "./ports";
 import { buildTree, collectCandidatePaths, makeLocator, planPrune, resolveRef, type Locate, type Resolved } from "./tree";
 
@@ -16,8 +16,6 @@ export interface CoreOptions {
 
 export interface Snapshot {
   tree: Tree;
-  agents: AgentRecord[];
-  infos: PathInfo[];
   locate: Locate;
 }
 
@@ -30,7 +28,7 @@ export class WsCore {
 
   constructor(
     readonly runtime: AgentRuntime,
-    readonly source: WorkspaceSource,
+    private readonly source: WorkspaceSource,
     private readonly opts: CoreOptions = {},
   ) {
     this.claudeBin = opts.claudeBin ?? "claude";
@@ -47,7 +45,7 @@ export class WsCore {
     const include = opts.include ?? [];
     const infos = await this.source.inspect(collectCandidatePaths({ agents, entries, all: !!opts.all, include }));
     const tree = buildTree({ agents, infos, entries, root, home: this.opts.home, all: !!opts.all, include });
-    return { tree, agents, infos, locate: makeLocator(tree, infos) };
+    return { tree, locate: makeLocator(tree, infos) };
   }
 
   resolve(snap: Snapshot, ref: string): Resolved | undefined {
@@ -97,7 +95,7 @@ export class WsCore {
 
   /** 場所が消えた worktree に残っているエージェント */
   prunePlan(snap: Snapshot): AgentNode[] {
-    return planPrune(snap.tree).agents;
+    return planPrune(snap.tree);
   }
 
   async pruneAgents(agents: AgentNode[]): Promise<void> {

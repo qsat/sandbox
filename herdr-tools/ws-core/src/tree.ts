@@ -202,7 +202,6 @@ export function resolveRef(tree: Tree, ref: string): Resolved | undefined {
 // ---------------------------------------------------------------------------
 
 /** 場所が消えた worktree に残っているエージェント */
-export function planPrune(tree: Tree): { worktrees: WorktreeNode[]; agents: AgentNode[] } {
-  const worktrees = tree.workspaces.flatMap((w) => w.worktrees).filter((wt) => !wt.exists);
-  return { worktrees, agents: worktrees.flatMap((wt) => wt.agents) };
+export function planPrune(tree: Tree): AgentNode[] {
+  return tree.workspaces.flatMap((w) => w.worktrees).flatMap((wt) => (wt.exists ? [] : wt.agents));
 }

@@ -1,6 +1,6 @@
 // 行モデル: 木を「画面の1行ずつ」に平らにする。popup と ws list のテキスト出力で使う。
 
-import { attentionRank, basename, type AgentNode, type Tree, type WorktreeNode } from "@herdr-tools/ws-core";
+import { attentionRank, basename, byAttention, type AgentNode, type Tree, type WorktreeNode } from "@herdr-tools/ws-core";
 import type { TmuxIndex } from "../model";
 
 export type Row =
@@ -77,7 +77,7 @@ export function toRows(tree: Tree, idx: TmuxIndex, opts: ViewOptions): Row[] {
     for (const wt of worktrees) {
       rows.push({ kind: "worktree", depth: 1, ref: wt.path, worktree: wt, text: worktreeLabel(wt, idx, opts.color) });
       const agents = [...wt.agents];
-      if (opts.attentionFirst) agents.sort((a, b) => attentionRank(a) - attentionRank(b) || a.name.localeCompare(b.name));
+      if (opts.attentionFirst) agents.sort(byAttention);
       for (const a of agents) rows.push({ kind: "agent", depth: 2, ref: a.id, agent: a, worktree: wt, text: agentLabel(a, idx, opts.color) });
     }
   }

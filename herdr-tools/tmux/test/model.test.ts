@@ -29,13 +29,13 @@ const facts: TmuxFacts = {
     { name: "api=gone", path: GONE, attached: false },
   ],
   panes: [
-    { session: "api", windowIndex: 1, windowName: "agents", paneId: "%5", agent: "t1", dead: false },
-    { session: "api", windowIndex: 1, windowName: "agents", paneId: "%6", agent: "t4", dead: true },
+    { paneId: "%5", agent: "t1", dead: false },
+    { paneId: "%6", agent: "t4", dead: true },
   ],
 };
 
 const tree = buildTree({ agents, infos, entries: [API, FEAT, WEB], root: "/Users/me/ghq", all: false, include: interestingPaths(facts) });
-const idx = indexTmux(tree, makeLocator(tree, infos), facts);
+const idx = indexTmux(makeLocator(tree, infos), facts);
 const ctx = { client: { kind: "client", name: "c1" } as const, fromApp: false, fallbackCwd: "/Users/me" };
 const r = (ref: string) => resolveRef(tree, ref)!;
 
@@ -67,8 +67,8 @@ describe("索引", () => {
 
 describe("chooseClient", () => {
   const clients = [
-    { name: "/dev/ttys001", session: "api", activity: 100 },
-    { name: "/dev/ttys002", session: "web", activity: 200 },
+    { name: "/dev/ttys001", activity: 100 },
+    { name: "/dev/ttys002", activity: 200 },
   ];
   test("明示が最優先", () => expect(chooseClient({ explicit: "c", fromApp: true, clients })).toEqual({ kind: "client", name: "c" }));
   test("app からは最後に使われたもの", () => expect(chooseClient({ fromApp: true, clients })).toEqual({ kind: "client", name: "/dev/ttys002" }));
@@ -118,7 +118,7 @@ describe("planGo（判断フローの全分岐）", () => {
   });
   test("同名セッションが既にあれば作らない", () => {
     const f2 = { ...facts, sessions: [...facts.sessions, { name: "api=feat-auth", path: "/elsewhere", attached: false }] };
-    const idx2 = indexTmux(tree, makeLocator(tree, infos), f2);
+    const idx2 = indexTmux(makeLocator(tree, infos), f2);
     expect(planGo(r(FEAT), idx2, ctx).some((s) => s.op === "newSession")).toBe(false);
   });
 });

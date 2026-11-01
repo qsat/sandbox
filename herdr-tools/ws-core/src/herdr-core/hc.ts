@@ -17,10 +17,8 @@ export interface HcTerminal {
   status: AgentStatus;
   kind?: string;
   msg?: string;
-  /** 今の前面プロセス。terminal.list に含まれないこともある */
-  foreground?: { name: string; argv?: string[]; cwd?: string; pid?: number };
-  argv?: string[];
-  exitCode?: number | null;
+  /** 今の前面プロセス名。terminal.list に含まれないこともある */
+  foreground?: { name: string };
 }
 
 const STATUSES = new Set<AgentStatus>(["working", "blocked", "idle", "done", "error"]);
@@ -58,9 +56,7 @@ export function normalizeTerminal(raw: any): HcTerminal {
     status: asStatus(statusObj ? statusObj.state : st),
     kind: statusObj?.kind ?? raw?.kind ?? undefined,
     msg: statusObj?.msg ?? undefined,
-    foreground: fg && typeof fg === "object" ? { name: String(fg.name ?? ""), argv: fg.argv, cwd: fg.cwd, pid: fg.pid } : undefined,
-    argv: Array.isArray(raw?.argv) ? raw.argv.map(String) : undefined,
-    exitCode: raw?.exit_code ?? null,
+    foreground: fg && typeof fg === "object" ? { name: String(fg.name ?? "") } : undefined,
   };
 }
 

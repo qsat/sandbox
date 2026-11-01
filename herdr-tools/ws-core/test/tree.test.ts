@@ -118,8 +118,6 @@ describe("resolveRef", () => {
 
 describe("planPrune", () => {
   test("場所が消えた worktree のエージェント", () => {
-    const p = planPrune(tree());
-    expect(p.worktrees.map((w) => w.path)).toEqual([GONE]);
-    expect(p.agents.map((a) => a.id)).toEqual(["t3"]);
+    expect(planPrune(tree()).map((a) => a.id)).toEqual(["t3"]);
   });
 });

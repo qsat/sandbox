@@ -7,6 +7,5 @@ export * from "./ports";
 export * from "./claude";
 export * from "./service";
 export { GitWorkspaceSource, expandHome, type GitSourceOptions } from "./adapters/git";
-export * from "./herdr-core/runtime";
-export { Hc, HcRpc, normalizeTerminal, type HcTerminal, type HcRunSpec } from "./herdr-core/hc";
-export { run, runOk, runInteractive, mapLimit, shellQuote, type RunResult, type RunOptions } from "./util/exec";
+export { HerdrRuntime, type HerdrRuntimeOptions } from "./herdr-core/runtime";
+export { run, runOk, runInteractive } from "./util/exec";

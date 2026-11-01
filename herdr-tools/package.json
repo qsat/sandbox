@@ -11,8 +11,7 @@
     "test": "bun test",
     "typecheck": "tsc -p .",
     "e2e": "bash ws/test/e2e.sh",
-    "build": "bun build --compile --minify ws/cli.ts --outfile dist/ws",
-    "install-bin": "bun run build && mkdir -p ~/.local/bin && cp dist/ws ~/.local/bin/ws"
+    "build": "bun build --compile --minify ws/cli.ts --outfile dist/ws"
   },
   "devDependencies": {
     "@types/bun": "^1.4.4",

@@ -12,9 +12,9 @@ const infos: PathInfo[] = [
   { path: B, exists: true, toplevel: B, commonDir: `${B}/.git`, branch: "main" },
 ];
 const tree = buildTree({ agents: [t("t1", A, "working"), t("t2", B, "idle"), t("t3", B, "blocked")], infos, entries: [], root: "/g", all: false });
-const idx = indexTmux(tree, makeLocator(tree, infos), {
+const idx = indexTmux(makeLocator(tree, infos), {
   sessions: [{ name: "a", path: A, attached: true }],
-  panes: [{ session: "a", windowIndex: 1, windowName: "agents", paneId: "%1", agent: "t1", dead: false }],
+  panes: [{ paneId: "%1", agent: "t1", dead: false }],
 });
 
 describe("toRows", () => {
