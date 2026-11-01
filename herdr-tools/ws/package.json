@@ -1,0 +1,22 @@
+{
+  "name": "ws",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "herdr-core × tmux のナビゲーション CLI",
+  "bin": {
+    "ws": "./cli.ts"
+  },
+  "scripts": {
+    "test": "bun test test",
+    "test:mod": "bun test ../mod",
+    "typecheck": "tsc -p .",
+    "e2e": "bash test/e2e.sh",
+    "build": "bun build --compile --minify cli.ts --outfile dist/ws",
+    "install-bin": "bun run build && mkdir -p ~/.local/bin && cp dist/ws ~/.local/bin/ws"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "typescript": "^7.0.2"
+  }
+}
