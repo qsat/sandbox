@@ -1,0 +1,9 @@
+{
+  "name": "@herdr-tools/tmux",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "tmux クライアント: セッション・ペインへの移動、popup の一覧",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@herdr-tools/ws-core": "workspace:*" }
+}

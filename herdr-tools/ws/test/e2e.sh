@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# E2E: JSON を返すスタブの hc と、実際の tmux（専用ソケット）で ws の全コマンドを通す。
-#   bash test/e2e.sh
+# E2E: スタブの herdr-core（herdr/test/stub/hc）と実際の tmux（専用ソケット）で ws の全コマンドを通す。
+#   bash ws/test/e2e.sh（または herdr-tools で bun run e2e）
 # 必要なもの: bun, tmux 3.2+, git, jq
 set -euo pipefail
 
@@ -9,7 +9,7 @@ ROOT="$(cd "$HERE/.." && pwd)"
 TMP="$(mktemp -d)"
 SOCK="ws-e2e-$$"
 
-export HC_BIN="$HERE/stub/hc"
+export HC_BIN="$ROOT/../herdr/test/stub/hc"
 export HC_STUB_STATE="$TMP/hc.json"
 export WS_TMUX_SOCKET="$SOCK"
 export GHQ_ROOT="$TMP/ghq"
@@ -76,18 +76,18 @@ echo "list（core × tmux × git）"
 J="$(ws list --json)"
 check "worktree 2つ（セッションのある api、エージェントのいる feat）" "$(jq '[.workspaces[].worktrees[]] | length' <<<"$J")" "2"
 check "エージェントは feat に入る" "$(jq -r '.workspaces[0].worktrees[] | select(.agents|length>0) | .path' <<<"$J")" "$FEAT"
-check "未 attach" "$(jq '.workspaces[0].worktrees[].agents[] | .attached' <<<"$J")" "false"
+check "未 attach" "$(jq '.workspaces[0].worktrees[].agents[] | .tmux.attached' <<<"$J")" "false"
 
 echo "go（agent・セッション無し → 作成・agents ウィンドウ・切り替え）"
 ws go t1 --client "$CLIENT"
 check "tm 規則のセッション" "$(t list-sessions -F '#{session_name}' | grep -c '^api=feat-auth$')" "1"
-check "agents ウィンドウに @hc=t1 のペイン" "$(t list-panes -a -F '#{session_name}:#{window_name} #{@hc}' | grep -c '^api=feat-auth:agents t1$')" "1"
+check "agents ウィンドウに @ws_agent=t1 のペイン" "$(t list-panes -a -F '#{session_name}:#{window_name} #{@ws_agent}' | grep -c '^api=feat-auth:agents t1$')" "1"
 check "クライアントが移動" "$(client_session)" "api=feat-auth"
 check "ペインで hc attach が動く" "$(sleep 0.5; t capture-pane -p -t '=api=feat-auth:agents' | grep -c 'attached to t1')" "1"
 
 echo "go（agent・attach 済み → 二重に attach しない）"
 ws go t1 --client "$CLIENT"
-check "ペインは1つのまま" "$(t list-panes -a -F '#{@hc}' | grep -c '^t1$')" "1"
+check "ペインは1つのまま" "$(t list-panes -a -F '#{@ws_agent}' | grep -c '^t1$')" "1"
 
 echo "go（worktree）"
 ws go "$API" --client "$CLIENT"
@@ -120,7 +120,7 @@ check "agents ウィンドウに3ペイン" "$(t list-panes -t '=api=feat-auth:a
 echo "new --attach"
 (cd "$API" && ws new --attach --client "$CLIENT")
 check "起動して会話ペインへ" "$(client_session)" "api"
-check "api の agents ウィンドウに t4" "$(t list-panes -a -F '#{session_name}:#{window_name} #{@hc}' | grep -c '^api:agents t4$')" "1"
+check "api の agents ウィンドウに t4" "$(t list-panes -a -F '#{session_name}:#{window_name} #{@ws_agent}' | grep -c '^api:agents t4$')" "1"
 
 echo "prune（ディレクトリごと消された worktree）"
 (cd "$GONE" && ws new >/dev/null)

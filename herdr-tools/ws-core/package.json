@@ -1,0 +1,8 @@
+{
+  "name": "@herdr-tools/ws-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Workspace > Worktree > Agent のドメインとユースケース（tmux / herdr を知らない）",
+  "exports": { ".": "./src/index.ts" }
+}

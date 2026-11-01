@@ -14,17 +14,17 @@ BIN_DIR="${WS_BIN_DIR:-$HOME/.local/bin}"
 APP_DIR="${HERDR_APP_DIR:-$HOME/.config/herdr-app}"
 
 echo "== ws をビルドして $BIN_DIR/ws に置く"
-run bash -c "cd '$HERE/ws' && bun install --frozen-lockfile >/dev/null && bun run build"
+run bash -c "cd '$HERE' && bun install --frozen-lockfile >/dev/null && bun run build"
 run mkdir -p "$BIN_DIR"
-run cp "$HERE/ws/dist/ws" "$BIN_DIR/ws"
+run cp "$HERE/dist/ws" "$BIN_DIR/ws"
 
 echo "== mod を $APP_DIR/mods/agent-board に置く"
 run mkdir -p "$APP_DIR/mods/agent-board" "$APP_DIR/layouts"
-run cp "$HERE/mod/agent-board/main.js" "$HERE/mod/agent-board/mod.json" "$APP_DIR/mods/agent-board/"
+run cp "$HERE/herdr/mod/agent-board/main.js" "$HERE/herdr/mod/agent-board/mod.json" "$APP_DIR/mods/agent-board/"
 if [ -e "$APP_DIR/layouts/agents.json" ]; then
   echo "  (layouts/agents.json は既にあるので触らない)"
 else
-  run cp "$HERE/layouts/agents.json" "$APP_DIR/layouts/agents.json"
+  run cp "$HERE/herdr/layouts/agents.json" "$APP_DIR/layouts/agents.json"
 fi
 if command -v herdr-app >/dev/null 2>&1; then
   run herdr-app check "$APP_DIR/mods/agent-board"
@@ -36,8 +36,8 @@ cat <<MSG
 
 == 手で追記するもの（dotfiles 側）
 --- ~/.tmux.conf ---
-$(grep -v '^#' "$HERE/config/tmux.conf" | sed '/^$/d')
+$(grep -v '^#' "$HERE/tmux/config/tmux.conf" | sed '/^$/d')
 
 --- ~/.claude/settings.json（hooks に追加）---
-$(cat "$HERE/config/claude-settings.json")
+$(cat "$HERE/ws/config/claude-settings.json")
 MSG
