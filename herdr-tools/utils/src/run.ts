@@ -4,7 +4,6 @@ export interface RunOptions {
   env?: Record<string, string | undefined>;
 }
 
-/** 子プロセスを実行して終了コードと出力を返す。コマンドが無ければ 127 */
 export async function run(cmd: string, args: string[], opts: RunOptions = {}) {
   let proc;
   try {

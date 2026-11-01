@@ -1,5 +1,3 @@
-// 行モデル: 木を「画面の1行ずつ」に平らにする。popup と ws list のテキスト出力で使う。
-
 import { agentTags } from "@herdr-tools/utils/agent-tags";
 import { basename } from "@herdr-tools/utils/basename";
 import { statusIcon } from "@herdr-tools/utils/status-icon";
@@ -7,10 +5,9 @@ import { statusLabel } from "@herdr-tools/utils/status-label";
 import type { Tag } from "@herdr-tools/utils/tag";
 import { worktreeTags } from "@herdr-tools/utils/worktree-tags";
 import { attentionRank, byAttention, type AgentNode, type Tree, type WorkspaceNode, type WorktreeNode } from "@herdr-tools/ws-core";
-import type { TmuxIndex } from "../model";
+import type { TmuxIndex } from "../tmux-index";
 
-interface ViewOptions {
-  /** 注意が要るもの（blocked など）を先頭に */
+interface RowOptions {
   attentionFirst: boolean;
   color: boolean;
 }
@@ -44,7 +41,7 @@ export function worktreeLabel(wt: WorktreeNode, idx: TmuxIndex, color: boolean) 
   return [wt.isMain ? paint(color, BOLD, name) : name, tagsText(worktreeTags(wt, idx.sessionOf(wt.path)), color)].filter(Boolean).join(" ");
 }
 
-export function toRows(tree: Tree, idx: TmuxIndex, opts: ViewOptions) {
+export function toRows(tree: Tree, idx: TmuxIndex, opts: RowOptions) {
   const sorted = <T>(xs: T[], cmp: (a: T, b: T) => number) => (opts.attentionFirst ? [...xs].sort(cmp) : xs);
   const rankOfWorkspace = (ws: WorkspaceNode) => Math.min(99, ...ws.worktrees.map(rankOfWorktree));
   return sorted(tree.workspaces, (a, b) => rankOfWorkspace(a) - rankOfWorkspace(b) || a.name.localeCompare(b.name)).flatMap((ws) => [
@@ -68,8 +65,7 @@ export function isSelectable(r: Row | undefined) {
   return !!r && r.kind !== "workspace";
 }
 
-/** 選択位置を次の選択可能な行へ動かす */
-export function moveSelection(rows: Row[], from: number, delta: 1 | -1) {
+export function nextSelectable(rows: Row[], from: number, delta: 1 | -1) {
   let i = from;
   for (let n = 0; n < rows.length; n++) {
     i += delta;
@@ -84,8 +80,7 @@ export function firstSelectable(rows: Row[]) {
   return i < 0 ? 0 : i;
 }
 
-/** 更新後も同じ対象を選んだままにする */
-export function reselect(rows: Row[], ref: string | undefined) {
+export function keepSelectionOn(rows: Row[], ref: string | undefined) {
   if (ref) {
     const i = rows.findIndex((r) => r.kind !== "workspace" && r.ref === ref);
     if (i >= 0) return i;

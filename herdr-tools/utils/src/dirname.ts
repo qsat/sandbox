@@ -1,6 +1,5 @@
 import { trimTrailingSlash } from "./trim-trailing-slash";
 
-/** パスの親ディレクトリ */
 export function dirname(p: string) {
   const t = trimTrailingSlash(p);
   const i = t.lastIndexOf("/");

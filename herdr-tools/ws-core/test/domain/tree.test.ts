@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildTree,
-  collectCandidatePaths,
+  pathsToInspect,
   makeLocator,
   needsResume,
-  planPrune,
+  agentsInMissingWorktrees,
   resolveRef,
   type AgentRecord,
-  type PathInfo,
-} from "../src";
+  type PathInspection,
+} from "../../src";
 
 const G = "/Users/me/ghq/github.com/o";
 const API = `${G}/api`;
@@ -20,7 +20,7 @@ function agent(p: Partial<AgentRecord> & { id: string }): AgentRecord {
   return { name: p.id, cwd: API, status: "idle", alive: true, parent: null, ...p };
 }
 
-const infos: PathInfo[] = [
+const infos: PathInspection[] = [
   { path: API, exists: true, toplevel: API, commonDir: `${API}/.git`, branch: "main" },
   { path: FEAT, exists: true, toplevel: FEAT, commonDir: `${API}/.git`, branch: "feat-auth" },
   { path: `${FEAT}/src`, exists: true, toplevel: FEAT, commonDir: `${API}/.git`, branch: "feat-auth" },
@@ -29,29 +29,29 @@ const infos: PathInfo[] = [
 ];
 
 const agents: AgentRecord[] = [
-  agent({ id: "t1", name: "api-main", cwd: API, workspaceHint: API, worktreeHint: API, status: "working" }),
-  agent({ id: "t2", name: "api-feat-auth", cwd: `${FEAT}/src`, status: "blocked", kind: "permission" }), // 記録なし、cwd から推定
-  agent({ id: "t3", name: "old", cwd: "/", workspaceHint: API, worktreeHint: GONE, sessionId: "s3", programLost: true }),
-  agent({ id: "t4", name: "child", cwd: FEAT, worktreeHint: FEAT, parent: "t2" }),
+  agent({ id: "t1", name: "api-main", cwd: API, recordedWorkspace: API, recordedWorktree: API, status: "working" }),
+  agent({ id: "t2", name: "api-feat-auth", cwd: `${FEAT}/src`, status: "blocked", blockedReason: "permission" }), // 記録なし、cwd から推定
+  agent({ id: "t3", name: "old", cwd: "/", recordedWorkspace: API, recordedWorktree: GONE, claudeSessionId: "s3", programLost: true }),
+  agent({ id: "t4", name: "child", cwd: FEAT, recordedWorktree: FEAT, parent: "t2" }),
 ];
 
 const ENTRIES = [API, FEAT, WEB];
 // snapshot と同じく、--all のときは全エントリを include に足す
 const tree = (opts: { all?: boolean; include?: string[] } = {}) =>
-  buildTree({ agents, infos, include: [...(opts.include ?? []), ...(opts.all ? ENTRIES : [])], root: "/Users/me/ghq", home: "/Users/me" });
+  buildTree({ agents, inspections: infos, alwaysShow: [...(opts.include ?? []), ...(opts.all ? ENTRIES : [])], ghqRoot: "/Users/me/ghq", home: "/Users/me" });
 
 describe("要再開", () => {
-  const base = agent({ id: "t1", sessionId: "abc", programLost: true });
+  const base = agent({ id: "t1", claudeSessionId: "abc", programLost: true });
   test("生きている・プログラムを失った・会話IDあり", () => expect(needsResume(base)).toBe(true));
   test("プログラムが動いていれば不要", () => expect(needsResume({ ...base, programLost: false })).toBe(false));
   test("分からなければ不要", () => expect(needsResume({ ...base, programLost: undefined })).toBe(false));
-  test("会話IDが無ければ不要", () => expect(needsResume({ ...base, sessionId: undefined })).toBe(false));
+  test("会話IDが無ければ不要", () => expect(needsResume({ ...base, claudeSessionId: undefined })).toBe(false));
   test("終了済みは不要", () => expect(needsResume({ ...base, alive: false })).toBe(false));
 });
 
 describe("buildTree", () => {
   test("候補パス: エージェントの居場所（記録を優先）と include", () => {
-    const c = collectCandidatePaths(agents, [WEB]);
+    const c = pathsToInspect(agents, [WEB]);
     expect(c.sort()).toEqual([API, `${FEAT}/src`, FEAT, GONE, WEB].sort());
   });
 
@@ -112,8 +112,8 @@ describe("resolveRef", () => {
   });
 });
 
-describe("planPrune", () => {
+describe("agentsInMissingWorktrees", () => {
   test("場所が消えた worktree のエージェント", () => {
-    expect(planPrune(tree()).map((a) => a.id)).toEqual(["t3"]);
+    expect(agentsInMissingWorktrees(tree()).map((a) => a.id)).toEqual(["t3"]);
   });
 });

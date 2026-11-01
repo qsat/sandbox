@@ -1,10 +1,7 @@
-// ws list --json の形: ws-core の木に、tmux の情報を tmux キーで添える。
-// 型は withTmux から推論する。Herdr app の mod も ListedTree を読む（型だけを import し、実行時には ws を exec して受け取る）。
+import type { Tree } from "@herdr-tools/ws-core/domain/tree";
+import type { TmuxIndex } from "./tmux-index";
 
-import type { Tree } from "@herdr-tools/ws-core/model";
-import type { TmuxIndex } from "./model";
-
-export function withTmux(tree: Tree, idx: TmuxIndex) {
+export function toListJson(tree: Tree, idx: TmuxIndex) {
   return {
     workspaces: tree.workspaces.map((ws) => ({
       ...ws,
@@ -20,5 +17,5 @@ export function withTmux(tree: Tree, idx: TmuxIndex) {
   };
 }
 
-export type ListedTree = ReturnType<typeof withTmux>;
+export type ListedTree = ReturnType<typeof toListJson>;
 export type ListedAgent = ListedTree["workspaces"][number]["worktrees"][number]["agents"][number];

@@ -9,8 +9,8 @@ describe("表示の部品", () => {
   test("statusIcon / statusLabel", () => {
     expect(statusIcon("blocked")).toBe("▲");
     expect(statusIcon("unknown")).toBe("?");
-    expect(statusLabel({ status: "blocked", kind: "permission" })).toBe("blocked(permission)");
-    expect(statusLabel({ status: "idle", kind: "x" })).toBe("idle");
+    expect(statusLabel({ status: "blocked", blockedReason: "permission" })).toBe("blocked(permission)");
+    expect(statusLabel({ status: "idle", blockedReason: "x" })).toBe("idle");
   });
   test("agentTags: attach の有無が分からなければ未attach を出さない", () => {
     const a = { needsResume: true, missingLocation: true, parent: "t1", alive: false };

@@ -1,11 +1,10 @@
-// tmux クライアントのユースケース: ws-core の木と tmux の事実を合わせて、移動・ペイン表示・片付けを行う。
-// 実行環境（herdr-core など）は WsCore の AgentRuntime ポートの向こうにいて、ここからは見えない。
-
 import { homedir } from "node:os";
 import { looksLikePath, resolveRef, type Resolved, type WsCore } from "@herdr-tools/ws-core";
-import { focusGhostty, ghosttyNewWindow } from "./ghostty";
-import { AGENTS_WINDOW, chooseClient, indexTmux, interestingPaths, planGo, planPanes, workingDir, type Step } from "./model";
-import { Tmux } from "./tmux";
+import { focusGhostty, openGhosttyWindowRunning } from "./ghostty";
+import { AGENTS_WINDOW, chooseClient, planGo, workingDir, type Step } from "./plans/go";
+import { planPanes } from "./plans/panes";
+import { indexTmux, sessionPaths } from "./tmux-index";
+import { TmuxServer } from "./tmux-server";
 
 interface GoOptions {
   client?: string;
@@ -14,94 +13,78 @@ interface GoOptions {
 }
 
 export class TmuxNavigator {
-  /** 場所が消えた worktree のときに使うディレクトリ */
-  private readonly fallbackCwd = homedir();
+  private readonly cwdWhenMissing = homedir();
 
   constructor(
     readonly core: WsCore,
-    readonly tmux: Tmux = new Tmux(),
+    readonly tmux = new TmuxServer(),
     private readonly env: Record<string, string | undefined> = process.env,
   ) {}
 
-  /** ws-core の木に tmux の事実を添える。セッションの場所はエージェントがいなくても木に出す */
-  async view(opts: { all?: boolean; include?: string[] } = {}) {
+  async view(opts: { allEntries?: boolean; alsoShow?: string[] } = {}) {
     const facts = await this.tmux.facts();
-    const snap = await this.core.snapshot({ all: opts.all, include: [...interestingPaths(facts), ...(opts.include ?? [])] });
+    const snap = await this.core.snapshot({ allEntries: opts.allEntries, alwaysShow: [...sessionPaths(facts), ...(opts.alsoShow ?? [])] });
     return { snap, idx: indexTmux(snap.locate, facts) };
   }
 
-  /** ws go: どこから呼んでも、最後は1つの tmux クライアントを切り替える */
   async go(target: Resolved, view: TmuxView, opts: GoOptions = {}) {
     const client = chooseClient({
       explicit: opts.client,
       fromApp: !!opts.fromApp,
-      insideTmuxClient: opts.fromApp ? undefined : await this.tmux.currentClient(this.env),
+      callerClient: opts.fromApp ? undefined : await this.tmux.callerClient(this.env),
       clients: await this.tmux.listClients(),
     });
-    const steps = planGo(target, view.idx, { client, fromApp: !!opts.fromApp, fallbackCwd: this.fallbackCwd });
-    if (!opts.dryRun) await this.execute(steps);
+    const steps = planGo(target, view.idx, { client, fromApp: !!opts.fromApp, cwdWhenMissing: this.cwdWhenMissing });
+    if (!opts.dryRun) for (const step of steps) await this.run(step);
     return steps;
   }
 
-  /** ref（worktree のパスかエージェントの id／名前）へ移動する */
   async goRef(ref: string, opts: GoOptions = {}) {
-    const view = await this.view({ include: looksLikePath(ref) ? [ref] : [] });
-    const t = resolveRef(view.snap, ref);
-    if (!t) throw new Error(`見つかりません: ${ref}`);
-    return this.go(t, view, opts);
+    const view = await this.view({ alsoShow: looksLikePath(ref) ? [ref] : [] });
+    const target = resolveRef(view.snap, ref);
+    if (!target) throw new Error(`見つかりません: ${ref}`);
+    return this.go(target, view, opts);
   }
 
-  /** worktree でエージェントを起動し、そのまま会話ペインへ */
-  async newAndGo(path: string, claudeArgs: string[], opts: GoOptions = {}): Promise<{ id: string; name: string; steps: Step[] }> {
-    const r = await this.core.newAgent(path, claudeArgs);
-    return { ...r, steps: await this.goRef(r.id, opts) };
+  async startAgentAndGo(path: string, claudeArgs: string[], opts: GoOptions = {}) {
+    const agent = await this.core.startAgent(path, claudeArgs);
+    return { ...agent, steps: await this.goRef(agent.id, opts) };
   }
 
-  async execute(steps: Step[]) {
-    for (const s of steps) {
-      switch (s.op) {
-        case "newSession":
-          await this.tmux.newSession(s.name, s.cwd);
-          break;
-        case "prepareAgent":
-          await this.core.resume(s.agent);
-          break;
-        case "selectPane":
-          await this.tmux.selectPane(s.paneId);
-          break;
-        case "openAgentPane":
-          await this.tmux.openAgentPane(s.session, s.window, s.cwd, s.agent, this.core.attachCommand(s.agent));
-          break;
-        case "switchClient":
-          await this.tmux.switchClient(s.client, target(s.target));
-          break;
-        case "attach":
-          await this.tmux.attach(target(s.target));
-          break;
-        case "ghosttyNewWindow":
-          await ghosttyNewWindow(this.tmux.attachArgv(target(s.target)));
-          break;
-        case "focusGhostty":
-          await focusGhostty();
-          break;
-      }
+  private async run(step: Step) {
+    switch (step.op) {
+      case "newSession":
+        return this.tmux.newSession(step.name, step.cwd);
+      case "resumeIfNeeded":
+        return this.core.resumeIfNeeded(step.agentId);
+      case "selectPane":
+        return this.tmux.selectPane(step.paneId);
+      case "openAgentPane":
+        return this.tmux.openAgentPane(step.session, step.window, step.cwd, step.agentId, this.core.attachCommand(step.agentId));
+      case "switchClient":
+        return this.tmux.switchClient(step.client, step.target);
+      case "attachHere":
+        return this.tmux.attachHere(step.target);
+      case "newGhosttyWindow":
+        return openGhosttyWindowRunning(this.tmux.attachArgv(step.target));
+      case "focusGhostty":
+        return focusGhostty();
     }
   }
 
-  /** ws panes: ペインの worktree のエージェントを agents ウィンドウに並べる */
-  async panes(paneId: string, opts: { includeChildren: boolean; max: number }) {
-    const info = await this.tmux.paneInfo(paneId);
-    if (!info) throw new Error(`ペインがありません: ${paneId}`);
-    const view = await this.view({ include: [info.currentPath] });
-    const wt = this.worktreeOfSession(view, info.session) ?? view.snap.locate(info.currentPath)?.worktree;
+  async openPanesForWorktreeOf(paneId: string, opts: { includeChildren: boolean; max: number }) {
+    const pane = await this.tmux.paneInfo(paneId);
+    if (!pane) throw new Error(`ペインがありません: ${paneId}`);
+    const view = await this.view({ alsoShow: [pane.currentPath] });
+    const wt = this.worktreeOfSession(view, pane.session) ?? view.snap.locate(pane.currentPath)?.worktree;
     if (!wt) throw new Error("このペインの worktree が分かりません");
 
     const plan = planPanes(wt, view.idx, opts);
     for (const a of plan.open) {
-      await this.core.resume(a.id);
-      await this.tmux.openAgentPane(info.session, AGENTS_WINDOW, workingDir(wt, this.fallbackCwd), a.id, this.core.attachCommand(a.id));
+      await this.core.resumeIfNeeded(a.id);
+      await this.tmux.openAgentPane(pane.session, AGENTS_WINDOW, workingDir(wt, this.cwdWhenMissing), a.id, this.core.attachCommand(a.id));
     }
-    return { session: info.session, opened: plan.open.map((a) => a.id), skipped: plan.skipped.map((a) => a.id), alreadyAttached: wt.agents.filter((a) => view.idx.isAttached(a.id)).length };
+    return { opened: plan.open.length, overLimit: plan.overLimit.length, alreadyOpen: wt.agents.filter((a) => view.idx.isAttached(a.id)).length };
   }
 
   async killSessions(names: string[]) {
@@ -109,14 +92,8 @@ export class TmuxNavigator {
   }
 
   private worktreeOfSession(view: TmuxView, session: string) {
-    for (const ws of view.snap.tree.workspaces) for (const wt of ws.worktrees) if (view.idx.sessionOf(wt.path)?.name === session) return wt;
-    return undefined;
+    return view.snap.tree.workspaces.flatMap((ws) => ws.worktrees).find((wt) => view.idx.sessionOf(wt.path)?.name === session);
   }
 }
 
 type TmuxView = Awaited<ReturnType<TmuxNavigator["view"]>>;
-
-/** %12 はペイン。セッション名は前方一致で別セッションに当たらないよう = を付ける */
-function target(t: string) {
-  return t.startsWith("%") || t.startsWith("=") ? t : `=${t}`;
-}

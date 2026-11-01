@@ -1,20 +1,19 @@
-// herdr-core（hc）の JSON-RPC クライアント。`hc connect` の stdin/stdout に1行1メッセージ（plain mode）で話す。
-// 形は schema/hc.openrpc.json のとおり。接続はプロセスの中で1本を使い回し、切れたら次の呼び出しで張り直す。
+import type { HcTerminal } from "./hc-terminal";
 
-import type { HcTerminal } from "./terminal";
+type Notification = { method: string; params?: unknown };
 
-class Connection {
+class HcConnection {
   private readonly proc: ReturnType<typeof Bun.spawn>;
   private nextId = 1;
   private pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
   closed = false;
 
-  constructor(bin: string, onNotification: (msg: { method: string; params?: any }) => void = () => {}) {
+  constructor(bin: string, onNotification: (n: Notification) => void = () => {}) {
     this.proc = Bun.spawn([bin, "connect"], { stdin: "pipe", stdout: "pipe", stderr: "ignore" });
-    void this.read(onNotification);
+    void this.readLines(onNotification);
   }
 
-  private async read(onNotification: (msg: { method: string; params?: any }) => void) {
+  private async readLines(onNotification: (n: Notification) => void) {
     const decoder = new TextDecoder();
     let buf = "";
     try {
@@ -23,22 +22,21 @@ class Connection {
         for (let nl = buf.indexOf("\n"); nl >= 0; nl = buf.indexOf("\n")) {
           const line = buf.slice(0, nl).trim();
           buf = buf.slice(nl + 1);
-          if (!line) continue;
-          const msg = JSON.parse(line);
-          const p = typeof msg.id === "number" ? this.pending.get(msg.id) : undefined;
-          if (p) {
-            this.pending.delete(msg.id);
-            if (msg.error) p.reject(Object.assign(new Error(msg.error.message), { kind: msg.error.data?.kind }));
-            else p.resolve(msg.result);
-          } else if (msg.method) onNotification(msg);
+          if (line) this.dispatch(JSON.parse(line), onNotification);
         }
       }
-    } catch {
-      // 切れた
-    }
+    } catch {}
     this.closed = true;
     for (const p of this.pending.values()) p.reject(new Error("hc connect closed"));
     this.pending.clear();
+  }
+
+  private dispatch(msg: any, onNotification: (n: Notification) => void) {
+    const p = typeof msg.id === "number" ? this.pending.get(msg.id) : undefined;
+    if (!p) return msg.method && onNotification(msg);
+    this.pending.delete(msg.id);
+    if (msg.error) p.reject(Object.assign(new Error(msg.error.message), { kind: msg.error.data?.kind }));
+    else p.resolve(msg.result);
   }
 
   call<T>(method: string, params: Record<string, unknown>) {
@@ -60,19 +58,17 @@ class Connection {
   }
 }
 
-export class Hc {
-  private conn?: Connection;
+export class HcClient {
+  private conn?: HcConnection;
 
   constructor(readonly bin = "hc") {}
 
-  /** T は schema/hc.openrpc.json のそのメソッドの result */
-  private call<T = unknown>(method: string, params: Record<string, unknown>) {
-    if (!this.conn || this.conn.closed) this.conn = new Connection(this.bin);
-    return this.conn.call<T>(method, params);
+  private call<Result = unknown>(method: string, params: Record<string, unknown>) {
+    if (!this.conn || this.conn.closed) this.conn = new HcConnection(this.bin);
+    return this.conn.call<Result>(method, params);
   }
 
-  /** 終了済みも含めて全部 */
-  async list() {
+  async listIncludingFinished() {
     return (await this.call<{ terminals: HcTerminal[] }>("terminal.list", { all: true })).terminals;
   }
 
@@ -85,10 +81,8 @@ export class Hc {
     }
   }
 
-  /** --keep で、待たずに起動する。アドレスを返す */
-  async run(spec: { name: string; cwd: string; labels: Record<string, string>; argv: string[] }) {
-    const r = await this.call<HcTerminal>("terminal.run", { ...spec, keep: true, wait: false });
-    return r.address;
+  async runKeptInBackground(spec: { name: string; cwd: string; labels: Record<string, string>; argv: string[] }) {
+    return (await this.call<HcTerminal>("terminal.run", { ...spec, keep: true, wait: false })).address;
   }
 
   async label(terminal: string, labels: Record<string, string>) {
@@ -107,16 +101,11 @@ export class Hc {
     await this.call("terminal.rm", { terminal });
   }
 
-  /**
-   * events.subscribe（plain mode では、その接続は以後通知だけを運ぶので専用の接続を張る）。
-   * event と missed のたびに onChange を呼ぶ（heartbeat は除く）。
-   */
-  subscribe(onChange: () => void): () => void {
-    let conn: Connection;
+  subscribe(onChange: () => void) {
+    let conn: HcConnection;
     try {
-      conn = new Connection(this.bin, (msg) => {
-        if (msg.method === "event" || msg.method === "missed") onChange();
-      });
+      // plain mode では events.subscribe した接続が以後通知だけを運ぶので、専用の接続を張る
+      conn = new HcConnection(this.bin, (n) => (n.method === "event" || n.method === "missed") && onChange());
     } catch {
       return () => {};
     }

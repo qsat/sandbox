@@ -1,9 +1,6 @@
-// ws ui: tmux の display-popup で開く対話一覧。
-// j/k（↑↓）で移動、Enter で ws go、n で新規エージェント、R で再開、a で全 worktree 表示、r で再読込、q / Esc で閉じる。
-// 実行環境の変化（AgentRuntime.subscribe）で自動更新し、tmux 側の変化は数秒おきに拾う。
-
 import type { TmuxNavigator } from "../navigator";
-import { firstSelectable, isSelectable, moveSelection, reselect, toRows, type Row } from "./view";
+import { splitKeys } from "./keys";
+import { firstSelectable, isSelectable, keepSelectionOn, nextSelectable, toRows, type Row } from "./rows";
 
 const ESC = "\x1b";
 const ALT_ON = `${ESC}[?1049h${ESC}[?25l`;
@@ -13,11 +10,7 @@ const INVERT = `${ESC}[7m`;
 const RESET = `${ESC}[0m`;
 const DIM = `${ESC}[2m`;
 
-interface UiOptions {
-  client?: string;
-}
-
-export async function runUi(nav: TmuxNavigator, opts: UiOptions) {
+export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
   const out = process.stdout;
   const stdin = process.stdin;
   if (!stdin.isTTY) throw new Error("ws ui は端末（tmux の popup）から実行してください");
@@ -54,9 +47,9 @@ export async function runUi(nav: TmuxNavigator, opts: UiOptions) {
     loading = true;
     try {
       const current = rows[sel];
-      const view = await nav.view({ all });
+      const view = await nav.view({ allEntries: all });
       rows = toRows(view.snap.tree, view.idx, { attentionFirst: true, color: true });
-      sel = reselect(rows, current && current.kind !== "workspace" ? current.ref : undefined);
+      sel = keepSelectionOn(rows, current && current.kind !== "workspace" ? current.ref : undefined);
     } catch (e) {
       message = `読み込み失敗: ${(e as Error).message}`;
     } finally {
@@ -75,7 +68,6 @@ export async function runUi(nav: TmuxNavigator, opts: UiOptions) {
     debounce = setTimeout(() => void reload(), 200);
   };
 
-  // 実行環境に繋がらなくても一覧自体は出す（購読できなければ何もしない関数が返る）
   const unsubscribe = nav.core.subscribe(scheduleReload);
   const timer = setInterval(() => void reload(), 3000);
 
@@ -122,7 +114,6 @@ export async function runUi(nav: TmuxNavigator, opts: UiOptions) {
       await reload();
     };
 
-    // まとめて届いた入力（貼り付けや速いキー連打）は1キーずつに分けて処理する
     const onData = (buf: Buffer) => {
       for (const k of splitKeys(buf.toString())) if (!done) onKey(k);
     };
@@ -136,11 +127,11 @@ export async function runUi(nav: TmuxNavigator, opts: UiOptions) {
           return finish();
         case "j":
         case `${ESC}[B`:
-          sel = moveSelection(rows, sel, 1);
+          sel = nextSelectable(rows, sel, 1);
           return render();
         case "k":
         case `${ESC}[A`:
-          sel = moveSelection(rows, sel, -1);
+          sel = nextSelectable(rows, sel, -1);
           return render();
         case "g":
           sel = firstSelectable(rows);
@@ -163,12 +154,12 @@ export async function runUi(nav: TmuxNavigator, opts: UiOptions) {
         case "n":
           if (!r || r.kind === "workspace") return;
           return void act(async () => {
-            await nav.newAndGo(r.worktree.path, [], { client: opts.client });
+            await nav.startAgentAndGo(r.worktree.path, [], { client: opts.client });
           }, true);
         case "R":
           if (!r || r.kind !== "agent") return;
           return void act(async () => {
-            const res = await nav.core.resume(r.agent.id);
+            const res = await nav.core.resumeIfNeeded(r.agent.id);
             return res.resumed ? `再開しました: ${r.agent.id}` : `再開不要: ${res.reason}`;
           }, false);
       }
@@ -176,11 +167,6 @@ export async function runUi(nav: TmuxNavigator, opts: UiOptions) {
     stdin.on("data", onData);
     process.stdout.on("resize", render);
   });
-}
-
-/** 入力を1キーずつに分ける（ESC [ A のような矢印キーは1つにまとめる） */
-export function splitKeys(input: string) {
-  return input.match(/\x1b\[[0-9;]*[A-Za-z~]|\x1bO[A-Za-z]|[\s\S]/g) ?? [];
 }
 
 function stripAnsi(s: string) {

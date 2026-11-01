@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { ListedTree } from "@herdr-tools/tmux/json";
-import { boardRows, commandFor, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
+import type { ListedTree } from "@herdr-tools/tmux/list-json";
+import { boardRows, wsCommandFor, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
 
 const agent = (p: { id: string; name: string; status: "working" | "idle"; needsResume: boolean; attached: boolean }) => ({
   id: p.id,
@@ -65,21 +65,21 @@ describe("boardRows", () => {
   });
 });
 
-describe("commandFor", () => {
+describe("wsCommandFor", () => {
   const rows = boardRows(tree, [], []);
   const wt = rows[2]!;
   test("クリック → ws go <ref> --from-app", () => {
-    expect(commandFor(wt, "go")).toEqual(["ws", ["go", "/g/o/api=feat", "--from-app"]]);
-    expect(commandFor(find(rows, "t1"), "go")).toEqual(["ws", ["go", "t1", "--from-app"]]);
+    expect(wsCommandFor(wt, "go")).toEqual(["ws", ["go", "/g/o/api=feat", "--from-app"]]);
+    expect(wsCommandFor(find(rows, "t1"), "go")).toEqual(["ws", ["go", "t1", "--from-app"]]);
   });
   test("新規 → ws new <worktree> --attach --from-app", () => {
-    expect(commandFor(wt, "new")).toEqual(["ws", ["new", "/g/o/api=feat", "--attach", "--from-app"]]);
+    expect(wsCommandFor(wt, "new")).toEqual(["ws", ["new", "/g/o/api=feat", "--attach", "--from-app"]]);
   });
   test("再開は要再開のときだけ", () => {
-    expect(commandFor(find(rows, "t2"), "resume")).toEqual(["ws", ["resume", "t2"]]);
-    expect(commandFor(find(rows, "t1"), "resume")).toBeNull();
+    expect(wsCommandFor(find(rows, "t2"), "resume")).toEqual(["ws", ["resume", "t2"]]);
+    expect(wsCommandFor(find(rows, "t1"), "resume")).toBeNull();
   });
-  test("workspace 行は何もしない", () => expect(commandFor(rows[0]!, "go")).toBeNull());
+  test("workspace 行は何もしない", () => expect(wsCommandFor(rows[0]!, "go")).toBeNull());
 });
 
 describe("その他", () => {

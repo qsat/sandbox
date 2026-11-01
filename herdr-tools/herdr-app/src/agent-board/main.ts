@@ -1,34 +1,23 @@
-// agent-board: Herdr app の mod 本体（アダプタ）。エージェント一覧を描き、操作はすべて exec("ws", …) に委ねる。
-//
-// - mod の JavaScript は Node ではない（gpui-kit のネイティブ UI）。HTML / CSS / Node API / setTimeout は使えない。
-//   bun build で board.ts と utils をまとめた1ファイル（main.js）にし、herdr / gpui-kit だけを外部 import として残す
-// - 移動先の判断は ws にだけある。ここは「表示と入力」だけ
-// - エージェントの状態は terminals() で即時反映。tmux のセッション・ペインは core に載らないので、
-//   表示中だけ数秒おきに ws list --json を取り直す
-//
-// ここで使う herdr / gpui-kit の API は、~/.config/herdr-app/ の herdr.d.ts / gpui-kit.d.ts が正。
-// 手元の型定義に合わせて直すのはこのファイルだけ（判断ロジックは board.ts でテスト済み）。
-
 import { exec, setShared, shared, terminals } from "herdr";
 import * as ui from "gpui-kit";
 import type { Tag } from "@herdr-tools/utils/tag";
-import type { ListedTree } from "@herdr-tools/tmux/json";
-import { boardRows, commandFor, parseList, toggleCollapsed, WS, type BoardAction, type BoardRow } from "./board";
+import type { ListedTree } from "@herdr-tools/tmux/list-json";
+import { boardRows, parseList, toggleCollapsed, WS, wsCommandFor, type BoardAction, type BoardRow } from "./board";
 
-const REFRESH_MS = 4000;
+const LIST_REFRESH_MS = 4000;
 
-let tree: ListedTree = { workspaces: [] };
+let listJson: ListedTree = { workspaces: [] };
 let lastError = "";
 let lastFetch = 0;
 let fetching = false;
 let timer: unknown;
 
-async function refresh() {
+async function refreshListJson() {
   if (fetching) return;
   fetching = true;
   try {
     const r = await exec(WS, ["list", "--json"], {});
-    tree = parseList(r.stdout);
+    listJson = parseList(r.stdout);
     lastError = r.code !== 0 ? (r.stderr || `ws list: exit ${r.code}`).trim() : "";
   } catch (e) {
     lastError = String((e as Error)?.message ?? e);
@@ -39,7 +28,7 @@ async function refresh() {
 }
 
 async function runRow(row: BoardRow, action: BoardAction, cx: ui.Context) {
-  const c = commandFor(row, action);
+  const c = wsCommandFor(row, action);
   if (!c) return;
   try {
     const r = await exec(c[0], c[1], {});
@@ -47,7 +36,7 @@ async function runRow(row: BoardRow, action: BoardAction, cx: ui.Context) {
   } catch (e) {
     lastError = String((e as Error)?.message ?? e);
   }
-  await refresh();
+  await refreshListJson();
   cx.notify();
 }
 
@@ -108,14 +97,12 @@ function renderRow(row: BoardRow, cx: ui.Context) {
   }
 }
 
-/** mod 本体。表示のたびに呼ばれる */
 export default function render(cx: ui.Context) {
-  // 表示中だけ数秒おきに ws list を取り直す（非表示でもタイマーは動くので控えめに）
-  if (Date.now() - lastFetch > REFRESH_MS && !fetching) void refresh().then(() => cx.notify());
-  if (!timer && cx.timer) timer = cx.timer(REFRESH_MS, () => cx.notify());
+  if (Date.now() - lastFetch > LIST_REFRESH_MS && !fetching) void refreshListJson().then(() => cx.notify());
+  if (!timer && cx.timer) timer = cx.timer(LIST_REFRESH_MS, () => cx.notify());
 
   const list = ui.div().flex_col().gap(2).p(8);
-  const rows = boardRows(tree, terminals(), collapsedState());
+  const rows = boardRows(listJson, terminals(), collapsedState());
   if (rows.length === 0) list.child(ui.text("エージェントもセッションもありません").color("muted"));
   for (const r of rows) list.child(renderRow(r, cx));
   if (lastError) list.child(ui.text(lastError).color("danger"));

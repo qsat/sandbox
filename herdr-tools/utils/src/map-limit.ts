@@ -1,4 +1,3 @@
-/** 並列数を絞った map（結果は入力と同じ順） */
 export async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>) {
   const out: R[] = new Array(items.length);
   let next = 0;
