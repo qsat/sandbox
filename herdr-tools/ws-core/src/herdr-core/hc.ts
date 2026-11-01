@@ -3,7 +3,8 @@
 // - 一回きりの操作（run / label / send / kill / rm）は CLI
 // API はプレビュー版（protocol generation 1）なので、返り値の形の揺れは normalizeTerminal で吸収する。
 
-import { run, runOk, type AgentStatus } from "@herdr-tools/ws-core";
+import type { AgentStatus } from "../model";
+import { run, runOk } from "../util/exec";
 
 /** herdr-core の端末（terminal.list / terminal.get / hc ls --json を正規化したもの） */
 export interface HcTerminal {

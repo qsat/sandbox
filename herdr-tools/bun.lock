@@ -9,13 +9,6 @@
         "typescript": "^7.0.2",
       },
     },
-    "herdr": {
-      "name": "@herdr-tools/herdr",
-      "version": "0.1.0",
-      "dependencies": {
-        "@herdr-tools/ws-core": "workspace:*",
-      },
-    },
     "tmux": {
       "name": "@herdr-tools/tmux",
       "version": "0.1.0",
@@ -30,7 +23,6 @@
         "ws": "./cli.ts",
       },
       "dependencies": {
-        "@herdr-tools/herdr": "workspace:*",
         "@herdr-tools/tmux": "workspace:*",
         "@herdr-tools/ws-core": "workspace:*",
       },
@@ -41,8 +33,6 @@
     },
   },
   "packages": {
-    "@herdr-tools/herdr": ["@herdr-tools/herdr@workspace:herdr"],
-
     "@herdr-tools/tmux": ["@herdr-tools/tmux@workspace:tmux"],
 
     "@herdr-tools/ws": ["@herdr-tools/ws@workspace:ws"],

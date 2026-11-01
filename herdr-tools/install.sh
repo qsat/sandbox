@@ -20,11 +20,11 @@ run cp "$HERE/dist/ws" "$BIN_DIR/ws"
 
 echo "== mod を $APP_DIR/mods/agent-board に置く"
 run mkdir -p "$APP_DIR/mods/agent-board" "$APP_DIR/layouts"
-run cp "$HERE/herdr/mod/agent-board/main.js" "$HERE/herdr/mod/agent-board/mod.json" "$APP_DIR/mods/agent-board/"
+run cp "$HERE/herdr-app/mod/agent-board/main.js" "$HERE/herdr-app/mod/agent-board/mod.json" "$APP_DIR/mods/agent-board/"
 if [ -e "$APP_DIR/layouts/agents.json" ]; then
   echo "  (layouts/agents.json は既にあるので触らない)"
 else
-  run cp "$HERE/herdr/layouts/agents.json" "$APP_DIR/layouts/agents.json"
+  run cp "$HERE/herdr-app/layouts/agents.json" "$APP_DIR/layouts/agents.json"
 fi
 if command -v herdr-app >/dev/null 2>&1; then
   run herdr-app check "$APP_DIR/mods/agent-board"

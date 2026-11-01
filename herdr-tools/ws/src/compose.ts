@@ -1,9 +1,7 @@
-// コンポジションルート: ws-core に実行環境（herdr-core）と作業場所（ghq / git）をつなぎ、クライアント（tmux）を載せる。
-// 具体的な実装を知っているのはここだけ。
+// コンポジションルート: ws-core（herdr-core と ghq / git の上に立つ）を設定から組み立て、クライアント（tmux）を載せる。
 
 import { homedir } from "node:os";
-import { GitWorkspaceSource, WsCore } from "@herdr-tools/ws-core";
-import { HerdrRuntime } from "@herdr-tools/herdr";
+import { GitWorkspaceSource, HerdrRuntime, WsCore } from "@herdr-tools/ws-core";
 import { Tmux, TmuxNavigator } from "@herdr-tools/tmux";
 
 export interface Composition {

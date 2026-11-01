@@ -1,8 +1,8 @@
 // ws-core のドメインモデル。I/O なし。
 //
 // 木の形: Workspace（本体リポジトリ）> Worktree（作業場所）> Agent（エージェント）
-// エージェントをどこで動かすか（herdr-core など）や、どう見せるか（tmux / Herdr app など）は知らない。
-// それらはポート（ports.ts）の向こう側にいる。
+// 事実の出どころは herdr-core（エージェント）と git / ghq（作業場所）。ここではそれを正規化した形だけを扱う。
+// どう見せるか・どう入るか（tmux / Herdr app）は知らない。
 
 export type AgentStatus = "working" | "blocked" | "idle" | "done" | "error" | "unknown";
 

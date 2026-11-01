@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { normalizeTerminal } from "../src/hc";
-import { isShell, terminalNameFor, toAgentRecord } from "../src/runtime";
+import { normalizeTerminal } from "../../src/herdr-core/hc";
+import { isShell, terminalNameFor, toAgentRecord } from "../../src/herdr-core/runtime";
 
 describe("端末名（core の規則: 英小文字・数字・-・_ の1〜32文字）", () => {
   test("<repo>-<branch> を slug 化（= や大文字・/ は使えない）", () => {

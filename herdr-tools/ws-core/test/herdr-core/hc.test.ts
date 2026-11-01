@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { normalizeTerminal } from "../src/hc";
+import { normalizeTerminal } from "../../src/herdr-core/hc";
 
 describe("normalizeTerminal", () => {
   test("terminal.get 形式（status がオブジェクト、labels がオブジェクト）", () => {

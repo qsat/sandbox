@@ -42,7 +42,7 @@ export async function runOk(cmd: string, args: string[], opts: RunOptions = {}):
   return r.stdout;
 }
 
-/** 端末をそのまま引き継いで実行する（tmux attach など） */
+/** 端末をそのまま引き継いで実行する（対話的なコマンド用） */
 export async function runInteractive(cmd: string, args: string[]): Promise<number> {
   const proc = Bun.spawn([cmd, ...args], { stdin: "inherit", stdout: "inherit", stderr: "inherit" });
   return await proc.exited;

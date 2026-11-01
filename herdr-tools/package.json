@@ -2,7 +2,11 @@
   "name": "herdr-tools",
   "private": true,
   "type": "module",
-  "workspaces": ["ws-core", "herdr", "tmux", "ws"],
+  "workspaces": [
+    "ws-core",
+    "tmux",
+    "ws"
+  ],
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc -p .",

@@ -1,9 +1,0 @@
-{
-  "name": "@herdr-tools/herdr",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "description": "herdr-core による AgentRuntime の実装と、Herdr app の mod",
-  "exports": { ".": "./src/index.ts" },
-  "dependencies": { "@herdr-tools/ws-core": "workspace:*" }
-}

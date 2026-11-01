@@ -1,4 +1,6 @@
-// ポート: ws-core が外の世界に求めるもの。実装はクライアント側のパッケージ（herdr など）が持つ。
+// ポート: ws-core が事実の出どころに求めるもの。
+// 本番の実装は ws-core 自身が持つ（AgentRuntime = herdr-core/runtime.ts、WorkspaceSource = adapters/git.ts）。
+// インターフェースとして切ってあるのは、ユースケースの単体テストで偽物に差し替えるため。
 
 import type { AgentRecord, PathInfo } from "./model";
 

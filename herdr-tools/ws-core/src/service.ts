@@ -1,5 +1,5 @@
-// ws-core のユースケース。ポート越しに事実を集め、木を組み、判断する。
-// どのクライアント（tmux / Herdr app など）から呼ばれても同じ答えを返す。
+// ws-core のユースケース。herdr-core と git / ghq から事実を集め、木を組み、判断する。
+// どのクライアント（tmux / Herdr app）から呼ばれても同じ答えを返す。
 
 import { parseSessionStart, resumeCommand } from "./claude";
 import { basename, needsResume, workspacePathFromCommonDir, type AgentNode, type AgentRecord, type PathInfo, type Tree } from "./model";
@@ -39,7 +39,7 @@ export class WsCore {
   /**
    * Workspace > Worktree > Agent の木。
    * @param all     作業場所の全エントリを出す（既定はエージェントか include があるものだけ）
-   * @param include クライアントが見たいパス（tmux のセッションの場所など）。エージェントがいなくても出す
+   * @param include クライアントが見たいパス（クライアントが開いている作業場所など）。エージェントがいなくても出す
    */
   async snapshot(opts: { all?: boolean; include?: string[] } = {}): Promise<Snapshot> {
     const root = await this.source.root();

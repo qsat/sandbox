@@ -2,25 +2,30 @@
 
 「Herdr × tmux エージェント運用 方式設計」の実装。エージェントを workspace > worktree > agent で一覧・移動・会話・再開する。
 
-中心にあるのは **ws-core**（ドメインとユースケース）で、tmux も herdr も知らない。
-herdr-core はエージェントを動かす「実行環境」として、tmux と Herdr app は「見せ方・入り方」としてその外側につながる。
+中心にあるのは **ws-core**。設計書で実行環境を herdr-core に一元化したので、ws-core は herdr-core と git / ghq を
+「事実の出どころ」として直接知っていて、その上に Workspace > Worktree > Agent のドメインとユースケースを持つ。
+知らないのは、それを見せる・それに入るための**クライアント**（tmux と Herdr app）だけ。
 
 ```
-                 ┌──────────── ws CLI（コンポジションルート: つなぐだけ）────────────┐
-                 │                                                                   │
- Herdr app mod ──exec──→  tmux/（クライアント）            herdr/（実行環境の実装）
- (herdr/mod)              セッション・ペイン・popup          HerdrRuntime: hc の JSON-RPC / CLI
-                          ws go / ws panes の計画            ラベル・端末名規則・$HC_TERMINAL_ID
-                                │                                  │ implements
-                                ▼                                  ▼
-                 ws-core: Workspace > Worktree > Agent ── ports: AgentRuntime / WorkspaceSource
-                          状態の導出・参照の解決・再開・起動・会話IDの記録・片付け
-                          （WorkspaceSource の git / ghq 実装も持つ）
+ Herdr app mod（herdr-app/）──exec──┐
+                                    ▼
+                         ws CLI（ws/: つなぐだけ）
+                                    │
+          tmux/（クライアント）  ◀──┤
+          セッション・ペイン・popup │
+          ws go / ws panes の計画   ▼
+                         ws-core: Workspace > Worktree > Agent
+                           状態の導出・参照の解決・再開・起動・会話IDの記録・片付け
+                           事実の出どころ: herdr-core/（hc の JSON-RPC / CLI）、adapters/git.ts（ghq / git）
 ```
 
-依存の向きは `ws → {ws-core, herdr, tmux}`、`herdr → ws-core`、`tmux → ws-core` だけ。
+依存の向きは `ws → {ws-core, tmux}`、`tmux → ws-core` だけ。Herdr app の mod はコードを共有せず、`ws` を exec するだけ。
 Bun workspaces でパッケージを分け、各パッケージの `node_modules` には宣言した依存しか入らない。
-さらに `test/architecture.test.ts` が import と識別子を検査する（ws-core に tmux / herdr / hc が出てこない、tmux に herdr / hc が出てこない）。
+さらに `test/architecture.test.ts` が import と識別子を検査する（ws-core にクライアントの名前が出てこない、
+tmux が hc を直接触らない、mod が Herdr app の API 以外を import しない）。
+
+ws-core の中の `AgentRuntime` / `WorkspaceSource` はインターフェースだが、本番の実装は ws-core 自身が持つ
+（`herdr-core/runtime.ts` と `adapters/git.ts`）。切ってあるのはユースケースの単体テストで偽物に差し替えるため。
 
 ## ディレクトリ
 
@@ -28,14 +33,14 @@ Bun workspaces でパッケージを分け、各パッケージの `node_modules
 | --- | --- |
 | `ws-core/src/model.ts` | ドメインの型（`AgentRecord` / `AgentNode` / `WorktreeNode` / `WorkspaceNode`）と純粋なルール（要再開・注意の順・パス境界） |
 | `ws-core/src/tree.ts` | 木の組み立て、生のパスからの worktree 特定（`makeLocator`）、参照の解決、片付けの計画 |
-| `ws-core/src/ports.ts` | `AgentRuntime`（起動・一覧・送信・会話IDの記録・購読・会話に入るコマンド）と `WorkspaceSource` |
+| `ws-core/src/ports.ts` | `AgentRuntime`（起動・一覧・送信・会話IDの記録・購読・会話に入るコマンド）と `WorkspaceSource`。テスト用の継ぎ目 |
 | `ws-core/src/service.ts` | `WsCore`: snapshot / resolve / resume / newAgent / recordSessionFromHook / prune |
 | `ws-core/src/claude.ts` | Claude Code の知識（`claude --resume <id>`、SessionStart hook の入力） |
 | `ws-core/src/adapters/git.ts` | `WorkspaceSource` の ghq / git 実装 |
-| `herdr/src/runtime.ts` | `HerdrRuntime`: herdr-core の言葉（ラベル `ws` / `wt` / `claude.session`、端末名規則、foreground がシェル＝プログラム喪失）と ws-core の言葉の翻訳 |
-| `herdr/src/hc.ts` | hc クライアント（`hc connect` の JSON-RPC、CLI、返り値の正規化） |
-| `herdr/mod/agent-board/`, `herdr/layouts/` | Herdr app の mod とレイアウト（`ws list --json` の利用者） |
-| `herdr/test/stub/` | E2E 用のスタブ herdr-core |
+| `ws-core/src/herdr-core/runtime.ts` | `HerdrRuntime`: herdr-core の言葉（ラベル `ws` / `wt` / `claude.session`、端末名規則、foreground がシェル＝プログラム喪失）とドメインの言葉の翻訳 |
+| `ws-core/src/herdr-core/hc.ts` | hc クライアント（`hc connect` の JSON-RPC、CLI、返り値の正規化） |
+| `ws-core/test/stub/` | E2E 用のスタブ herdr-core |
+| `herdr-app/mod/agent-board/`, `herdr-app/layouts/` | Herdr app の mod とレイアウト（`ws list --json` の利用者） |
 | `tmux/src/model.ts` | tmux の事実（セッション・ペイン・クライアント）、木への索引、`ws go` / `ws panes` の計画、tm のセッション名規則 |
 | `tmux/src/navigator.ts` | `TmuxNavigator`: 計画を tmux で実行。再開は `WsCore.resume`、会話ペインのコマンドは `AgentRuntime.attachCommand` から受け取る |
 | `tmux/src/tmux.ts`, `ghostty.ts` | tmux コマンド、Ghostty（tmux を表示する端末） |
@@ -98,7 +103,7 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 3. tmux クライアントを切り替える: `--client` 指定 > `--from-app` なら最後に使われたクライアント > tmux 内なら呼び出し元 > tmux の外ならその場で `tmux attach`
 4. app からなら Ghostty を前面へ（クライアントが1つも無ければ Ghostty の新しいウィンドウで attach）
 
-### ラベル（herdr の実装の中だけの話。ws-core は「本体リポジトリ・worktree・会話ID」としてだけ扱う）
+### ラベル（herdr-core への記録。ドメインでは「本体リポジトリ・worktree・会話ID」として扱う）
 
 | ラベル | 値 | 付けるもの |
 | --- | --- | --- |
@@ -128,10 +133,10 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 | ラベルのキーに `.` を使える | 使えなければ `WS_SESSION_LABEL=claude_session`（読む側は両方見る） |
 | kill -9 後もラベルが残り `foreground.name` がシェルになる | 残らなければセッションIDをファイルに保存する方式に変える（`HerdrRuntime.recordSession` / `toAgentRecord`） |
 | hook から `$HC_TERMINAL_ID` が見える | 見えなければ hook は何もしない（`WS_DEBUG=1` で理由を stderr に出す） |
-| `terminal.list` の返り値の形 | `herdr/src/hc.ts` の `normalizeTerminal` で吸収。RPC が失敗したら `hc ls --json` にフォールバックする（その場合ラベルが無く cwd から推定） |
+| `terminal.list` の返り値の形 | `ws-core/src/herdr-core/hc.ts` の `normalizeTerminal` で吸収。RPC が失敗したら `hc ls --json` にフォールバックする（その場合ラベルが無く cwd から推定） |
 | `hc run --bg` の出力 | 出力には依存せず、起動後に名前で引き直してアドレスを得る |
 | `open -na Ghostty --args -e tmux attach -t <session>` | `tmux/src/ghostty.ts` の `ghosttyNewWindow` |
-| mod の API（`herdr.d.ts` / `gpui-kit.d.ts`） | `herdr/mod/agent-board/main.js` の「[2] アダプタ」だけ直す。判断ロジック（[1]）はテスト済み |
+| mod の API（`herdr.d.ts` / `gpui-kit.d.ts`） | `herdr-app/mod/agent-board/main.js` の「[2] アダプタ」だけ直す。判断ロジック（[1]）はテスト済み |
 
 **mod の注意**: この環境には Herdr app が無いため、`main.js` の描画部分（[2] アダプタ）は設計書に書かれた API 名
 （`terminals()` / `exec()` / `shared` / `setShared` / cx のタイマー）を元にした下書き。UI 部品の呼び方（`ui.div()…` など）は
@@ -141,7 +146,7 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 
 ```sh
 bun install
-bun test            # ws-core / herdr / tmux / mod / アーキテクチャの検査
+bun test            # ws-core（herdr-core の翻訳を含む）/ tmux / mod / アーキテクチャの検査
 bun run typecheck
 bun run e2e         # スタブの herdr-core と実際の tmux（専用ソケット）で全コマンドを通す
 bun run build       # dist/ws（単一バイナリ）
@@ -152,4 +157,4 @@ list / new / hook / go（全分岐）/ resume / panes / new --attach / prune / u
 
 環境変数: `HC_BIN`（hc のパス）、`WS_TMUX_SOCKET`（`tmux -L`）、`TMUX_BIN`、`GHQ_ROOT`、`GHQ_BIN`、`GIT_BIN`、`WS_SESSION_LABEL`、`WS_CLAUDE_BIN`、`WS_PANES_MAX`、`WS_DEBUG`。
 
-別の実行環境やクライアントを足すとき: 実行環境は `AgentRuntime` を実装して `ws/src/compose.ts` で差し替える。クライアントは ws-core の `WsCore` と木（`Tree` / `Locate`）だけを使って作る。
+クライアントを足すとき（別の端末マルチプレクサなど）は、ws-core の `WsCore` と木（`Tree` / `Locate`）だけを使って `tmux/` と同じ形で作る。ws-core には手を入れない。

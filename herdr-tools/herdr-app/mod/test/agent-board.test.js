@@ -1,5 +1,5 @@
 // mod の純粋なロジックの検査。herdr / gpui-kit はモックに差し替える。
-//   cd herdr-tools && bun test herdr/mod
+//   cd herdr-tools && bun test herdr-app
 import { describe, expect, mock, test } from "bun:test";
 
 mock.module("herdr", () => ({ terminals: () => [], exec: async () => ({ code: 0, stdout: "{}" }), shared: {}, setShared: () => {} }));

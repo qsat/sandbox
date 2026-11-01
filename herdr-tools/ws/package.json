@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "ws CLI: ws-core に herdr（実行環境）と tmux（クライアント）をつなぐ",
-  "bin": { "ws": "./cli.ts" },
+  "description": "ws CLI: ws-core にクライアント（tmux）をつなぐ",
+  "bin": {
+    "ws": "./cli.ts"
+  },
   "dependencies": {
     "@herdr-tools/ws-core": "workspace:*",
-    "@herdr-tools/herdr": "workspace:*",
     "@herdr-tools/tmux": "workspace:*"
   }
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // ws: エージェントを workspace > worktree > agent で一覧・移動する CLI。
-// 判断は ws-core に、実行環境は herdr/ に、tmux での移動と表示は tmux/ にある。ここはつなぐだけ。
+// 判断と herdr-core の扱いは ws-core に、tmux での移動と表示は tmux/ にある。ここはつなぐだけ。
 
 import { resolve as resolvePath } from "node:path";
 import { expandHome, looksLikePath } from "@herdr-tools/ws-core";

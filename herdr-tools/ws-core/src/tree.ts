@@ -24,7 +24,7 @@ export interface CandidateInput {
   agents: AgentRecord[];
   entries: string[];
   all: boolean;
-  /** クライアントが「これも見たい」と渡すパス（tmux のセッションの場所など） */
+  /** クライアントが「これも見たい」と渡すパス（クライアントが開いている作業場所など） */
   include?: string[];
 }
 

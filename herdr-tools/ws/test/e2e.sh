@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# E2E: スタブの herdr-core（herdr/test/stub/hc）と実際の tmux（専用ソケット）で ws の全コマンドを通す。
+# E2E: スタブの herdr-core（ws-core/test/stub/hc）と実際の tmux（専用ソケット）で ws の全コマンドを通す。
 #   bash ws/test/e2e.sh（または herdr-tools で bun run e2e）
 # 必要なもの: bun, tmux 3.2+, git, jq
 set -euo pipefail
@@ -9,7 +9,7 @@ ROOT="$(cd "$HERE/.." && pwd)"
 TMP="$(mktemp -d)"
 SOCK="ws-e2e-$$"
 
-export HC_BIN="$ROOT/../herdr/test/stub/hc"
+export HC_BIN="$ROOT/../ws-core/test/stub/hc"
 export HC_STUB_STATE="$TMP/hc.json"
 export WS_TMUX_SOCKET="$SOCK"
 export GHQ_ROOT="$TMP/ghq"
