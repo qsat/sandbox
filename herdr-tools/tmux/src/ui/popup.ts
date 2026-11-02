@@ -1,4 +1,5 @@
 import type { TmuxNavigator } from "../navigator";
+import { agentDisplayName } from "@herdr-tools/utils/agent-display-name";
 import { basename } from "@herdr-tools/utils/basename";
 import { splitKeys } from "./keys";
 import { firstSelectable, isSelectable, keepSelectionOn, nextSelectable, toRows, type Row } from "./rows";
@@ -26,7 +27,7 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
   let loading = false;
   let reloadQueued = false;
   let done = false;
-  let closeAsked: { worktreePath: string; name: string } | null = null;
+  let confirming: { question: string; run: () => Promise<string> } | null = null;
 
   const render = () => {
     if (done) return;
@@ -39,8 +40,8 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
     });
     if (rows.length === 0) lines.push(DIM + "（表示するものがありません。a で全 worktree を表示）" + RESET);
     while (lines.length < height) lines.push("");
-    const help = `${DIM}Enter:移動 n:新規 R:再開 x:セッション終了 a:${all ? "絞込" : "全部"} r:再読込 q:閉じる${RESET}`;
-    const prompt = closeAsked ? `${ESC}[33m${closeAsked.name} の tmux セッションを閉じますか？ y/N${RESET}` : message;
+    const help = `${DIM}Enter:移動 n:新規 R:再開 s:停止 x:セッション終了 a:${all ? "絞込" : "全部"} r:再読込 q:閉じる${RESET}`;
+    const prompt = confirming ? `${ESC}[33m${confirming.question} y/N${RESET}` : message;
     out.write(CLEAR + lines.join("\r\n") + "\r\n" + prompt + "\r\n" + help);
   };
 
@@ -125,14 +126,11 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
 
     const onKey = (k: string) => {
       const r = rows[sel];
-      if (closeAsked) {
-        const asked = closeAsked;
-        closeAsked = null;
+      if (confirming) {
+        const asked = confirming;
+        confirming = null;
         if (k !== "y" && k !== "Y") return render();
-        return void act(async () => {
-          const res = await nav.closeSessionOf(asked.worktreePath);
-          return res.closed ? `閉じました: ${res.session}` : "tmux セッションはありません";
-        }, false);
+        return void act(asked.run, false);
       }
       switch (k) {
         case "q":
@@ -170,10 +168,31 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
           return void act(async () => {
             await nav.startAgentAndGo(r.worktree.path, [], { client: opts.client });
           }, true);
-        case "x":
+        case "x": {
           if (!isSelectable(r)) return;
-          closeAsked = { worktreePath: r.worktree.path, name: basename(r.worktree.path) };
+          const path = r.worktree.path;
+          confirming = {
+            question: `${basename(path)} の tmux セッションを閉じますか？`,
+            run: async () => {
+              const res = await nav.closeSessionOf(path);
+              return res.closed ? `閉じました: ${res.session}` : "tmux セッションはありません";
+            },
+          };
           return render();
+        }
+        case "s": {
+          if (!r || r.kind !== "agent") return;
+          const agent = r.agent;
+          const verb = agent.alive ? "停止" : "削除";
+          confirming = {
+            question: `${agentDisplayName(agent)} を${verb}しますか？`,
+            run: async () => {
+              const res = await nav.core.stopAgent(agent.id);
+              return res.stopped ? `${verb}しました: ${agentDisplayName(agent)}` : `${verb}できません: ${res.reason}`;
+            },
+          };
+          return render();
+        }
         case "R":
           if (!r || r.kind !== "agent") return;
           return void act(async () => {

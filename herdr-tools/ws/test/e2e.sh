@@ -180,5 +180,14 @@ check "ws close で worktree のセッションを閉じる" "$(ws close "$FEAT"
 check "api=feat-auth のセッションが消えた" "$(has_session api=feat-auth)" "no"
 check "エージェントは herdr-core に残る" "$(state '[.terminals[] | select(.state=="live")] | length > 0')" "true"
 
+echo "ui の s（エージェントを止めて一覧から消す）"
+terminal_count() { state '[.terminals[]] | length'; }
+BEFORE="$(terminal_count)"
+(sleep 2.5; printf 'jsn'; sleep 1; printf 'q') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'" >/dev/null
+check "一覧で s のあと y 以外を押すと止めない" "$(terminal_count)" "$BEFORE"
+UI_OUT="$( (sleep 2.5; printf 'jsy'; sleep 3; printf 'q') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'" | tr -d '\r')"
+check "一覧で s → y で止めて herdr-core から消す" "$(terminal_count)" "$((BEFORE - 1))"
+check "止めたことを一覧に出す" "$(grep -c '停止しました' <<<"$UI_OUT" | awk '{print ($1>0)}')" "1"
+
 echo
 echo "E2E: $pass checks passed"
