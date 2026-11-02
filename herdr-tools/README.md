@@ -63,7 +63,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | --- | --- | --- |
 | worktree を作る | `gwq add -b <branch>`（今までどおり） | — |
 | その worktree に入る | `C-e`（tm）で選ぶ（今までどおり） | 一覧で worktree をクリック → Ghostty が前に出る |
-| エージェントを起動する | `ws new --attach` | worktree の「＋ claude」ボタン |
+| エージェントを起動する | `cc`（`ws new --here`。今のペインで会話）か `ws new --attach`（agents ウィンドウへ移る） | worktree の「＋ claude」ボタン |
 | 待っているエージェントを探す | `prefix a`（blocked が先頭） | 一覧を見る（常時表示） |
 | そのエージェントと話す | 一覧で `Enter` → 会話ペインへ | クリック → Ghostty の会話ペインへ |
 | 一覧をキーで操作する | 一覧で `j` / `k`（↓ / ↑）で選び、`Enter` 移動、`n` ＋ claude、`R` 再開、`s` 停止・削除、`x` セッションを閉じる（停止と閉じるは y で確かめる） | ボードを一度クリックしてから `j` / `k`（↓ / ↑）で選び、`Enter` 移動、`n` ＋ claude、`R` 再開、`s` 停止・削除、`x` セッションを閉じる（停止と閉じるは確認のダイアログを出す） |
@@ -79,7 +79,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 ws list [--json] [--all]                         Workspace > Worktree > Agent の木（--all で ghq の全エントリ）
 ws go <ref> [--client <name> | --from-app] [--dry-run]
                                                  移動。ref は worktree のパス（配下でも可）かアドレス／端末名
-ws new [<worktree>] [--attach] [--client <name> | --from-app] [-- <claude の引数>]
+ws new [<worktree>] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
 ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
 ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す（エージェントでない端末は触らない）
 ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは herdr-core で動き続ける
@@ -101,6 +101,21 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 2. agent なら（移動では再開しない。再開は `ws resume`・ボタン・`R` だけで行う）: `@ws_agent` が一致する生きたペインがあればそれを選ぶ／無ければ `agents` ウィンドウに `hc attach` ペインを作る（無ければウィンドウごと）
 3. tmux クライアントを切り替える: `--client` 指定 > `--from-app` なら最後に使われたクライアント > tmux 内なら呼び出し元 > tmux の外ならその場で `tmux attach`
 4. app からなら Ghostty を前面へ（クライアントが1つも無ければ Ghostty の新しいウィンドウで attach）
+
+### `cc`: herdr-core で起動して、今の端末で会話する
+
+`claude` はそのままにして、herdr-core で動かしたいときは `cc` で起動する。`ws/config/cc.sh` を `~/.zshrc` などから source する。
+
+```sh
+cc() {
+  if [ -n "${HC_TERMINAL_ID:-}" ]; then command claude "$@"; else ws new --here -- "$@"; fi
+}
+```
+
+- `ws new --here` は今の worktree で herdr-core に起動し、今の端末で `hc attach` する。tmux の中なら今のペインに `@ws_agent` を付け、一覧では会話中になる
+- 抜ける（切り離す）と元のシェルに戻り、ペインの印を外す。エージェントは動き続け、一覧からまた会話に入れる
+- herdr-core の端末の中（`$HC_TERMINAL_ID` がある）で打ったときは、子端末を作らずにそのまま claude を動かす
+- `cc` は C コンパイラの名前だが、シェルの関数は対話シェルで打ったときだけ効くので、`make` などが呼ぶ `cc` には影響しない
 
 ### tmux のセッション内のウィンドウを1つのウィンドウのペインにまとめる
 

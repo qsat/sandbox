@@ -12,8 +12,8 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
   ws list [--json] [--all]                         一覧（--all で ghq の全エントリ）
   ws go <ref> [--client <name> | --from-app] [--dry-run]
                                                    移動。ref は worktree のパスかエージェントの id／名前
-  ws new [<worktree>] [--attach] [--client <name> | --from-app] [-- <claude の引数>]
-                                                   エージェント起動
+  ws new [<worktree>] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
+                                                   エージェント起動。--here は今の端末で会話、--attach は agents ウィンドウへ移動
   ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
   ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す
   ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは止めない
@@ -101,7 +101,9 @@ async function main(argv: string[]) {
     }
     case "new": {
       const path = absolutePathFromCwd(p.positional[0] ?? ".");
-      if (has(p, "--attach")) {
+      if (has(p, "--here")) {
+        await nav.startAgentAndTalkHere(path, p.rest);
+      } else if (has(p, "--attach")) {
         await nav.startAgentAndGo(path, p.rest, goOpts);
       } else {
         const r = await core.startAgent(path, p.rest);
