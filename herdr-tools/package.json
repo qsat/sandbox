@@ -11,11 +11,12 @@
   ],
   "scripts": {
     "test": "bun test",
-    "typecheck": "tsc -p .",
+    "typecheck": "tsc -p . && bun run typecheck:mod",
+    "typecheck:mod": "bash herdr-app/sync-types.sh && tsc -p herdr-app",
     "e2e": "bash ws/test/e2e.sh",
     "build": "bun run build:ws && bun run build:mod",
     "build:ws": "bun build --compile --minify ws/cli.ts --outfile dist/ws",
-    "build:mod": "bun build herdr-app/src/agent-board/main.ts --outfile dist/mods/agent-board/main.js --format esm --target browser --external herdr --external gpui-kit && cp herdr-app/mod/agent-board/mod.json dist/mods/agent-board/"
+    "build:mod": "bun build herdr-app/src/agent-board/main.ts --outfile dist/mods/agent-board/main.js --format esm --target browser --external herdr --external gpui-kit && cp herdr-app/mod/agent-board/* dist/mods/agent-board/"
   },
   "devDependencies": {
     "@types/bun": "^1.4.4",

@@ -9,5 +9,6 @@
     "skipLibCheck": true,
     "types": ["bun"]
   },
-  "include": ["utils", "ws-core", "tmux", "herdr-app", "ws", "test"]
+  "include": ["utils", "ws-core", "tmux", "herdr-app", "ws", "test"],
+  "exclude": ["herdr-app/src/agent-board/main.ts", "herdr-app/types"]
 }

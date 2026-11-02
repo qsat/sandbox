@@ -21,7 +21,7 @@ run cp "$HERE/dist/ws" "$BIN_DIR/ws"
 
 echo "== mod（バンドル済みの main.js と mod.json）を $APP_DIR/mods/agent-board に置く"
 run mkdir -p "$APP_DIR/mods/agent-board" "$APP_DIR/layouts"
-run cp "$HERE/dist/mods/agent-board/main.js" "$HERE/dist/mods/agent-board/mod.json" "$APP_DIR/mods/agent-board/"
+run cp "$HERE/dist/mods/agent-board/"* "$APP_DIR/mods/agent-board/"
 if [ -e "$APP_DIR/layouts/agents.json" ]; then
   echo "  (layouts/agents.json は既にあるので触らない)"
 else

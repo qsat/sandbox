@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
 import { boardRows, wsCommandFor, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
 
-const agent = (p: { id: string; name: string; status: "working" | "idle"; needsResume: boolean; attached: boolean }) => ({
+const agent = (p: { id: string; name: string; status: "working" | "idle"; resumable: boolean; attached: boolean }) => ({
   id: p.id,
   name: p.name,
   status: p.status,
-  needsResume: p.needsResume,
+  resumable: p.resumable,
   alive: true,
   cwd: "/g/o/api=feat",
   missingLocation: false,
@@ -28,8 +28,8 @@ const tree: ListedTree = {
           isMain: false,
           tmux: { session: null },
           agents: [
-            agent({ id: "t1", name: "api-feat", status: "working", needsResume: false, attached: true }),
-            agent({ id: "t2", name: "api-feat-2", status: "idle", needsResume: true, attached: false }),
+            agent({ id: "t1", name: "api-feat", status: "working", resumable: false, attached: true }),
+            agent({ id: "t2", name: "api-feat-2", status: "idle", resumable: true, attached: false }),
           ],
         },
       ],
@@ -43,15 +43,28 @@ describe("boardRows", () => {
   test("terminals() の即時の状態を重ね、注意が要る順に並べる", () => {
     const rows = boardRows(tree, [{ address: "t1", status: { state: "blocked", kind: "permission" } }], []);
     expect(rows.map((r) => r.kind)).toEqual(["workspace", "worktree", "worktree", "agent", "agent"]);
-    expect(rows[0]).toMatchObject({ waiting: 2 });
     expect(rows[3]).toMatchObject({ key: "t1", status: "blocked(permission)", icon: "▲" });
     expect(rows[4]).toMatchObject({ key: "t2", canResume: true });
   });
 
-  test("タグは tmux の popup と同じ部品（utils）で作る", () => {
+  test("「待ち」は blocked だけを数える（再開できるだけのものは数えない）", () => {
+    expect(boardRows(tree, [{ address: "t1", status: { state: "blocked" } }], [])[0]).toMatchObject({ waiting: 1 });
+    expect(boardRows(tree, [], [])[0]).toMatchObject({ waiting: 0 });
+  });
+
+  test("タグは tmux の popup と同じ部品（utils）で作り、「要再開」は出さない（再開ボタンで示す）", () => {
     const rows = boardRows(tree, [], []);
-    expect(rows[1]).toMatchObject({ tags: [{ text: "[main]" }, { text: "tmux*" }] });
-    expect(find(rows, "t2")).toMatchObject({ tags: [{ text: "要再開", tone: "strong" }, { text: "未attach", tone: "muted" }] });
+    expect(rows[1]).toMatchObject({ tags: [{ text: "tmux*" }] });
+    expect(find(rows, "t2")).toMatchObject({ tags: [{ text: "未attach", tone: "muted" }] });
+  });
+
+  test("worktree の行はブランチ名を名前にし、ブランチのタグは重ねない。ブランチが無ければディレクトリ名", () => {
+    const rows = boardRows(tree, [], []);
+    expect(rows[1]).toMatchObject({ label: "main" });
+    expect(rows[2]).toMatchObject({ label: "feat" });
+    const detached: ListedTree = structuredClone(tree);
+    detached.workspaces[0]!.worktrees[1]!.branch = null;
+    expect(boardRows(detached, [], [])[2]).toMatchObject({ label: "api=feat", tags: [] });
   });
 
   test("名乗っていない（status が null）なら ws list の状態のまま", () => {
@@ -75,11 +88,27 @@ describe("wsCommandFor", () => {
   test("新規 → ws new <worktree> --attach --from-app", () => {
     expect(wsCommandFor(wt, "new")).toEqual(["ws", ["new", "/g/o/api=feat", "--attach", "--from-app"]]);
   });
-  test("再開は要再開のときだけ", () => {
+  test("再開は再開できるときだけ", () => {
     expect(wsCommandFor(find(rows, "t2"), "resume")).toEqual(["ws", ["resume", "t2"]]);
     expect(wsCommandFor(find(rows, "t1"), "resume")).toBeNull();
   });
+  test("停止 → ws stop <agent>（エージェントの行だけ）", () => {
+    expect(wsCommandFor(find(rows, "t1"), "stop")).toEqual(["ws", ["stop", "t1"]]);
+    expect(wsCommandFor(wt, "stop")).toBeNull();
+  });
+  test("エージェントの行は、動いているかどうかを持つ（停止と、終了済みを消すの出し分け）", () => {
+    expect(find(rows, "t1")).toMatchObject({ alive: true });
+  });
   test("workspace 行は何もしない", () => expect(wsCommandFor(rows[0]!, "go")).toBeNull());
+});
+
+describe("エージェントの行の名前", () => {
+  test("端末に名前が無い（名前がアドレスと同じ）ときは、アドレスの番号で agent-N と出す", () => {
+    const unnamed: ListedTree = structuredClone(tree);
+    unnamed.workspaces[0]!.worktrees[1]!.agents[0]!.name = "t1";
+    expect(find(boardRows(unnamed, [], []), "t1")).toMatchObject({ label: "agent-1" });
+    expect(find(boardRows(tree, [], []), "t2")).toMatchObject({ label: "t2 api-feat-2" });
+  });
 });
 
 describe("その他", () => {

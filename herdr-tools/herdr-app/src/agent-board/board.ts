@@ -11,7 +11,7 @@ export const WS = "ws";
 
 export type LiveTerminal = Pick<HcTerminal, "address" | "status">;
 
-export type BoardAction = "go" | "new" | "resume";
+export type BoardAction = "go" | "new" | "resume" | "stop";
 
 function withLiveStatus(a: ListedAgent, live: Map<string, LiveTerminal>) {
   const st = live.get(a.id)?.status;
@@ -23,22 +23,30 @@ export function boardRows(listJson: ListedTree, live: LiveTerminal[], collapsed:
   const folded = new Set(collapsed);
   return listJson.workspaces.flatMap((ws) => {
     const worktrees = ws.worktrees.map((wt) => ({ ...wt, agents: wt.agents.map((a) => withLiveStatus(a, liveBy)).sort(byAttention) }));
-    const waiting = worktrees.flatMap((wt) => wt.agents).filter((a) => a.status === "blocked" || a.needsResume).length;
+    const waiting = worktrees.flatMap((wt) => wt.agents).filter((a) => a.status === "blocked").length;
     const header = { kind: "workspace" as const, key: ws.path, label: ws.name, waiting, collapsed: folded.has(ws.path) };
     if (folded.has(ws.path)) return [header];
     return [
       header,
       ...worktrees.flatMap((wt) => [
-        { kind: "worktree" as const, key: wt.path, label: basename(wt.path), tags: worktreeTags(wt, wt.tmux.session), isMain: wt.isMain, exists: wt.exists },
+        {
+          kind: "worktree" as const,
+          key: wt.path,
+          label: wt.branch ?? basename(wt.path),
+          tags: worktreeTags({ ...wt, branch: null }, wt.tmux.session),
+          isMain: wt.isMain,
+          exists: wt.exists,
+        },
         ...wt.agents.map((a) => ({
           kind: "agent" as const,
           key: a.id,
-          label: `${a.id} ${a.name}`,
+          label: a.name === a.id ? a.id.replace(/^t(\d+)$/, "agent-$1") : `${a.id} ${a.name}`,
           icon: statusIcon(a.status),
           status: statusLabel(a),
           rawStatus: a.status,
           tags: agentTags(a, a.tmux.attached),
-          canResume: a.needsResume,
+          canResume: a.resumable,
+          alive: a.alive,
           worktree: wt.path,
         })),
       ]),
@@ -57,6 +65,8 @@ export function wsCommandFor(row: BoardRow, action: BoardAction): [string, strin
       return [WS, ["new", row.kind === "worktree" ? row.key : row.worktree, "--attach", "--from-app"]];
     case "resume":
       return row.kind === "agent" && row.canResume ? [WS, ["resume", row.key]] : null;
+    case "stop":
+      return row.kind === "agent" ? [WS, ["stop", row.key]] : null;
   }
 }
 
