@@ -102,6 +102,27 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 3. tmux クライアントを切り替える: `--client` 指定 > `--from-app` なら最後に使われたクライアント > tmux 内なら呼び出し元 > tmux の外ならその場で `tmux attach`
 4. app からなら Ghostty を前面へ（クライアントが1つも無ければ Ghostty の新しいウィンドウで attach）
 
+### tmux のセッション内のウィンドウを1つのウィンドウのペインにまとめる
+
+`join-pane` で他のウィンドウのペインを今のウィンドウへ移す。ペインが無くなったウィンドウは自動で閉じる。
+移す先を毎回「最後のペイン」にすると元の順番のまま並び、1回ごとに `tiled` で並べ直すとペインが多くても `pane too small` で失敗しない。
+
+```sh
+#!/usr/bin/env bash
+# ~/.config/scripts/tmux-join-windows.sh <window_id>
+target="$1"
+for p in $(tmux list-panes -s -t "$target" -F '#{window_id} #{pane_id}' | awk -v w="$target" '$1 != w {print $2}'); do
+  last=$(tmux list-panes -t "$target" -F '#{pane_id}' | tail -1)
+  tmux join-pane -d -s "$p" -t "$last" && tmux select-layout -t "$target" tiled
+done
+```
+
+```tmux
+bind J run-shell "~/.config/scripts/tmux-join-windows.sh '#{window_id}'"
+```
+
+1枚ずつ別ウィンドウに戻すときは、標準の `prefix !`（`break-pane`）。
+
 ### Claude の利用上限（5h / 週）
 
 Claude Code は statusLine のコマンドに `rate_limits.five_hour` / `rate_limits.seven_day`（使用率とリセット時刻）を渡す。
@@ -138,6 +159,17 @@ Herdr app で開いただけのシェルは出さない。
 | 状態を報告したことがある（`reported` / `status`） | Herdr app もこれをエージェントの条件にしている |
 | `ws` / `wt` のラベルがある | `ws new` が起動したもの。claude が落ちてシェルに戻っても、再開できるエージェントとして出す |
 | 会話IDのラベルがある | SessionStart hook が記録したもの（手で起動した claude） |
+
+`claude` コマンドで起動したのに一覧に出ないときは、次の順に確かめる。
+
+| 状況 | 一覧に出ない理由 | 対処 |
+| --- | --- | --- |
+| tmux のペインや Ghostty で直接 `claude` を起動した | herdr-core の端末ではないので、herdr-core が知らない | `ws new`（tmux の popup なら `n`）か、Herdr app のタブから起動する |
+| herdr-core の端末で起動したが、最初の応答の前 | 状態の報告も会話IDの記録もまだ無い | 最初のメッセージを送るか、SessionStart hook を設定する（起動直後にラベルが付く） |
+| SessionStart hook を設定していない、または hook から `ws` が見つからない | 会話IDのラベルが付かない。状態の報告も無ければ出ない | `~/.claude/settings.json` の hook を確かめ、`ws` を PATH に置く。`WS_DEBUG=1` で hook の結果が stderr に出る |
+| hook から `$HC_TERMINAL_ID` が見えない | 自分の端末が分からず、ラベルを付けられない | 実機確認項目。見えなければ hook は何もしない |
+| 別の hc セッション（`HC_SESSION` / `--session`）の端末 | ws は既定のセッションにだけ繋ぐ | Herdr app と ws で同じセッションを使う |
+| 状態を一度も報告せずに終わった | 終了後は状態が消え、ラベルも無い | `ws new` で起動すれば、終了後もラベルで一覧に残る |
 
 一覧に出すリポジトリは、tmux のセッションかエージェントがあるもの（`--all` なら ghq の全エントリ）。
 出したリポジトリについては、tmux のセッションやエージェントの有無に関わらず、`git worktree list` の worktree をすべて並べる
