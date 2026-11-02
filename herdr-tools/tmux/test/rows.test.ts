@@ -50,6 +50,24 @@ describe("toRows", () => {
   });
 });
 
+describe("toRows（popup はボードと同じ見せ方）", () => {
+  const rows = toRows(tree, idx, { attentionFirst: true, color: false, look: "board" });
+  test("リポジトリの間に空行を入れ、空行は選べない", () => {
+    expect(rows.map((r) => r.kind)).toEqual(["workspace", "worktree", "agent", "agent", "spacer", "workspace", "worktree", "agent"]);
+    expect(nextSelectable(rows, 3, 1)).toBe(6);
+  });
+  test("worktree はブランチ名とタグ、エージェントは名前・アイコン・状態の順", () => {
+    expect(rows[6]!.text).toBe("main tmux*");
+    expect(rows[2]!.text).toBe("agent-3 ▲ blocked 未attach");
+    expect(rows[7]!.text).toBe("agent-1 ● working");
+    expect(rows[3]!.text).toBe("agent-2 ○ idle 未attach");
+  });
+  test("ws list（plain）はアドレスを出したまま、空行を入れない", () => {
+    expect(renderText(tree, idx, false)).not.toContain("agent-");
+    expect(toRows(tree, idx, { attentionFirst: true, color: false }).some((r) => r.kind === "spacer")).toBe(false);
+  });
+});
+
 describe("splitKeys", () => {
   test("まとめて届いた入力を1キーずつに", () => {
     expect(splitKeys("jjq")).toEqual(["j", "j", "q"]);

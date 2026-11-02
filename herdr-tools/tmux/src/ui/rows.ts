@@ -1,8 +1,10 @@
+import { agentDisplayName } from "@herdr-tools/utils/agent-display-name";
 import { agentTags } from "@herdr-tools/utils/agent-tags";
 import { basename } from "@herdr-tools/utils/basename";
 import { statusIcon } from "@herdr-tools/utils/status-icon";
 import { statusLabel } from "@herdr-tools/utils/status-label";
 import type { Tag } from "@herdr-tools/utils/tag";
+import { worktreeDisplayName } from "@herdr-tools/utils/worktree-display-name";
 import { worktreeTags } from "@herdr-tools/utils/worktree-tags";
 import { attentionRank, byAttention, type AgentNode, type Tree, type WorkspaceNode, type WorktreeNode } from "@herdr-tools/ws-core";
 import type { TmuxIndex } from "../tmux-index";
@@ -11,15 +13,21 @@ interface RowOptions {
   attentionFirst: boolean;
   color: boolean;
   keyHints?: boolean;
+  look?: "plain" | "board";
 }
 
 const RESUME_HINT = "R で再開";
 
-const STATUS_COLOR: Record<string, string> = { blocked: "\x1b[33m", error: "\x1b[31m", idle: "\x1b[36m", working: "\x1b[32m" };
-const TONE: Record<Tag["tone"], string> = { strong: "\x1b[1m", muted: "\x1b[2m", danger: "\x1b[31m" };
-const GRAY = "\x1b[90m";
-const BOLD = "\x1b[1m";
-const RESET = "\x1b[0m";
+const ESC = "\x1b";
+const truecolor = (hex: string) => `${ESC}[38;2;${parseInt(hex.slice(1, 3), 16)};${parseInt(hex.slice(3, 5), 16)};${parseInt(hex.slice(5, 7), 16)}m`;
+const STATUS_COLOR: Record<string, string> = { blocked: `${ESC}[33m`, error: `${ESC}[31m`, idle: `${ESC}[36m`, working: `${ESC}[32m`, done: `${ESC}[34m` };
+const TONE: Record<Tag["tone"], string> = { strong: `${ESC}[1m`, muted: `${ESC}[2m`, danger: `${ESC}[31m` };
+const GRAY = `${ESC}[90m`;
+const BOLD = `${ESC}[1m`;
+const RESET = `${ESC}[0m`;
+const BOARD_REPOSITORY = BOLD + truecolor("#8fc232");
+const BOARD_BRANCH = truecolor("#8f8728");
+const BOARD_BRANCH_MAIN = BOLD + BOARD_BRANCH;
 
 function paint(color: boolean, code: string, s: string) {
   return color ? code + s + RESET : s;
@@ -29,35 +37,64 @@ function tagsText(tags: Tag[], color: boolean) {
   return tags.map((t) => paint(color, TONE[t.tone], t.text)).join(" ");
 }
 
+function joinParts(parts: string[], gap: string) {
+  return parts.filter(Boolean).join(gap);
+}
+
 function rankOfWorktree(wt: WorktreeNode) {
   return Math.min(99, ...wt.agents.map(attentionRank));
 }
 
+function hintTags(a: AgentNode, keyHints: boolean): Tag[] {
+  return keyHints && a.resumable ? [{ text: RESUME_HINT, tone: "muted" }] : [];
+}
+
 export function agentLabel(a: AgentNode, idx: TmuxIndex, color: boolean, keyHints = false) {
   const sc = STATUS_COLOR[a.status] ?? GRAY;
-  const hints: Tag[] = keyHints && a.resumable ? [{ text: RESUME_HINT, tone: "muted" }] : [];
-  const tags = tagsText([...agentTags(a, idx.isAttached(a.id)), ...hints], color);
+  const tags = tagsText([...agentTags(a, idx.isAttached(a.id)), ...hintTags(a, keyHints)], color);
   return `${paint(color, sc, statusIcon(a.status))} ${a.id.padEnd(4)} ${a.name}  ${paint(color, sc, statusLabel(a))}${tags ? "  " + tags : ""}`;
+}
+
+function boardAgentLabel(a: AgentNode, idx: TmuxIndex, color: boolean, keyHints = false) {
+  const sc = STATUS_COLOR[a.status] ?? GRAY;
+  const tags = tagsText([...agentTags(a, idx.isAttached(a.id)), ...hintTags(a, keyHints)], color);
+  return joinParts([paint(color, BOLD, agentDisplayName(a)), paint(color, sc, statusIcon(a.status)), paint(color, sc, statusLabel(a)), tags], " ");
 }
 
 export function worktreeLabel(wt: WorktreeNode, idx: TmuxIndex, color: boolean) {
   const name = basename(wt.path);
-  return [wt.isMain ? paint(color, BOLD, name) : name, tagsText(worktreeTags(wt, idx.sessionOf(wt.path)), color)].filter(Boolean).join(" ");
+  return joinParts([wt.isMain ? paint(color, BOLD, name) : name, tagsText(worktreeTags(wt, idx.sessionOf(wt.path)), color)], " ");
+}
+
+function boardWorktreeLabel(wt: WorktreeNode, idx: TmuxIndex, color: boolean) {
+  const tags = tagsText(worktreeTags({ ...wt, branch: null }, idx.sessionOf(wt.path)), color);
+  return joinParts([paint(color, wt.isMain ? BOARD_BRANCH_MAIN : BOARD_BRANCH, worktreeDisplayName(wt)), tags], " ");
 }
 
 export function toRows(tree: Tree, idx: TmuxIndex, opts: RowOptions) {
+  const board = opts.look === "board";
   const sorted = <T>(xs: T[], cmp: (a: T, b: T) => number) => (opts.attentionFirst ? [...xs].sort(cmp) : xs);
   const rankOfWorkspace = (ws: WorkspaceNode) => Math.min(99, ...ws.worktrees.map(rankOfWorktree));
-  return sorted(tree.workspaces, (a, b) => rankOfWorkspace(a) - rankOfWorkspace(b) || a.name.localeCompare(b.name)).flatMap((ws) => [
-    { kind: "workspace" as const, depth: 0, text: paint(opts.color, BOLD, ws.name) },
+  const workspaces = sorted(tree.workspaces, (a, b) => rankOfWorkspace(a) - rankOfWorkspace(b) || a.name.localeCompare(b.name));
+  return workspaces.flatMap((ws, i) => [
+    ...(board && i > 0 ? [{ kind: "spacer" as const, depth: 0, text: "" }] : []),
+    { kind: "workspace" as const, depth: 0, text: paint(opts.color, board ? BOARD_REPOSITORY : BOLD, ws.name) },
     ...sorted(ws.worktrees, (a, b) => rankOfWorktree(a) - rankOfWorktree(b) || Number(b.isMain) - Number(a.isMain) || a.path.localeCompare(b.path)).flatMap((wt) => [
-      { kind: "worktree" as const, depth: 1, ref: wt.path, worktree: wt, text: worktreeLabel(wt, idx, opts.color) },
-      ...sorted(wt.agents, byAttention).map((a) => ({ kind: "agent" as const, depth: 2, ref: a.id, agent: a, worktree: wt, text: agentLabel(a, idx, opts.color, opts.keyHints) })),
+      { kind: "worktree" as const, depth: 1, ref: wt.path, worktree: wt, text: (board ? boardWorktreeLabel : worktreeLabel)(wt, idx, opts.color) },
+      ...sorted(wt.agents, byAttention).map((a) => ({
+        kind: "agent" as const,
+        depth: 2,
+        ref: a.id,
+        agent: a,
+        worktree: wt,
+        text: (board ? boardAgentLabel : agentLabel)(a, idx, opts.color, opts.keyHints),
+      })),
     ]),
   ]);
 }
 
 export type Row = ReturnType<typeof toRows>[number];
+type SelectableRow = Extract<Row, { kind: "worktree" | "agent" }>;
 
 export function renderText(tree: Tree, idx: TmuxIndex, color: boolean) {
   return toRows(tree, idx, { attentionFirst: false, color })
@@ -65,8 +102,8 @@ export function renderText(tree: Tree, idx: TmuxIndex, color: boolean) {
     .join("\n");
 }
 
-export function isSelectable(r: Row | undefined) {
-  return !!r && r.kind !== "workspace";
+export function isSelectable(r: Row | undefined): r is SelectableRow {
+  return !!r && (r.kind === "worktree" || r.kind === "agent");
 }
 
 export function nextSelectable(rows: Row[], from: number, delta: 1 | -1) {
@@ -86,7 +123,7 @@ export function firstSelectable(rows: Row[]) {
 
 export function keepSelectionOn(rows: Row[], ref: string | undefined) {
   if (ref) {
-    const i = rows.findIndex((r) => r.kind !== "workspace" && r.ref === ref);
+    const i = rows.findIndex((r) => isSelectable(r) && r.ref === ref);
     if (i >= 0) return i;
   }
   return firstSelectable(rows);

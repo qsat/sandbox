@@ -53,8 +53,8 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
     try {
       const current = rows[sel];
       const view = await nav.view({ allEntries: all });
-      rows = toRows(view.snap.tree, view.idx, { attentionFirst: true, color: true, keyHints: true });
-      sel = keepSelectionOn(rows, current && current.kind !== "workspace" ? current.ref : undefined);
+      rows = toRows(view.snap.tree, view.idx, { attentionFirst: true, color: true, keyHints: true, look: "board" });
+      sel = keepSelectionOn(rows, isSelectable(current) ? current.ref : undefined);
     } catch (e) {
       message = `読み込み失敗: ${(e as Error).message}`;
     } finally {
@@ -161,17 +161,17 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
           return void reload();
         case "\r":
         case "\n":
-          if (!r || r.kind === "workspace") return;
+          if (!isSelectable(r)) return;
           return void act(async () => {
             await nav.goRef(r.ref, { client: opts.client });
           }, true);
         case "n":
-          if (!r || r.kind === "workspace") return;
+          if (!isSelectable(r)) return;
           return void act(async () => {
             await nav.startAgentAndGo(r.worktree.path, [], { client: opts.client });
           }, true);
         case "x":
-          if (!r || r.kind === "workspace") return;
+          if (!isSelectable(r)) return;
           closeAsked = { worktreePath: r.worktree.path, name: basename(r.worktree.path) };
           return render();
         case "R":

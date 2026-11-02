@@ -1,7 +1,8 @@
 import { agentTags } from "@herdr-tools/utils/agent-tags";
-import { basename } from "@herdr-tools/utils/basename";
+import { agentDisplayName } from "@herdr-tools/utils/agent-display-name";
 import { statusIcon } from "@herdr-tools/utils/status-icon";
 import { statusLabel } from "@herdr-tools/utils/status-label";
+import { worktreeDisplayName } from "@herdr-tools/utils/worktree-display-name";
 import { worktreeTags } from "@herdr-tools/utils/worktree-tags";
 import type { ListedAgent, ListedTree } from "@herdr-tools/tmux/list-json";
 import { byAttention, type AgentStatus } from "@herdr-tools/ws-core/domain/agent";
@@ -32,7 +33,7 @@ export function boardRows(listJson: ListedTree, live: LiveTerminal[], collapsed:
         {
           kind: "worktree" as const,
           key: wt.path,
-          label: wt.branch ?? basename(wt.path),
+          label: worktreeDisplayName(wt),
           tags: worktreeTags({ ...wt, branch: null }, wt.tmux.session),
           isMain: wt.isMain,
           exists: wt.exists,
@@ -41,7 +42,7 @@ export function boardRows(listJson: ListedTree, live: LiveTerminal[], collapsed:
         ...wt.agents.map((a) => ({
           kind: "agent" as const,
           key: a.id,
-          label: a.name === a.id ? a.id.replace(/^t(\d+)$/, "agent-$1") : `${a.id} ${a.name}`,
+          label: agentDisplayName(a),
           icon: statusIcon(a.status),
           status: statusLabel(a),
           rawStatus: a.status,
