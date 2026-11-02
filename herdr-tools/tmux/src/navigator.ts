@@ -84,6 +84,16 @@ export class TmuxNavigator {
     return { opened: plan.open.length, overLimit: plan.overLimit.length, alreadyOpen: wt.agents.filter((a) => view.idx.isAttached(a.id)).length };
   }
 
+  async closeSessionOf(ref: string) {
+    const view = await this.view({ alsoShow: looksLikePath(ref) ? [ref] : [] });
+    const target = resolveRef(view.snap, ref);
+    if (!target) throw new Error(`見つかりません: ${ref}`);
+    const session = view.idx.sessionOf(target.worktree.path);
+    if (!session) return { closed: false, reason: "no-session" } as const;
+    await this.tmux.killSession(session.name);
+    return { closed: true, session: session.name } as const;
+  }
+
   async killSessions(names: string[]) {
     for (const n of names) await this.tmux.killSession(n).catch(() => {});
   }

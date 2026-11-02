@@ -16,6 +16,7 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
                                                    エージェント起動
   ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
   ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す
+  ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは止めない
   ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる
   ws ui [--client <name>]                          tmux popup 用の対話一覧
   ws hook session-start                            Claude Code の SessionStart hook
@@ -113,6 +114,12 @@ async function main(argv: string[]) {
       const r = await core.resume(ref);
       process.stdout.write(r.resumed ? `resumed ${ref} (${r.claudeSessionId})\n` : `skip ${ref}: ${r.reason}\n`);
       return r.resumed || r.reason !== "not-found" ? 0 : 1;
+    }
+    case "close": {
+      const ref = p.positional[0] ?? ".";
+      const r = await nav.closeSessionOf(looksLikePath(ref) ? absolutePathFromCwd(ref) : ref);
+      process.stdout.write(r.closed ? `closed ${r.session}\n` : `skip ${ref}: ${r.reason}\n`);
+      return 0;
     }
     case "stop": {
       const ref = p.positional[0];

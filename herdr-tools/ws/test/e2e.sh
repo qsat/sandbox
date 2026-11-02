@@ -166,5 +166,19 @@ check "先頭の行（エージェントが動いている api=feat-auth）で E
 UI_OUT="$( (sleep 2.5; printf 'jjq') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'"; echo "exit=$?")"
 check "q で閉じる" "$(grep -o 'exit=[0-9]*' <<<"$UI_OUT" | tail -1)" "exit=0"
 
+echo "close（tmux セッションを閉じる。エージェントは止めない）"
+has_session() { if t has-session -t "=$1" 2>/dev/null; then echo yes; else echo no; fi; }
+check "閉じる前は api のセッションがある" "$(has_session api)" "yes"
+(sleep 2.5; printf 'Gxn'; sleep 1; printf 'q') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'" >/dev/null
+check "一覧で x のあと y 以外を押すと閉じない" "$(has_session api)" "yes"
+UI_OUT="$( (sleep 2.5; printf 'Gxy'; sleep 1.5; printf 'q') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'" | tr -d '\r')"
+check "一覧で x → y で閉じる" "$(has_session api)" "no"
+check "閉じたことを一覧に出す" "$(grep -c '閉じました: api' <<<"$UI_OUT" | awk '{print ($1>0)}')" "1"
+check "セッションが無ければ何もしない" "$(ws close "$API")" "skip $API: no-session"
+ws go "$API" --client "$CLIENT"
+check "ws close で worktree のセッションを閉じる" "$(ws close "$FEAT")" "closed api=feat-auth"
+check "api=feat-auth のセッションが消えた" "$(has_session api=feat-auth)" "no"
+check "エージェントは herdr-core に残る" "$(state '[.terminals[] | select(.state=="live")] | length > 0')" "true"
+
 echo
 echo "E2E: $pass checks passed"
