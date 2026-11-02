@@ -126,6 +126,7 @@ Herdr app で開いただけのシェルは出さない。
 
 | 項目 | 既定 | 変え方 |
 | --- | --- | --- |
+| `ws` が `hc connect` に渡す環境変数 | Claude Code のセッションの印（`CLAUDECODE`、`CLAUDE_CODE_CHILD_SESSION` など）を外す。claude の中で動いた `ws` が herdr-core を起動すると、その端末で起動した claude がトランスクリプトを保存しなくなるため | `utils/src/without-claude-code-session.ts` |
 | `ws panes` に子エージェントを含めるか | 含めない（`-a` で含める） | フラグ |
 | `ws panes` の並べ方 | `agents` ウィンドウに `tiled` | `Tmux.openAgentPane` |
 | `ws panes` の上限 | 8（注意が要る順に開き、超えた分は省略と表示） | `--max` / `WS_PANES_MAX` |

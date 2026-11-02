@@ -1,3 +1,4 @@
+import { withoutClaudeCodeSession } from "@herdr-tools/utils/without-claude-code-session";
 import type { HcTerminal } from "./hc-terminal";
 
 type Notification = { method: string; params?: unknown };
@@ -9,7 +10,7 @@ class HcConnection {
   closed = false;
 
   constructor(bin: string, onNotification: (n: Notification) => void = () => {}) {
-    this.proc = Bun.spawn([bin, "connect"], { stdin: "pipe", stdout: "pipe", stderr: "ignore" });
+    this.proc = Bun.spawn([bin, "connect"], { stdin: "pipe", stdout: "pipe", stderr: "ignore", env: withoutClaudeCodeSession(process.env) });
     void this.readLines(onNotification);
   }
 
