@@ -53,7 +53,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
    - mod をバンドル（`dist/mods/agent-board/`）して `~/.config/herdr-app/mods/agent-board/` に、レイアウトを `~/.config/herdr-app/layouts/agents.json` に置く
    - `herdr-app` があれば `herdr-app check` を通す
 4. `ws/config/claude-settings.json` の SessionStart hook を `~/.claude/settings.json` に足す
-5. `tmux/config/tmux.conf` のキー（`prefix a` 一覧、`prefix A` 全ペイン表示）を `~/.tmux.conf` に足す
+5. `tmux/config/tmux.conf` のキー（`prefix a` 一覧を縦長の popup で開く、`prefix A` 全ペイン表示）を `~/.tmux.conf` に足す
 6. 一覧だけの画面にしたければ `mod.json` を `{"place": "none"}` にし、`ctrl-shift-l` か `herdr-app do layout.switch '{"name":"agents"}'` で切り替える
 
 ## 使い方
@@ -68,6 +68,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | worktree のエージェントを全部並べる | `prefix A`（`ws panes`） | — |
 | 再起動後に続きをやる | 一覧で `R`（再開できる行に「R で再開」と出る）か `ws resume <agent>`。移動では再開しない | 「再開」ボタン |
 | エージェントを止める | `ws stop <agent>`（止めて一覧から消す）。claude の中なら `/exit` | エージェントの「停止」ボタン（確認のダイアログで「停止する」か Enter で止める。「キャンセル」か Esc で取りやめる）。終了済みなら「削除」 |
+| worktree の tmux セッションを閉じる（エージェントは止めない） | 一覧で `x` → `y`。または `ws close [<worktree>]` | worktree の「閉じる」ボタン（tmux セッションがある行に出る。確認のダイアログで「閉じる」か Enter） |
 | 片付ける | claude を `/exit` → `gwq remove` → 必要なら `ws prune` | — |
 
 ### コマンド
@@ -79,6 +80,7 @@ ws go <ref> [--client <name> | --from-app] [--dry-run]
 ws new [<worktree>] [--attach] [--client <name> | --from-app] [-- <claude の引数>]
 ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
 ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す（エージェントでない端末は触らない）
+ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは herdr-core で動き続ける
 ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる
 ws ui [--client <name>]                          tmux popup 用の対話一覧
 ws hook session-start                            Claude Code の SessionStart hook
@@ -157,7 +159,7 @@ bun run build:mod   # mod だけ
 ```
 
 E2E は `git worktree` で `repo` と `repo=branch` を横並びに作り、tmux のコントロールモードのクライアントを切り替え対象にして、
-list / new / hook / go（全分岐）/ resume / panes / new --attach / prune / ui を確かめる。
+list / new / hook / go（全分岐）/ resume / stop / panes / new --attach / prune / ui / close を確かめる。
 
 環境変数: `HC_BIN`（hc のパス）、`WS_TMUX_SOCKET`（`tmux -L`）、`TMUX_BIN`、`GHQ_ROOT`、`GHQ_BIN`、`GIT_BIN`、`WS_SESSION_LABEL`、`WS_CLAUDE_BIN`、`WS_PANES_MAX`、`WS_DEBUG`。
 

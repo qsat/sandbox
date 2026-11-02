@@ -6,8 +6,8 @@ import { boardRows, parseList, toggleCollapsed, WS, wsCommandFor, type BoardActi
 
 const MOD_NAME = "agent-board";
 const LIST_REFRESH_MS = 4000;
-const STOP_DIALOG_WIDTH = 340;
-const STOP_DIALOG_HEIGHT = 150;
+const CONFIRM_DIALOG_WIDTH = 360;
+const CONFIRM_DIALOG_HEIGHT = 160;
 const COLLAPSED_KEY = "agent-board.collapsed";
 const ROW_HEIGHT = 22;
 const REPOSITORY_SPACING = ROW_HEIGHT * 0.5;
@@ -19,13 +19,17 @@ type Theme = Record<
 >;
 
 type AgentRow = Extract<BoardRow, { kind: "agent" }>;
+type WorktreeRow = Extract<BoardRow, { kind: "worktree" }>;
 
 type ButtonLook = "secondary" | "outline" | "primary" | "quiet" | "alert" | "danger";
 
-interface StopRequest {
-  key: string;
-  label: string;
-  alive: boolean;
+interface ConfirmRequest {
+  title: string;
+  body: string;
+  busy: string;
+  icon: ButtonSpec["icon"];
+  action: string;
+  command: [string, string[]];
 }
 
 interface ButtonSpec {
@@ -102,17 +106,17 @@ export default class AgentBoard extends View {
   list!: ListedTree;
   error!: string;
   fetching!: boolean;
-  stopRequest!: StopRequest | null;
-  stopping!: boolean;
+  confirmRequest!: ConfirmRequest | null;
+  confirming!: boolean;
   focus!: FocusHandle;
 
   init(_props: unknown, cx: AsyncContext) {
     this.list = { workspaces: [] };
     this.error = "";
     this.fetching = false;
-    this.stopRequest = (props()?.stop as StopRequest | undefined) ?? null;
-    this.stopping = false;
-    if (this.stopRequest) {
+    this.confirmRequest = (props()?.confirm as ConfirmRequest | undefined) ?? null;
+    this.confirming = false;
+    if (this.confirmRequest) {
       this.focus = cx.focus_handle();
       this.focus.focus();
       return;
@@ -152,12 +156,36 @@ export default class AgentBoard extends View {
     }, { owner: this });
   }
 
+  askConfirm(request: ConfirmRequest) {
+    openOverlay({ mod: MOD_NAME, kind: "dialog", width: CONFIRM_DIALOG_WIDTH, height: CONFIRM_DIALOG_HEIGHT, props: { confirm: request } });
+  }
+
   stopButton(row: AgentRow, t: Theme) {
-    const spec: ButtonSpec = row.alive
-      ? { id: `stop:${row.key}`, icon: "square", text: "停止", tooltip: "claude を終了し、一覧から消す", look: "alert" }
-      : { id: `stop:${row.key}`, icon: "x", text: "削除", tooltip: "終了したエージェントを一覧から削除する", look: "quiet" };
-    const request: StopRequest = { key: row.key, label: row.label, alive: row.alive };
-    return button(spec, t, () => openOverlay({ mod: MOD_NAME, kind: "dialog", width: STOP_DIALOG_WIDTH, height: STOP_DIALOG_HEIGHT, props: { stop: request } }));
+    const command = wsCommandFor(row, "stop")!;
+    const [spec, request]: [ButtonSpec, ConfirmRequest] = row.alive
+      ? [
+          { id: `stop:${row.key}`, icon: "square", text: "停止", tooltip: "claude を終了し、一覧から消す", look: "alert" },
+          { title: `${row.label} を停止しますか？`, body: "claude を終了し、一覧から消します。", busy: "止めています…", icon: "square", action: "停止する", command },
+        ]
+      : [
+          { id: `stop:${row.key}`, icon: "x", text: "削除", tooltip: "終了したエージェントを一覧から削除する", look: "quiet" },
+          { title: `${row.label} を削除しますか？`, body: "終了したエージェントを herdr-core の一覧から削除します。", busy: "削除しています…", icon: "x", action: "削除する", command },
+        ];
+    return button(spec, t, () => this.askConfirm(request));
+  }
+
+  closeSessionButton(row: WorktreeRow, t: Theme) {
+    const command = wsCommandFor(row, "close")!;
+    return button({ id: `close:${row.key}`, icon: "x", text: "閉じる", tooltip: "この worktree の tmux セッションを閉じる（エージェントは止めない）", look: "quiet" }, t, () =>
+      this.askConfirm({
+        title: `${row.label} の tmux セッションを閉じますか？`,
+        body: "セッションの中のペインもすべて閉じます。エージェントは herdr-core で動き続けます。",
+        busy: "閉じています…",
+        icon: "x",
+        action: "閉じる",
+        command,
+      }),
+    );
   }
 
   tags(tags: Tag[], t: Theme) {
@@ -183,6 +211,7 @@ export default class AgentBoard extends View {
           .pl(16)
           .on_click((_e, cx) => this.runRow(row, "go", cx))
           .child(this.info([div().when(row.isMain, (el) => el.font_semibold()).child(row.label), this.tags(row.tags, t)]))
+          .when(row.hasSession, (el) => el.child(this.closeSessionButton(row, t)))
           .when(row.exists, (el) =>
             el.child(
               button({ id: `new:${row.key}`, icon: "plus", text: "claude", tooltip: "この worktree で claude を起動する", look: "outline" }, t, (cx) =>
@@ -208,16 +237,16 @@ export default class AgentBoard extends View {
     }
   }
 
-  confirmStop(request: StopRequest, cx: Context) {
-    if (this.stopping) return;
-    this.stopping = true;
+  runConfirmed(request: ConfirmRequest, cx: Context) {
+    if (this.confirming) return;
+    this.confirming = true;
     this.error = "";
     cx.notify();
     cx.spawn(
       async (cx) => {
-        const r = await exec(WS, ["stop", request.key]).catch((e: Error) => ({ code: 1, stdout: "", stderr: String(e?.message ?? e) }));
+        const r = await exec(...request.command).catch((e: Error) => ({ code: 1, stdout: "", stderr: String(e?.message ?? e) }));
         if (r.code === 0) return closeOverlay(props().overlay);
-        this.stopping = false;
+        this.confirming = false;
         this.error = r.stderr.trim() || r.stdout.trim();
         cx.notify();
       },
@@ -225,16 +254,13 @@ export default class AgentBoard extends View {
     );
   }
 
-  renderStopDialog(request: StopRequest, t: Theme) {
-    const question = request.alive
-      ? { title: `${request.label} を停止しますか？`, body: "claude を終了し、一覧から消します。", icon: "square" as const, action: "停止する" }
-      : { title: `${request.label} を削除しますか？`, body: "終了したエージェントを herdr-core の一覧から削除します。", icon: "x" as const, action: "削除する" };
+  renderConfirmDialog(request: ConfirmRequest, t: Theme) {
     const large = (el: Element) => el.h(28).px(12);
     return div()
-      .id("agent-board-stop")
+      .id("agent-board-confirm")
       .track_focus(this.focus)
       .on_key_down((e, cx) => {
-        if (e.key === "enter") this.confirmStop(request, cx);
+        if (e.key === "enter") this.runConfirmed(request, cx);
         else if (e.key === "escape") closeOverlay(props().overlay);
         else return;
         cx.stop_propagation();
@@ -247,23 +273,23 @@ export default class AgentBoard extends View {
       .bg(t.popover)
       .text_size(13)
       .text_color(t.foreground)
-      .child(div().text_size(15).font_semibold().child(question.title))
-      .child(div().flex_1().text_color(this.error ? t.ansi1 : t.muted).child(this.error || (this.stopping ? "止めています…" : question.body)))
+      .child(div().text_size(15).font_semibold().child(request.title))
+      .child(div().flex_1().text_color(this.error ? t.ansi1 : t.muted).child(this.error || (this.confirming ? request.busy : request.body)))
       .child(
         div()
           .flex()
           .justify_end()
           .gap(8)
-          .child(large(button({ id: "stop-dialog:cancel", text: "キャンセル", tooltip: "Esc", look: "secondary" }, t, () => closeOverlay(props().overlay))))
+          .child(large(button({ id: "confirm-dialog:cancel", text: "キャンセル", tooltip: "Esc", look: "secondary" }, t, () => closeOverlay(props().overlay))))
           .child(
-            large(button({ id: "stop-dialog:confirm", icon: question.icon, text: question.action, tooltip: "Enter", look: "danger" }, t, (cx) => this.confirmStop(request, cx))),
+            large(button({ id: "confirm-dialog:ok", icon: request.icon, text: request.action, tooltip: "Enter", look: "danger" }, t, (cx) => this.runConfirmed(request, cx))),
           ),
       );
   }
 
   render() {
     const t = theme() as unknown as Theme;
-    if (this.stopRequest) return this.renderStopDialog(this.stopRequest, t);
+    if (this.confirmRequest) return this.renderConfirmDialog(this.confirmRequest, t);
     const rows = boardRows(this.list, liveTerminals(), collapsedState());
     return div()
       .id("agent-board")

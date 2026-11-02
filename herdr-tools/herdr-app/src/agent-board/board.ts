@@ -11,7 +11,7 @@ export const WS = "ws";
 
 export type LiveTerminal = Pick<HcTerminal, "address" | "status">;
 
-export type BoardAction = "go" | "new" | "resume" | "stop";
+export type BoardAction = "go" | "new" | "resume" | "stop" | "close";
 
 function withLiveStatus(a: ListedAgent, live: Map<string, LiveTerminal>) {
   const st = live.get(a.id)?.status;
@@ -36,6 +36,7 @@ export function boardRows(listJson: ListedTree, live: LiveTerminal[], collapsed:
           tags: worktreeTags({ ...wt, branch: null }, wt.tmux.session),
           isMain: wt.isMain,
           exists: wt.exists,
+          hasSession: wt.tmux.session !== null,
         },
         ...wt.agents.map((a) => ({
           kind: "agent" as const,
@@ -67,6 +68,8 @@ export function wsCommandFor(row: BoardRow, action: BoardAction): [string, strin
       return row.kind === "agent" && row.canResume ? [WS, ["resume", row.key]] : null;
     case "stop":
       return row.kind === "agent" ? [WS, ["stop", row.key]] : null;
+    case "close":
+      return row.kind === "worktree" && row.hasSession ? [WS, ["close", row.key]] : null;
   }
 }
 

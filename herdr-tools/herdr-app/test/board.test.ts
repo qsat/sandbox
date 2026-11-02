@@ -96,6 +96,14 @@ describe("wsCommandFor", () => {
     expect(wsCommandFor(find(rows, "t1"), "stop")).toEqual(["ws", ["stop", "t1"]]);
     expect(wsCommandFor(wt, "stop")).toBeNull();
   });
+  test("tmux セッションを閉じる → ws close <worktree>（セッションのある worktree の行だけ）", () => {
+    const main = rows[1]!;
+    expect(main).toMatchObject({ hasSession: true });
+    expect(wsCommandFor(main, "close")).toEqual(["ws", ["close", "/g/o/api"]]);
+    expect(wt).toMatchObject({ hasSession: false });
+    expect(wsCommandFor(wt, "close")).toBeNull();
+    expect(wsCommandFor(find(rows, "t1"), "close")).toBeNull();
+  });
   test("エージェントの行は、動いているかどうかを持つ（停止と、終了済みを消すの出し分け）", () => {
     expect(find(rows, "t1")).toMatchObject({ alive: true });
   });
