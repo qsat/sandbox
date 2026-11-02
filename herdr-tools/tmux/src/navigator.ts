@@ -1,4 +1,5 @@
 import { homedir } from "node:os";
+import { runInteractive } from "@herdr-tools/utils/run-interactive";
 import { looksLikePath, resolveRef, type Resolved, type WsCore } from "@herdr-tools/ws-core";
 import { focusGhostty, openGhosttyWindowRunning } from "./ghostty";
 import { AGENTS_WINDOW, chooseClient, planGo, workingDir, type Step } from "./plans/go";
@@ -44,6 +45,18 @@ export class TmuxNavigator {
     const target = resolveRef(view.snap, ref);
     if (!target) throw new Error(`見つかりません: ${ref}`);
     return this.go(target, view, opts);
+  }
+
+  async startAgentAndTalkHere(path: string, claudeArgs: string[]) {
+    const agent = await this.core.startAgent(path, claudeArgs);
+    const pane = this.env.TMUX ? this.env.TMUX_PANE : undefined;
+    if (pane) await this.tmux.markPaneAsConversation(pane, agent.id);
+    try {
+      await runInteractive("sh", ["-c", this.core.attachCommand(agent.id)]);
+    } finally {
+      if (pane) await this.tmux.unmarkPane(pane).catch(() => {});
+    }
+    return agent;
   }
 
   async startAgentAndGo(path: string, claudeArgs: string[], opts: GoOptions = {}) {

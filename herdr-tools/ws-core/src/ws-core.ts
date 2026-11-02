@@ -1,6 +1,6 @@
 import { basename } from "@herdr-tools/utils/basename";
 import { mapLimit } from "@herdr-tools/utils/map-limit";
-import { claudeResumeCommand, sessionIdFromSessionStartHook, usageFromStatusLine } from "./claude-code";
+import { claudeResumeCommand, contextUsedPercentageFromStatusLine, sessionIdFromSessionStartHook, usageFromStatusLine } from "./claude-code";
 import { resumable, type AgentNode } from "./domain/agent";
 import { makeLocator } from "./domain/locate";
 import { buildTree, mainRepositoryOf, pathsToInspect, type PathInspection } from "./domain/tree";
@@ -47,6 +47,16 @@ export class WsCore {
   async claudeUsage() {
     const stored = await this.opts.usageStore?.read().catch(() => undefined);
     return openWindows(stored, this.now());
+  }
+
+  async recordContextUsageFromStatusLine(stdin: string, env: Record<string, string | undefined>) {
+    const id = this.runtime.agentIdOfCurrentProcess(env);
+    if (!id) return { recorded: false, reason: "not-in-runtime" } as const;
+    const used = contextUsedPercentageFromStatusLine(stdin);
+    if (used === undefined) return { recorded: false, reason: "no-context" } as const;
+    if ((await this.runtime.get(id))?.contextUsedPercentage === used) return { recorded: false, reason: "unchanged" } as const;
+    await this.runtime.recordContextUsage(id, used);
+    return { recorded: true, used } as const;
   }
 
   async recordClaudeUsageFromStatusLine(stdin: string) {

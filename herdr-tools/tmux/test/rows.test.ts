@@ -81,3 +81,10 @@ describe("splitKeys", () => {
     expect(splitKeys("\x1b")).toEqual(["\x1b"]);
   });
 });
+
+describe("context 使用率", () => {
+  test("エージェントの行に ctx 42% を出す", () => {
+    const withContext = buildTree({ agents: [{ ...t("t1", A, "working"), contextUsedPercentage: 42 }], inspections: infos, alwaysShow: [], ghqRoot: "/g" });
+    expect(renderText(withContext, indexTmux(makeLocator(withContext, infos), { sessions: [], panes: [] }), {}, false)).toContain("ctx 42%");
+  });
+});

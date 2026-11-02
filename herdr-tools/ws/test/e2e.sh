@@ -172,6 +172,10 @@ status_line_json 30 | ws statusline >/dev/null
 check "変わったら書く" "$(state '.docs["claude-usage"].version')" "2"
 check "--quiet は記録だけで何も出さない" "$(status_line_json 31 | ws statusline --quiet)" ""
 check "rate_limits が無い入力（API アカウントなど）でも失敗しない" "$(echo '{}' | ws statusline >/dev/null; echo $?)" "0"
+printf '{"context_window":{"used_percentage":41.6}}' | HC_TERMINAL_ID=t1 ws statusline --quiet
+check "context 使用率を自分の端末のラベルに記録（整数）" "$(state '.terminals[] | select(.address=="t1") | .labels["claude.context"]')" "42"
+check "ws list --json のエージェントに contextUsedPercentage" "$(ws list --json | jq '[.workspaces[].worktrees[].agents[] | select(.id=="t1") | .contextUsedPercentage][0]')" "42"
+check "一覧のエージェントの行に ctx 42%" "$(ws list | without_color | grep -c 'ctx 42%')" "1"
 
 echo "list（テキスト）"
 ws list
@@ -206,6 +210,21 @@ check "一覧で s のあと y 以外を押すと止めない" "$(terminal_count
 UI_OUT="$( (sleep 2.5; printf 'jsy'; sleep 3; printf 'q') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'" | tr -d '\r')"
 check "一覧で s → y で止めて herdr-core から消す" "$(terminal_count)" "$((BEFORE - 1))"
 check "止めたことを一覧に出す" "$(grep -c '停止しました' <<<"$UI_OUT" | awk '{print ($1>0)}')" "1"
+
+echo "new --here（今のペインで会話する）"
+HERE_PANE="$(t new-window -d -P -F '#{pane_id}' -t '=api:' -c "$FEAT")"
+pane_agent() { t show-options -p -t "$HERE_PANE" -v @ws_agent 2>/dev/null || true; }
+t send-keys -t "$HERE_PANE" "bun $ROOT/cli.ts new --here" Enter
+for _ in $(seq 100); do [ -n "$(pane_agent)" ] && break; sleep 0.1; done
+HERE_ID="$(pane_agent)"
+check "今のペインに会話の印（@ws_agent）を付ける" "$([ -n "$HERE_ID" ] && echo yes)" "yes"
+check "今の worktree で herdr-core に起動" "$(state ".terminals[] | select(.address==\"$HERE_ID\") | .labels.wt")" "$FEAT"
+sleep 0.5
+check "今のペインで hc attach" "$(t capture-pane -p -t "$HERE_PANE" | grep -c "attached to $HERE_ID")" "1"
+check "一覧では会話中" "$(ws list --json | jq -r --arg id "$HERE_ID" '.workspaces[].worktrees[].agents[] | select(.id==$id) | .tmux.attached')" "true"
+t send-keys -t "$HERE_PANE" C-c
+for _ in $(seq 50); do [ -z "$(pane_agent)" ] && break; sleep 0.1; done
+check "会話を抜けたら印を外し、エージェントは動き続ける" "$(pane_agent)|$(state ".terminals[] | select(.address==\"$HERE_ID\") | .state")" "|live"
 
 echo
 echo "E2E: $pass checks passed"

@@ -31,3 +31,12 @@ export function usageFromStatusLine(stdin: string): ClaudeUsage | undefined {
   if (!fiveHour && !sevenDay) return undefined;
   return { ...(fiveHour && { fiveHour }), ...(sevenDay && { sevenDay }) };
 }
+
+export function contextUsedPercentageFromStatusLine(stdin: string) {
+  try {
+    const used = JSON.parse(stdin)?.context_window?.used_percentage;
+    return typeof used === "number" ? Math.min(100, Math.max(0, Math.round(used))) : undefined;
+  } catch {
+    return undefined;
+  }
+}

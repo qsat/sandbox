@@ -13,6 +13,7 @@ export interface AgentRecord {
   recordedWorktree?: string;
   claudeSessionId?: string;
   programLost?: boolean;
+  contextUsedPercentage?: number;
 }
 
 export type AgentNode = Omit<AgentRecord, "recordedWorkspace" | "recordedWorktree" | "programLost"> & {

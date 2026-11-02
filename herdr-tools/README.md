@@ -63,7 +63,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | --- | --- | --- |
 | worktree を作る | `gwq add -b <branch>`（今までどおり） | — |
 | その worktree に入る | `C-e`（tm）で選ぶ（今までどおり） | 一覧で worktree をクリック → Ghostty が前に出る |
-| エージェントを起動する | `ws new --attach` | worktree の「＋ claude」ボタン |
+| エージェントを起動する | `cc`（`ws new --here`。今のペインで会話）か `ws new --attach`（agents ウィンドウへ移る） | worktree の「＋ claude」ボタン |
 | 待っているエージェントを探す | `prefix a`（blocked が先頭） | 一覧を見る（常時表示） |
 | そのエージェントと話す | 一覧で `Enter` → 会話ペインへ | クリック → Ghostty の会話ペインへ |
 | 一覧をキーで操作する | 一覧で `j` / `k`（↓ / ↑）で選び、`Enter` 移動、`n` ＋ claude、`R` 再開、`s` 停止・削除、`x` セッションを閉じる（停止と閉じるは y で確かめる） | ボードを一度クリックしてから `j` / `k`（↓ / ↑）で選び、`Enter` 移動、`n` ＋ claude、`R` 再開、`s` 停止・削除、`x` セッションを閉じる（停止と閉じるは確認のダイアログを出す） |
@@ -79,7 +79,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 ws list [--json] [--all]                         Workspace > Worktree > Agent の木（--all で ghq の全エントリ）
 ws go <ref> [--client <name> | --from-app] [--dry-run]
                                                  移動。ref は worktree のパス（配下でも可）かアドレス／端末名
-ws new [<worktree>] [--attach] [--client <name> | --from-app] [-- <claude の引数>]
+ws new [<worktree>] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
 ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
 ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す（エージェントでない端末は触らない）
 ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは herdr-core で動き続ける
@@ -101,6 +101,52 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 2. agent なら（移動では再開しない。再開は `ws resume`・ボタン・`R` だけで行う）: `@ws_agent` が一致する生きたペインがあればそれを選ぶ／無ければ `agents` ウィンドウに `hc attach` ペインを作る（無ければウィンドウごと）
 3. tmux クライアントを切り替える: `--client` 指定 > `--from-app` なら最後に使われたクライアント > tmux 内なら呼び出し元 > tmux の外ならその場で `tmux attach`
 4. app からなら Ghostty を前面へ（クライアントが1つも無ければ Ghostty の新しいウィンドウで attach）
+
+### `cc`: herdr-core で起動して、今の端末で会話する
+
+`claude` はそのままにして、herdr-core で動かしたいときは `cc` で起動する。`cc` は `ws new --here` のエイリアスで、
+`ws/config/cc.sh` を `~/.zshrc` などから source する。`cc` に続けた引数は claude に渡る（`cc --model opus`）。
+
+```sh
+alias cc='ws new --here --'
+```
+
+- `ws new --here` は今の worktree で herdr-core に起動し、今の端末で `hc attach` する。tmux の中なら今のペインに `@ws_agent` を付け、一覧では会話中になる
+- 抜ける（切り離す）と元のシェルに戻り、ペインの印を外す。エージェントは動き続け、一覧からまた会話に入れる
+- herdr-core の端末の中（Herdr app のタブなど）で打つと、その端末の中に子端末を作って attach する。そこではそのまま `claude` を使う
+- `cc` は C コンパイラの名前だが、エイリアスは対話シェルで打ったときだけ効くので、`make` などが呼ぶ `cc` には影響しない
+
+### エージェントごとの context 使用率
+
+`ws statusline` は、statusLine に渡される `context_window.used_percentage` を、自分の端末（`$HC_TERMINAL_ID`）の
+`claude.context` ラベルに記録する（整数の % が変わったときだけ）。一覧ではエージェントの行に出す。
+
+- tmux（`ws list`・popup）: `ctx 42%`
+- Herdr app の mod: 利用上限と同じ円グラフ（マウスを乗せると `context 42%`）
+
+利用上限と同じく、70% 以上で強調、90% 以上で警告の色。セッションの開始直後（値が null）、終了した端末、
+claude が落ちて要再開になった端末（値が古い）には出さない。statusLine に `ws statusline` を設定したセッションだけが対象。
+
+### tmux のセッション内のウィンドウを1つのウィンドウのペインにまとめる
+
+`join-pane` で他のウィンドウのペインを今のウィンドウへ移す。ペインが無くなったウィンドウは自動で閉じる。
+移す先を毎回「最後のペイン」にすると元の順番のまま並び、1回ごとに `tiled` で並べ直すとペインが多くても `pane too small` で失敗しない。
+
+```sh
+#!/usr/bin/env bash
+# ~/.config/scripts/tmux-join-windows.sh <window_id>
+target="$1"
+for p in $(tmux list-panes -s -t "$target" -F '#{window_id} #{pane_id}' | awk -v w="$target" '$1 != w {print $2}'); do
+  last=$(tmux list-panes -t "$target" -F '#{pane_id}' | tail -1)
+  tmux join-pane -d -s "$p" -t "$last" && tmux select-layout -t "$target" tiled
+done
+```
+
+```tmux
+bind J run-shell "~/.config/scripts/tmux-join-windows.sh '#{window_id}'"
+```
+
+1枚ずつ別ウィンドウに戻すときは、標準の `prefix !`（`break-pane`）。
 
 ### Claude の利用上限（5h / 週）
 
@@ -127,6 +173,7 @@ Claude Code は statusLine のコマンドに `rate_limits.five_hour` / `rate_li
 | `ws` | 本体リポジトリのパス | `ws new` |
 | `wt` | worktree のパス | `ws new` |
 | `claude.session` | Claude のセッションID | SessionStart hook（起動・再開・/clear・compact のたびに最新を指す） |
+| `claude.context` | context の使用率（整数の %） | `ws statusline`（自分の端末に、値が変わったときだけ） |
 
 ラベル無しで手で起動したエージェントは cwd から対応を推定する（git の toplevel で判定するので `repo` と `repo=branch` は混ざらない）。
 
@@ -138,6 +185,17 @@ Herdr app で開いただけのシェルは出さない。
 | 状態を報告したことがある（`reported` / `status`） | Herdr app もこれをエージェントの条件にしている |
 | `ws` / `wt` のラベルがある | `ws new` が起動したもの。claude が落ちてシェルに戻っても、再開できるエージェントとして出す |
 | 会話IDのラベルがある | SessionStart hook が記録したもの（手で起動した claude） |
+
+`claude` コマンドで起動したのに一覧に出ないときは、次の順に確かめる。
+
+| 状況 | 一覧に出ない理由 | 対処 |
+| --- | --- | --- |
+| tmux のペインや Ghostty で直接 `claude` を起動した | herdr-core の端末ではないので、herdr-core が知らない | `ws new`（tmux の popup なら `n`）か、Herdr app のタブから起動する |
+| herdr-core の端末で起動したが、最初の応答の前 | 状態の報告も会話IDの記録もまだ無い | 最初のメッセージを送るか、SessionStart hook を設定する（起動直後にラベルが付く） |
+| SessionStart hook を設定していない、または hook から `ws` が見つからない | 会話IDのラベルが付かない。状態の報告も無ければ出ない | `~/.claude/settings.json` の hook を確かめ、`ws` を PATH に置く。`WS_DEBUG=1` で hook の結果が stderr に出る |
+| hook から `$HC_TERMINAL_ID` が見えない | 自分の端末が分からず、ラベルを付けられない | 実機確認項目。見えなければ hook は何もしない |
+| 別の hc セッション（`HC_SESSION` / `--session`）の端末 | ws は既定のセッションにだけ繋ぐ | Herdr app と ws で同じセッションを使う |
+| 状態を一度も報告せずに終わった | 終了後は状態が消え、ラベルも無い | `ws new` で起動すれば、終了後もラベルで一覧に残る |
 
 一覧に出すリポジトリは、tmux のセッションかエージェントがあるもの（`--all` なら ghq の全エントリ）。
 出したリポジトリについては、tmux のセッションやエージェントの有無に関わらず、`git worktree list` の worktree をすべて並べる

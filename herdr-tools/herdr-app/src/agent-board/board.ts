@@ -1,4 +1,5 @@
 import { agentTags } from "@herdr-tools/utils/agent-tags";
+import { contextUsage } from "@herdr-tools/utils/context-usage";
 import { agentDisplayName } from "@herdr-tools/utils/agent-display-name";
 import { statusIcon } from "@herdr-tools/utils/status-icon";
 import { statusLabel } from "@herdr-tools/utils/status-label";
@@ -47,6 +48,7 @@ export function boardRows(listJson: ListedTree, live: LiveTerminal[], collapsed:
           status: statusLabel(a),
           rawStatus: a.status,
           tags: agentTags(a, a.tmux.attached),
+          context: contextUsage(a),
           canResume: a.resumable,
           alive: a.alive,
           worktree: wt.path,

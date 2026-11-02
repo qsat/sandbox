@@ -88,9 +88,17 @@ export class TmuxServer {
       ? (await this.exec(["split-window", "-d", "-t", windowTarget, "-c", cwd, "-P", "-F", "#{pane_id}", command])).trim()
       : (await this.exec(["new-window", "-d", "-t", `${exact(session)}:`, "-n", window, "-c", cwd, "-P", "-F", "#{pane_id}", command])).trim();
     await this.exec(["select-layout", "-t", windowTarget, "tiled"]);
-    await this.exec(["set-option", "-p", "-t", paneId, AGENT_PANE_OPTION, agentId]);
+    await this.markPaneAsConversation(paneId, agentId);
     await this.selectPane(paneId);
     return paneId;
+  }
+
+  async markPaneAsConversation(paneId: string, agentId: string) {
+    await this.exec(["set-option", "-p", "-t", paneId, AGENT_PANE_OPTION, agentId]);
+  }
+
+  async unmarkPane(paneId: string) {
+    await this.exec(["set-option", "-p", "-u", "-t", paneId, AGENT_PANE_OPTION]);
   }
 
   async selectPane(paneId: string) {
