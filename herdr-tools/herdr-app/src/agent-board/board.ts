@@ -58,6 +58,18 @@ export function boardRows(listJson: ListedTree, live: LiveTerminal[], collapsed:
 
 export type BoardRow = ReturnType<typeof boardRows>[number];
 
+export function rowId(row: BoardRow) {
+  return `${row.kind}:${row.key}`;
+}
+
+export function moveSelection(rows: BoardRow[], current: string | null, delta: 1 | -1) {
+  const selectable = rows.filter((r) => r.kind !== "workspace").map(rowId);
+  if (selectable.length === 0) return null;
+  const i = current ? selectable.indexOf(current) : -1;
+  if (i < 0) return (delta === 1 ? selectable[0] : selectable.at(-1)) ?? null;
+  return selectable[Math.min(selectable.length - 1, Math.max(0, i + delta))] ?? null;
+}
+
 export function wsCommandFor(row: BoardRow, action: BoardAction): [string, string[]] | null {
   if (row.kind === "workspace") return null;
   switch (action) {

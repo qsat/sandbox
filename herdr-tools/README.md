@@ -65,6 +65,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | エージェントを起動する | `ws new --attach` | worktree の「＋ claude」ボタン |
 | 待っているエージェントを探す | `prefix a`（blocked が先頭） | 一覧を見る（常時表示） |
 | そのエージェントと話す | 一覧で `Enter` → 会話ペインへ | クリック → Ghostty の会話ペインへ |
+| 一覧をキーで選ぶ | 一覧で `j` / `k`（↓ / ↑）、`Enter` で移動 | ボードを一度クリックしてから `j` / `k`（↓ / ↑）、`Enter` で移動 |
 | worktree のエージェントを全部並べる | `prefix A`（`ws panes`） | — |
 | 再起動後に続きをやる | 一覧で `R`（再開できる行に「R で再開」と出る）か `ws resume <agent>`。移動では再開しない | 「再開」ボタン |
 | エージェントを止める | `ws stop <agent>`（止めて一覧から消す）。claude の中なら `/exit` | エージェントの「停止」ボタン（確認のダイアログで「停止する」か Enter で止める。「キャンセル」か Esc で取りやめる）。終了済みなら「削除」 |

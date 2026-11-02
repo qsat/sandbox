@@ -2,7 +2,7 @@ import { View, div, svg, type AsyncContext, type Color, type Context, type Eleme
 import { closeOverlay, exec, openOverlay, props, setShared, shared, terminals, theme } from "herdr";
 import type { Tag } from "@herdr-tools/utils/tag";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { boardRows, parseList, toggleCollapsed, WS, wsCommandFor, type BoardAction, type BoardRow, type LiveTerminal } from "./board";
+import { boardRows, moveSelection, parseList, rowId, toggleCollapsed, WS, wsCommandFor, type BoardAction, type BoardRow, type LiveTerminal } from "./board";
 
 const MOD_NAME = "agent-board";
 const LIST_REFRESH_MS = 4000;
@@ -110,6 +110,7 @@ export default class AgentBoard extends View {
   confirmRequest!: ConfirmRequest | null;
   confirming!: boolean;
   focus!: FocusHandle;
+  selected!: string | null;
 
   init(_props: unknown, cx: AsyncContext) {
     this.list = { workspaces: [] };
@@ -117,8 +118,9 @@ export default class AgentBoard extends View {
     this.fetching = false;
     this.confirmRequest = (props()?.confirm as ConfirmRequest | undefined) ?? null;
     this.confirming = false;
+    this.selected = null;
+    this.focus = cx.focus_handle();
     if (this.confirmRequest) {
-      this.focus = cx.focus_handle();
       this.focus.focus();
       return;
     }
@@ -197,8 +199,18 @@ export default class AgentBoard extends View {
     return div().flex().flex_1().min_w(0).items_center().gap(6).overflow_hidden().whitespace_nowrap().children(children);
   }
 
-  renderRow(row: BoardRow, t: Theme, first: boolean): Element {
-    const base = div().id(`${row.kind}:${row.key}`).flex().items_center().gap(6).min_h(ROW_HEIGHT).px(4).rounded(6).cursor_pointer().hover((s) => s.bg(t.hover));
+  renderRow(row: BoardRow, t: Theme, first: boolean, selected: boolean): Element {
+    const base = div()
+      .id(rowId(row))
+      .flex()
+      .items_center()
+      .gap(6)
+      .min_h(ROW_HEIGHT)
+      .px(4)
+      .rounded(6)
+      .cursor_pointer()
+      .when(selected, (el) => el.bg(t.hover))
+      .hover((s) => s.bg(t.hover));
     switch (row.kind) {
       case "workspace":
         return base
@@ -288,12 +300,40 @@ export default class AgentBoard extends View {
       );
   }
 
+  onBoardKey(key: string, rows: BoardRow[], cx: Context) {
+    switch (key) {
+      case "j":
+      case "down":
+        this.selected = moveSelection(rows, this.selected, 1);
+        break;
+      case "k":
+      case "up":
+        this.selected = moveSelection(rows, this.selected, -1);
+        break;
+      case "enter": {
+        const row = rows.find((r) => rowId(r) === this.selected);
+        if (row) this.runRow(row, "go", cx);
+        break;
+      }
+      default:
+        return false;
+    }
+    cx.notify();
+    return true;
+  }
+
   render() {
     const t = theme() as unknown as Theme;
     if (this.confirmRequest) return this.renderConfirmDialog(this.confirmRequest, t);
     const rows = boardRows(this.list, liveTerminals(), collapsedState());
+    const showSelection = this.focus.is_focused();
     return div()
       .id("agent-board")
+      .track_focus(this.focus)
+      .on_mouse_down("left", () => this.focus.focus())
+      .on_key_down((e, cx) => {
+        if (this.onBoardKey(e.key, rows, cx)) cx.stop_propagation();
+      })
       .size_full()
       .flex()
       .flex_col()
@@ -303,7 +343,7 @@ export default class AgentBoard extends View {
       .text_color(t.foreground)
       .overflow_y_scrollbar()
       .when(rows.length === 0, (el) => el.child(label("エージェントもセッションもありません", t.muted)))
-      .children(rows.map((r, i) => this.renderRow(r, t, i === 0)))
+      .children(rows.map((r, i) => this.renderRow(r, t, i === 0, showSelection && rowId(r) === this.selected)))
       .when(this.error !== "", (el) => el.child(label(this.error, t.ansi1)));
   }
 }

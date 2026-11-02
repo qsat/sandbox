@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { boardRows, wsCommandFor, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
+import { boardRows, moveSelection, rowId, wsCommandFor, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
 
 const agent = (p: { id: string; name: string; status: "working" | "idle"; resumable: boolean; attached: boolean }) => ({
   id: p.id,
@@ -127,4 +127,20 @@ describe("その他", () => {
   test("parseList は壊れた出力でも空の木", () => {
     expect(parseList("oops")).toEqual({ workspaces: [] });
   });
+});
+
+describe("moveSelection（j / k で上下に動かす）", () => {
+  const rows = boardRows(tree, [], []);
+  const ids = rows.filter((r) => r.kind !== "workspace").map(rowId);
+  test("何も選んでいなければ、下へは先頭、上へは末尾を選ぶ", () => {
+    expect(moveSelection(rows, null, 1)).toBe(ids[0]!);
+    expect(moveSelection(rows, null, -1)).toBe(ids.at(-1)!);
+  });
+  test("workspace の行は飛ばし、端では止まる", () => {
+    expect(moveSelection(rows, ids[0]!, 1)).toBe(ids[1]!);
+    expect(moveSelection(rows, ids[0]!, -1)).toBe(ids[0]!);
+    expect(moveSelection(rows, ids.at(-1)!, 1)).toBe(ids.at(-1)!);
+  });
+  test("選んでいた行が消えたら、選び直す", () => expect(moveSelection(rows, "agent:gone", 1)).toBe(ids[0]!));
+  test("選べる行が無ければ null", () => expect(moveSelection([], null, 1)).toBeNull());
 });
