@@ -11,11 +11,11 @@ herdr-tools/
 ├── utils/src/                    依存なしの共通関数（1ファイル1関数）
 ├── ws-core/src/                  ドメインとユースケース。herdr-core と ghq / git は知っていて、クライアントは知らない
 │   ├── domain/
-│   │   ├── agent.ts              AgentRecord → AgentNode、要再開、注意が要る順
+│   │   ├── agent.ts              AgentRecord → AgentNode、再開できるか、注意が要る順
 │   │   ├── tree.ts               Workspace > Worktree > Agent の木
 │   │   └── locate.ts             パス・id から木の場所を引く
 │   ├── ports.ts                  AgentRuntime / WorkspaceSource（単体テストで偽物に差し替える継ぎ目）
-│   ├── ws-core.ts                WsCore: snapshot / resumeIfNeeded / startAgent / recordClaudeSessionFromHook / removeAgents
+│   ├── ws-core.ts                WsCore: snapshot / resume / startAgent / stopAgent / recordClaudeSessionFromHook / removeAgents
 │   ├── claude-code.ts            会話の再開コマンドと SessionStart hook の入力
 │   ├── ghq-workspace-source.ts   WorkspaceSource の実装
 │   └── herdr-core/               AgentRuntime の実装（hc-terminal: schema/hc.openrpc.json の Terminal、hc-client: JSON-RPC、herdr-runtime: 翻訳）
@@ -29,7 +29,7 @@ herdr-tools/
 │   └── ui/                       rows（一覧の行）/ popup（ws ui）/ keys
 ├── herdr-app/                    クライアント: Herdr app の mod（ws を exec するだけ）
 │   ├── src/agent-board/          board.ts（行と ws の呼び出し）/ main.ts（Herdr app の API）
-│   ├── src/herdr-app-api.placeholder.d.ts
+│   ├── sync-types.sh, tsconfig.json   Herdr app が生成した型（types/、gitignore）で main.ts を検査する
 │   ├── mod/agent-board/mod.json, layouts/agents.json
 └── ws/                           CLI。cli.ts と compose-from-env.ts で全部をつなぐ
 ```
@@ -62,11 +62,12 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | --- | --- | --- |
 | worktree を作る | `gwq add -b <branch>`（今までどおり） | — |
 | その worktree に入る | `C-e`（tm）で選ぶ（今までどおり） | 一覧で worktree をクリック → Ghostty が前に出る |
-| エージェントを起動する | `ws new --attach` | worktree の「新規」ボタン |
+| エージェントを起動する | `ws new --attach` | worktree の「＋ claude」ボタン |
 | 待っているエージェントを探す | `prefix a`（blocked が先頭） | 一覧を見る（常時表示） |
 | そのエージェントと話す | 一覧で `Enter` → 会話ペインへ | クリック → Ghostty の会話ペインへ |
 | worktree のエージェントを全部並べる | `prefix A`（`ws panes`） | — |
-| 再起動後に続きをやる | 一覧で「要再開」を選ぶだけ（移動時に自動で再開） | 「再開」ボタン |
+| 再起動後に続きをやる | 一覧で `R`（再開できる行に「R で再開」と出る）か `ws resume <agent>`。移動では再開しない | 「再開」ボタン |
+| エージェントを止める | `ws stop <agent>`（止めて一覧から消す）。claude の中なら `/exit` | エージェントの「停止」ボタン（確認のダイアログで「停止する」を押すと止める。Esc か外側のクリックで取りやめる）。終了済みなら「消す」 |
 | 片付ける | claude を `/exit` → `gwq remove` → 必要なら `ws prune` | — |
 
 ### コマンド
@@ -76,7 +77,8 @@ ws list [--json] [--all]                         Workspace > Worktree > Agent �
 ws go <ref> [--client <name> | --from-app] [--dry-run]
                                                  移動。ref は worktree のパス（配下でも可）かアドレス／端末名
 ws new [<worktree>] [--attach] [--client <name> | --from-app] [-- <claude の引数>]
-ws resume <agent>                                要再開なら claude --resume <id> を送る（何度呼んでも安全）
+ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
+ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す（エージェントでない端末は触らない）
 ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる
 ws ui [--client <name>]                          tmux popup 用の対話一覧
 ws hook session-start                            Claude Code の SessionStart hook
@@ -91,7 +93,7 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 設計書の判断フローをそのまま `tmux/src/plans/go.ts` の `planGo` が手順（`Step`）のリストにし、`TmuxNavigator` が実行する（`--dry-run` で手順だけ見られる）。
 
 1. セッションを用意（無ければ tm 規則 = basename、`.`→`_` で作る。同名があればそれを使う）
-2. agent なら: 再開（C。`resumeIfNeeded` を毎回行う。要再開かどうかは再開する側が最新の状態で判定するので、何度呼んでも安全）→ `@ws_agent` が一致する生きたペインがあればそれを選ぶ／無ければ `agents` ウィンドウに `hc attach` ペインを作る（無ければウィンドウごと）
+2. agent なら（移動では再開しない。再開は `ws resume`・ボタン・`R` だけで行う）: `@ws_agent` が一致する生きたペインがあればそれを選ぶ／無ければ `agents` ウィンドウに `hc attach` ペインを作る（無ければウィンドウごと）
 3. tmux クライアントを切り替える: `--client` 指定 > `--from-app` なら最後に使われたクライアント > tmux 内なら呼び出し元 > tmux の外ならその場で `tmux attach`
 4. app からなら Ghostty を前面へ（クライアントが1つも無ければ Ghostty の新しいウィンドウで attach）
 
@@ -105,6 +107,15 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 
 ラベル無しで手で起動したエージェントは cwd から対応を推定する（git の toplevel で判定するので `repo` と `repo=branch` は混ざらない）。
 
+herdr-core の端末のうちエージェントとして一覧に出すのは、次のどれかに当てはまるものだけ（`isAgentTerminal`）。
+Herdr app で開いただけのシェルは出さない。
+
+| 条件 | 理由 |
+| --- | --- |
+| 状態を報告したことがある（`reported` / `status`） | Herdr app もこれをエージェントの条件にしている |
+| `ws` / `wt` のラベルがある | `ws new` が起動したもの。claude が落ちてシェルに戻っても、再開できるエージェントとして出す |
+| 会話IDのラベルがある | SessionStart hook が記録したもの（手で起動した claude） |
+
 ## 実装時に決めたこと（設計書の未決事項に対する仮の既定）
 
 | 項目 | 既定 | 変え方 |
@@ -112,7 +123,7 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 | `ws panes` に子エージェントを含めるか | 含めない（`-a` で含める） | フラグ |
 | `ws panes` の並べ方 | `agents` ウィンドウに `tiled` | `Tmux.openAgentPane` |
 | `ws panes` の上限 | 8（注意が要る順に開き、超えた分は省略と表示） | `--max` / `WS_PANES_MAX` |
-| `ws panes` の要再開 | 開く前に再開する（`ws go` と同じ） | — |
+| `ws panes` で再開できるエージェント | 再開しないで開く（`ws go` と同じ） | — |
 | `ws prune` でエージェントを終了する条件 | 記録した worktree の場所が消えたもの。確認プロンプトで y のときだけ（`--yes` で省略） | ws-core の `agentsInMissingWorktrees` |
 | 再開時のコマンド | `claude --resume <id>`（元の引数は引き継がない） | `WS_CLAUDE_BIN` |
 
@@ -120,25 +131,26 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 
 ## 実機確認の結果で直す場所
 
-| 確認項目 | 結果が想定と違ったら |
-| --- | --- |
-| ラベルのキーに `.` を使える | 使えなければ `WS_SESSION_LABEL=claude_session`（読み書きともこのキーだけを使う。既に記録した会話IDは引き継がれない） |
-| kill -9 後もラベルが残り `foreground.name` がシェルになる | 残らなければセッションIDをファイルに保存する方式に変える（`HerdrRuntime.recordClaudeSession` / `toAgentRecord`） |
-| hook から `$HC_TERMINAL_ID` が見える | 見えなければ hook は何もしない（`WS_DEBUG=1` で理由を stderr に出す） |
-| API の形 | `schema/hc.openrpc.json`（herdr-core リポジトリ）どおりに書いてある（`ws-core/src/herdr-core/hc-terminal.ts`）。実機で違えばそこと `hc-client.ts` を直す。hc とは `hc connect` の JSON-RPC だけで話し、接続は1本を使い回す。起動した端末のアドレスは `terminal.run` の返り値から取る |
-| `open -na Ghostty --args -e tmux attach -t <session>` | `tmux/src/ghostty.ts` の `ghosttyNewWindow` |
-| mod の API（`herdr.d.ts` / `gpui-kit.d.ts`） | `herdr-app/src/herdr-app-api.placeholder.d.ts` を本物の d.ts に置き換え、型エラーが出たら `main.ts` だけ直す。判断ロジック（`board.ts`）はテスト済み |
+| 確認項目 | 実機の結果（2026-11-02、Herdr app 0.1.11） | 結果が想定と違ったら |
+| --- | --- | --- |
+| ラベルのキーに `.` を使える | 使える。hook が `claude.session` を書き、`terminal.list` で読めた | 使えなければ `WS_SESSION_LABEL=claude_session`（読み書きともこのキーだけを使う。既に記録した会話IDは引き継がれない） |
+| kill -9 後もラベルが残り `foreground.name` がシェルになる | なる。keep 端末のプログラムを kill -9 すると、約 2 秒は `foreground` が無く（`reason: signaled`）、約 2.5 秒でシェル（`zsh`）に替わる。ラベルは残る | 残らなければセッションIDをファイルに保存する方式に変える（`HerdrRuntime.recordClaudeSession` / `toAgentRecord`） |
+| hook から `$HC_TERMINAL_ID` が見える | 見える。Herdr app の端末で起動した claude に `claude.session` が付いた | 見えなければ hook は何もしない（`WS_DEBUG=1` で理由を stderr に出す） |
+| API の形 | 合っている。`terminal.list` / `run` / `label` / `kill` / `rm` を実機で使った | `schema/hc.openrpc.json`（herdr-core リポジトリ）どおりに書いてある（`ws-core/src/herdr-core/hc-terminal.ts`）。実機で違えばそこと `hc-client.ts` を直す。hc とは `hc connect` の JSON-RPC だけで話し、接続は1本を使い回す。起動した端末のアドレスは `terminal.run` の返り値から取る |
+| `open -na Ghostty --args -e tmux attach -t <session>` | まだ確かめていない（画面に Ghostty の窓が開くので、人が試す） | `tmux/src/ghostty.ts` の `ghosttyNewWindow` |
+| mod の API（`gpui-kit.d.ts`。`herdr` モジュールを含む） | 合っている（gpui-shell 0.7.1） | アプリの更新で API が変わったら `bun run typecheck:mod` が型エラーを出すので、`main.ts` だけ直す。判断ロジック（`board.ts`）はテスト済み |
 
-**mod の注意**: この環境には Herdr app が無いため、`main.ts`（アダプタ）は設計書に書かれた API 名
-（`terminals()` / `exec()` / `shared` / `setShared` / cx のタイマー）を元にした下書き。UI 部品の呼び方（`ui.div()…` など）は
-手元の `gpui-kit.d.ts` に合わせて直し、`bun run build:mod` のあと `herdr-app check` を通すこと。
+**mod の型**: Herdr app が `~/.config/herdr-app/mods/<mod>/gpui-kit.d.ts` を生成する。アプリの版ごとに変わり、
+アプリ自身がコミットしないよう指示しているので、`herdr-app/sync-types.sh` が `herdr-app/types/`（gitignore）に写してから検査する。
+この d.ts は `console` / `fetch` などをグローバルに宣言して bun の型とぶつかるため、`main.ts` だけ `herdr-app/tsconfig.json` で別に検査する。
+mod を変えたら `bun run build:mod` のあと `herdr-app check ~/.config/herdr-app/mods/agent-board` を通し、`herdr-app shot` で表示を見る。
 
 ## 開発
 
 ```sh
 bun install
 bun test            # utils / ws-core（herdr-core の翻訳を含む）/ tmux / mod / アーキテクチャの検査
-bun run typecheck
+bun run typecheck   # 全体と mod（typecheck:mod。Herdr app を一度起動して生成された型が要る）
 bun run e2e         # 偽の herdr-core（ws-core/test/fake-hc）と実際の tmux（専用ソケット）で全コマンドを通す。E2E_KEEP_TMP=1 で後片付けしない
 bun run build       # dist/ws（単一バイナリ）と dist/mods/agent-board/（バンドルした mod）
 bun run build:mod   # mod だけ
