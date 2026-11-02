@@ -12,7 +12,7 @@ const COLLAPSED_KEY = "agent-board.collapsed";
 const ROW_HEIGHT = 22;
 const REPOSITORY_SPACING = ROW_HEIGHT * 0.5;
 const REPOSITORY_COLOR: Color = "#b8ff3cb3";
-const BRANCH_COLOR: Color = "#f0ff3c80";
+const BRANCH_COLOR: Color = "#fff03c80";
 
 type Theme = Record<
   "foreground" | "muted" | "dim" | "accent" | "raised" | "hover" | "solid" | "solid_foreground" | "background" | "popover" | "blocked" | "unknown" | "ansi1",
