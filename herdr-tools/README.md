@@ -116,6 +116,27 @@ alias cc='ws new --here --'
 - herdr-core の端末の中（Herdr app のタブなど）で打つと、その端末の中に子端末を作って attach する。そこではそのまま `claude` を使う
 - `cc` は C コンパイラの名前だが、エイリアスは対話シェルで打ったときだけ効くので、`make` などが呼ぶ `cc` には影響しない
 
+#### vim-tmux-navigator を使っているときは、`C-\` を `hc attach` に通す
+
+`hc attach` から抜けるキーは `Ctrl+\` だけで、変えられない。vim-tmux-navigator は `C-\` を「直前のペインへ移る」に割り当てていて、
+tmux がキーを先に受け取るので、そのままでは会話中のペインから抜けられない（`cc` で入ったペインならシェルに戻れない）。
+
+vim-tmux-navigator の「前面が vim なら、キーを tmux で使わずにそのまま送る」判定（`is_vim`）の正規表現に `hc` を足す。
+こうすると `hc attach` が動いているペインでだけ `C-\` が届いて抜けられ、ほかのペインでは今までどおりペイン移動に使える。
+
+```tmux
+# ~/.tmux.conf の is_vim の正規表現に |hc を足す
+is_vim="ps -o state= -o comm= -t '#{pane_tty}' \
+    | grep -iqE '^[^TXZ ]+ +(\\S+\\/)?g?(view|l?n?vim?x?|fzf|hc)(diff)?$'"
+bind-key -n 'C-\' if-shell "$is_vim" 'send-keys C-\\' 'select-pane -l'
+```
+
+- `C-h` / `C-j` / `C-k` / `C-l` も同じ `is_vim` を見るので、会話中のペインではそれらのキーもペイン移動ではなく claude に届く。
+  会話中にペインを移るときは `prefix` と矢印キーなどを使う
+- vim-tmux-navigator を TPM のプラグインとして読み込んでいる場合は、プラグインの読み込み（`run '~/.tmux/plugins/tpm/tpm'`）より後ろに
+  上の2行を書いて、プラグインが付けた割り当てを上書きする
+- 抜けたかどうかは、ペインがシェルに戻ること（`cc` の場合）か、一覧の「未attach」で分かる
+
 ### エージェントごとの context 使用率
 
 `ws statusline` は、statusLine に渡される `context_window.used_percentage` を、自分の端末（`$HC_TERMINAL_ID`）の
