@@ -23,6 +23,13 @@ ok() { pass=$((pass + 1)); printf '  \033[32mok\033[0m %s\n' "$1"; }
 fail() { printf '  \033[31mNG\033[0m %s\n' "$1" >&2; exit 1; }
 check() { if [ "$2" = "$3" ]; then ok "$1"; else fail "$1: expected [$3] got [$2]"; fi; }
 
+# util-linux の script は -c でコマンドを受け取り、BSD（macOS）の script は引数の残りをコマンドとして受け取る
+if script -qec true /dev/null >/dev/null 2>&1; then
+  in_pty() { script -qec "$1" /dev/null; }
+else
+  in_pty() { script -q /dev/null sh -c "$1"; }
+fi
+
 cleanup() {
   t kill-server 2>/dev/null || true
   [ -n "${CLIENT_PID:-}" ] && kill "$CLIENT_PID" 2>/dev/null || true
@@ -100,10 +107,12 @@ check "パス指定でも移動（末尾 / 付き）" "$(client_session)" "api=f
 
 echo "resume（claude を失って --keep のシェルに置き換わった状態）"
 edit_state '.terminals[0].foreground = {"name":"zsh"}'
-check "要再開と判定" "$(ws list --json | jq '.workspaces[0].worktrees[].agents[] | .needsResume')" "true"
+check "再開できると判定" "$(ws list --json | jq '.workspaces[0].worktrees[].agents[] | .resumable')" "true"
 ws go t1 --client "$CLIENT"
-check "go の中で claude --resume を送る" "$(state '[.log[] | select(.[0]=="terminal.send")][0][1].text')" "claude --resume sess-1"
-check "再開後は要再開でない" "$(ws list --json | jq '.workspaces[0].worktrees[].agents[] | .needsResume')" "false"
+check "go は勝手に再開しない" "$(state '[.log[] | select(.[0]=="terminal.send")] | length')" "0"
+check "resume で claude --resume を送る" "$(ws resume t1)" "resumed t1 (sess-1)"
+check "送った文" "$(state '[.log[] | select(.[0]=="terminal.send")][0][1].text')" "claude --resume sess-1"
+check "再開後は再開の対象でない" "$(ws list --json | jq '.workspaces[0].worktrees[].agents[] | .resumable')" "false"
 check "2回目の resume は何もしない" "$(ws resume t1)" "skip t1: running"
 check "send は1回だけ" "$(state '[.log[] | select(.[0]=="terminal.send")] | length')" "1"
 
@@ -141,15 +150,20 @@ ws prune --yes >/dev/null
 check "セッションを閉じた" "$(t list-sessions -F '#{session_name}' | grep -c '^api=gone$' || true)" "0"
 check "エージェントを終了・削除" "$(state '[.terminals[] | select(.address=="t5")] | length')" "0"
 
+echo "stop（エージェントを止めて一覧から消す）"
+check "止めた" "$(ws stop t4)" "stopped t4"
+check "herdr-core から消えた" "$(state '[.terminals[] | select(.address=="t4")] | length')" "0"
+check "無いものは止めない" "$(ws stop t4 || true)" "skip t4: not-found"
+
 echo "list（テキスト）"
 ws list
 
 echo "ui（pty で開いてキー操作）"
-ws go "$FEAT" --client "$CLIENT"
-UI_OUT="$( (sleep 2.5; printf '\r') | script -qec "bun $ROOT/cli.ts ui --client '$CLIENT'" /dev/null | tr -d '\r')"
+ws go "$API" --client "$CLIENT"
+UI_OUT="$( (sleep 2.5; printf '\r') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'" | tr -d '\r')"
 check "一覧に worktree とエージェントが出る" "$(grep -c 'api-feat-auth' <<<"$UI_OUT" | awk '{print ($1>0)}')" "1"
-check "先頭の行（main worktree の api）で Enter → そこへ移動して閉じる" "$(client_session)" "api"
-UI_OUT="$( (sleep 2.5; printf 'jjq') | script -qec "bun $ROOT/cli.ts ui --client '$CLIENT'" /dev/null; echo "exit=$?")"
+check "先頭の行（エージェントが動いている api=feat-auth）で Enter → そこへ移動して閉じる" "$(client_session)" "api=feat-auth"
+UI_OUT="$( (sleep 2.5; printf 'jjq') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'"; echo "exit=$?")"
 check "q で閉じる" "$(grep -o 'exit=[0-9]*' <<<"$UI_OUT" | tail -1)" "exit=0"
 
 echo
