@@ -67,8 +67,10 @@ export function worktreeLabel(wt: WorktreeNode, idx: TmuxIndex, color: boolean) 
 }
 
 function boardWorktreeLabel(wt: WorktreeNode, idx: TmuxIndex, color: boolean) {
-  const tags = tagsText(worktreeTags({ ...wt, branch: null }, idx.sessionOf(wt.path)), color);
-  return joinParts([paint(color, wt.isMain ? BOARD_BRANCH_MAIN : BOARD_BRANCH, worktreeDisplayName(wt)), tags], " ");
+  const session = idx.sessionOf(wt.path);
+  const tags = tagsText(worktreeTags({ ...wt, branch: null }, session), color);
+  const nameColor = !session ? GRAY : wt.isMain ? BOARD_BRANCH_MAIN : BOARD_BRANCH;
+  return joinParts([paint(color, nameColor, worktreeDisplayName(wt)), tags], " ");
 }
 
 export function toRows(tree: Tree, idx: TmuxIndex, opts: RowOptions) {

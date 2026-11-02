@@ -211,7 +211,7 @@ export default class AgentBoard extends View {
         return base
           .pl(16)
           .on_click((_e, cx) => this.runRow(row, "go", cx))
-          .child(this.info([div().text_color(BRANCH_COLOR).when(row.isMain, (el) => el.font_semibold()).child(row.label), this.tags(row.tags, t)]))
+          .child(this.info([div().text_color(row.hasSession ? BRANCH_COLOR : t.dim).when(row.isMain, (el) => el.font_semibold()).child(row.label), this.tags(row.tags, t)]))
           .when(row.hasSession, (el) => el.child(this.closeSessionButton(row, t)))
           .when(row.exists, (el) =>
             el.child(

@@ -66,6 +66,12 @@ describe("toRows（popup はボードと同じ見せ方）", () => {
     expect(renderText(tree, idx, false)).not.toContain("agent-");
     expect(toRows(tree, idx, { attentionFirst: true, color: false }).some((r) => r.kind === "spacer")).toBe(false);
   });
+  test("tmux セッションの無い worktree の名前はグレーにする", () => {
+    const colored = toRows(tree, idx, { attentionFirst: true, color: true, look: "board" });
+    const nameOf = (path: string) => colored.find((r) => r.kind === "worktree" && r.ref === path)!.text;
+    expect(nameOf(B).startsWith("\x1b[90m")).toBe(true);
+    expect(nameOf(A).startsWith("\x1b[90m")).toBe(false);
+  });
 });
 
 describe("splitKeys", () => {
