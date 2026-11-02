@@ -116,6 +116,16 @@ alias cc='ws new --here --'
 - herdr-core の端末の中（Herdr app のタブなど）で打つと、その端末の中に子端末を作って attach する。そこではそのまま `claude` を使う
 - `cc` は C コンパイラの名前だが、エイリアスは対話シェルで打ったときだけ効くので、`make` などが呼ぶ `cc` には影響しない
 
+#### 会話から抜ける: `prefix C-\`
+
+`tmux/config/tmux.conf` の割り当て。会話中のペイン（`@ws_agent` がある）でだけ、`hc attach` の切り離しキー `Ctrl+\` をペインへ直接送る。
+`send-keys` はキーの割り当てを通らないので、vim-tmux-navigator の `C-\` と競合しない。会話中でないペインでは何も送らず、メッセージだけ出す
+（シェルや他のプログラムに `Ctrl+\`＝SIGQUIT を飛ばさない）。
+
+```tmux
+bind 'C-\' if-shell -F '#{@ws_agent}' "send-keys 'C-\\'" "display-message '会話中のペインではありません'"
+```
+
 #### vim-tmux-navigator を使っているときは、`C-\` を `hc attach` に通す
 
 `hc attach` から抜けるキーは `Ctrl+\` だけで、変えられない。vim-tmux-navigator は `C-\` を「直前のペインへ移る」に割り当てていて、

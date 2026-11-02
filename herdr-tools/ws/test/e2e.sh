@@ -223,8 +223,23 @@ sleep 0.5
 check "今のペインで hc attach" "$(t capture-pane -p -t "$HERE_PANE" | grep -c "attached to $HERE_ID")" "1"
 check "一覧では会話中" "$(ws list --json | jq -r --arg id "$HERE_ID" '.workspaces[].worktrees[].agents[] | select(.id==$id) | .tmux.attached')" "true"
 t send-keys -t "$HERE_PANE" C-c
+sleep 0.3
+check "Ctrl+C は claude に届き、会話は続く" "$(pane_agent)" "$HERE_ID"
+
+echo "prefix C-\\（会話中のペインから抜ける）"
+t source-file "$ROOT/../tmux/config/tmux.conf"
+focus_pane() { t select-window -t "$1"; t select-pane -t "$1"; t switch-client -c "$CLIENT" -t "$1"; }
+focus_pane "$HERE_PANE"
+t send-keys -K -c "$CLIENT" C-b 'C-\'
 for _ in $(seq 50); do [ -z "$(pane_agent)" ] && break; sleep 0.1; done
-check "会話を抜けたら印を外し、エージェントは動き続ける" "$(pane_agent)|$(state ".terminals[] | select(.address==\"$HERE_ID\") | .state")" "|live"
+check "抜けて印を外し、エージェントは動き続ける" "$(pane_agent)|$(state ".terminals[] | select(.address==\"$HERE_ID\") | .state")" "|live"
+sleep 0.3
+check "ペインは元のシェルに戻る（ws が終わる）" "$(t display -p -t "$HERE_PANE" '#{pane_current_command}' | grep -cv '^bun$')" "1"
+PLAIN_PANE="$(t new-window -d -P -F '#{pane_id}' -t '=api:' 'cat -v')"
+focus_pane "$PLAIN_PANE"
+t send-keys -K -c "$CLIENT" C-b 'C-\'
+sleep 0.3
+check "会話中でないペインには送らない（SIGQUIT でプログラムを落とさない）" "$(t display -p -t "$PLAIN_PANE" '#{pane_id} #{pane_current_command}')" "$PLAIN_PANE cat"
 
 echo
 echo "E2E: $pass checks passed"

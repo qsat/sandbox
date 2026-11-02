@@ -108,6 +108,9 @@ const [cmd, ...args] = process.argv.slice(2);
 
 if (cmd === "attach") {
   console.log(`[fake-hc] attached to ${args[0]}`);
+  const DETACH = 0x1c;
+  if (process.stdin.isTTY) process.stdin.setRawMode(true);
+  process.stdin.on("data", (bytes: Buffer) => bytes.includes(DETACH) && process.exit(0));
   await new Promise(() => {});
 } else if (cmd === "connect") {
   const s0 = load();
