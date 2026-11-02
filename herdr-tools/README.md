@@ -116,6 +116,17 @@ alias cc='ws new --here --'
 - herdr-core の端末の中（Herdr app のタブなど）で打つと、その端末の中に子端末を作って attach する。そこではそのまま `claude` を使う
 - `cc` は C コンパイラの名前だが、エイリアスは対話シェルで打ったときだけ効くので、`make` などが呼ぶ `cc` には影響しない
 
+### エージェントごとの context 使用率
+
+`ws statusline` は、statusLine に渡される `context_window.used_percentage` を、自分の端末（`$HC_TERMINAL_ID`）の
+`claude.context` ラベルに記録する（整数の % が変わったときだけ）。一覧ではエージェントの行に出す。
+
+- tmux（`ws list`・popup）: `ctx 42%`
+- Herdr app の mod: 利用上限と同じ円グラフ（マウスを乗せると `context 42%`）
+
+利用上限と同じく、70% 以上で強調、90% 以上で警告の色。セッションの開始直後（値が null）、終了した端末、
+claude が落ちて要再開になった端末（値が古い）には出さない。statusLine に `ws statusline` を設定したセッションだけが対象。
+
 ### tmux のセッション内のウィンドウを1つのウィンドウのペインにまとめる
 
 `join-pane` で他のウィンドウのペインを今のウィンドウへ移す。ペインが無くなったウィンドウは自動で閉じる。
@@ -162,6 +173,7 @@ Claude Code は statusLine のコマンドに `rate_limits.five_hour` / `rate_li
 | `ws` | 本体リポジトリのパス | `ws new` |
 | `wt` | worktree のパス | `ws new` |
 | `claude.session` | Claude のセッションID | SessionStart hook（起動・再開・/clear・compact のたびに最新を指す） |
+| `claude.context` | context の使用率（整数の %） | `ws statusline`（自分の端末に、値が変わったときだけ） |
 
 ラベル無しで手で起動したエージェントは cwd から対応を推定する（git の toplevel で判定するので `repo` と `repo=branch` は混ざらない）。
 

@@ -15,6 +15,7 @@ export interface AgentRuntime {
   get(id: string): Promise<AgentRecord | undefined>;
   start(spec: AgentStartSpec): Promise<{ id: string; name: string }>;
   recordClaudeSession(id: string, claudeSessionId: string): Promise<void>;
+  recordContextUsage(id: string, usedPercentage: number): Promise<void>;
   type(id: string, text: string): Promise<void>;
   stop(id: string): Promise<void>;
   remove(id: string): Promise<void>;

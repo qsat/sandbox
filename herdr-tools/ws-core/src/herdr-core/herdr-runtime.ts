@@ -4,7 +4,7 @@ import type { AgentRuntime, AgentStartSpec } from "../ports";
 import type { HcClient } from "./hc-client";
 import type { HcTerminal } from "./hc-terminal";
 
-export const LABEL = { workspace: "ws", worktree: "wt", claudeSession: "claude.session" };
+export const LABEL = { workspace: "ws", worktree: "wt", claudeSession: "claude.session", contextUsed: "claude.context" };
 
 const STATUSES = new Set(["working", "blocked", "idle", "done", "error"]);
 const SHELLS = new Set(["bash", "zsh", "fish", "sh", "dash", "ksh", "mksh", "tcsh", "csh", "nu", "pwsh", "elvish", "xonsh"]);
@@ -38,6 +38,11 @@ export function isAgentTerminal(t: HcTerminal, claudeSessionLabel: string) {
   return reportsStatus || startedByWs || hasClaudeSession;
 }
 
+function percentageLabel(value: string | undefined) {
+  const n = value === undefined || value === "" ? NaN : Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 export function toAgentRecord(t: HcTerminal, claudeSessionLabel: string): AgentRecord {
   const state = t.status?.state;
   return {
@@ -53,6 +58,7 @@ export function toAgentRecord(t: HcTerminal, claudeSessionLabel: string): AgentR
     recordedWorktree: t.labels[LABEL.worktree] || undefined,
     claudeSessionId: t.labels[claudeSessionLabel] || undefined,
     programLost: t.foreground ? isShell(t.foreground.name) : undefined,
+    contextUsedPercentage: percentageLabel(t.labels[LABEL.contextUsed]),
   };
 }
 
@@ -82,6 +88,10 @@ export class HerdrRuntime implements AgentRuntime {
     const name = uniqueTerminalName(spec.repo, spec.branch, liveNames);
     const labels = { [LABEL.workspace]: spec.workspace, [LABEL.worktree]: spec.worktree };
     return { id: await this.hc.runKeptInBackground({ name, cwd: spec.worktree, labels, argv: spec.command }), name };
+  }
+
+  recordContextUsage(id: string, usedPercentage: number) {
+    return this.hc.label(id, { [LABEL.contextUsed]: String(usedPercentage) });
   }
 
   recordClaudeSession(id: string, claudeSessionId: string) {

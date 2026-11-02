@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
 import { boardRows, keyActionFor, moveSelection, rowId, wsCommandFor, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
 
-const agent = (p: { id: string; name: string; status: "working" | "idle"; resumable: boolean; attached: boolean }) => ({
+const agent = (p: { id: string; name: string; status: "working" | "idle"; resumable: boolean; attached: boolean; contextUsedPercentage?: number }) => ({
+  contextUsedPercentage: p.contextUsedPercentage,
   id: p.id,
   name: p.name,
   status: p.status,
@@ -29,7 +30,7 @@ const tree: ListedTree = {
           isMain: false,
           tmux: { session: null },
           agents: [
-            agent({ id: "t1", name: "api-feat", status: "working", resumable: false, attached: true }),
+            agent({ id: "t1", name: "api-feat", status: "working", resumable: false, attached: true, contextUsedPercentage: 75 }),
             agent({ id: "t2", name: "api-feat-2", status: "idle", resumable: true, attached: false }),
           ],
         },
@@ -176,5 +177,14 @@ describe("keyActionFor（選んだ行へのキー操作）", () => {
   test("割り当ての無いキーと、何も選んでいないときは何もしない", () => {
     expect(act(t1, "q")).toBeNull();
     expect(act(null, "enter")).toBeNull();
+  });
+});
+
+describe("context 使用率", () => {
+  test("エージェントの行に円グラフ用の % と色を持たせる（要再開のエージェントには出さない）", () => {
+    const rows = boardRows(tree, [], []);
+    const row = (key: string) => rows.find((r) => r.kind === "agent" && r.key === key) as Extract<BoardRow, { kind: "agent" }>;
+    expect(row("t1").context).toEqual({ used: 75, tone: "strong", text: "ctx 75%" });
+    expect(row("t2").context).toBeUndefined();
   });
 });

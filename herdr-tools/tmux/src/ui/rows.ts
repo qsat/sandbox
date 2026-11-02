@@ -1,5 +1,6 @@
 import { agentDisplayName } from "@herdr-tools/utils/agent-display-name";
 import { agentTags } from "@herdr-tools/utils/agent-tags";
+import { contextUsage } from "@herdr-tools/utils/context-usage";
 import { basename } from "@herdr-tools/utils/basename";
 import { statusIcon } from "@herdr-tools/utils/status-icon";
 import { statusLabel } from "@herdr-tools/utils/status-label";
@@ -46,19 +47,24 @@ function rankOfWorktree(wt: WorktreeNode) {
   return Math.min(99, ...wt.agents.map(attentionRank));
 }
 
+function contextTags(a: AgentNode): Tag[] {
+  const ctx = contextUsage(a);
+  return ctx ? [ctx] : [];
+}
+
 function hintTags(a: AgentNode, keyHints: boolean): Tag[] {
   return keyHints && a.resumable ? [{ text: RESUME_HINT, tone: "muted" }] : [];
 }
 
 export function agentLabel(a: AgentNode, idx: TmuxIndex, color: boolean, keyHints = false) {
   const sc = STATUS_COLOR[a.status] ?? GRAY;
-  const tags = tagsText([...agentTags(a, idx.isAttached(a.id)), ...hintTags(a, keyHints)], color);
+  const tags = tagsText([...contextTags(a), ...agentTags(a, idx.isAttached(a.id)), ...hintTags(a, keyHints)], color);
   return `${paint(color, sc, statusIcon(a.status))} ${a.id.padEnd(4)} ${a.name}  ${paint(color, sc, statusLabel(a))}${tags ? "  " + tags : ""}`;
 }
 
 function boardAgentLabel(a: AgentNode, idx: TmuxIndex, color: boolean, keyHints = false) {
   const sc = STATUS_COLOR[a.status] ?? GRAY;
-  const tags = tagsText([...agentTags(a, idx.isAttached(a.id)), ...hintTags(a, keyHints)], color);
+  const tags = tagsText([...contextTags(a), ...agentTags(a, idx.isAttached(a.id)), ...hintTags(a, keyHints)], color);
   return joinParts([paint(color, BOLD, agentDisplayName(a)), paint(color, sc, statusIcon(a.status)), paint(color, sc, statusLabel(a)), tags], " ");
 }
 

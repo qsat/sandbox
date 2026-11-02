@@ -84,3 +84,12 @@ describe("isAgentTerminal（herdr-core の端末のうち、エージェント�
     expect(isAgentTerminal({ ...plainShell, labels: { [L]: "abc" } }, "claude_sid")).toBe(false);
   });
 });
+
+describe("toAgentRecord の context 使用率（claude.context ラベル）", () => {
+  const base: HcTerminal = { address: "t9", name: "a", cwd: "/x", labels: {}, parent: null, state: "live", status: null, foreground: { name: "claude" } };
+  test("数値のラベルを読む。無い・壊れた値は undefined", () => {
+    expect(toAgentRecord({ ...base, labels: { "claude.context": "42" } }, "claude.session").contextUsedPercentage).toBe(42);
+    expect(toAgentRecord(base, "claude.session").contextUsedPercentage).toBeUndefined();
+    expect(toAgentRecord({ ...base, labels: { "claude.context": "x" } }, "claude.session").contextUsedPercentage).toBeUndefined();
+  });
+});

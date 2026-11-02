@@ -197,6 +197,11 @@ export default class AgentBoard extends View {
     };
   }
 
+  contextPie(row: AgentRow, t: Theme) {
+    if (!row.context) return [];
+    return [div().id(`context:${row.key}`).flex_none().tooltip(`context ${row.context.used}%`).child(pie(row.context.used, pieColor(t, row.context.tone), t))];
+  }
+
   stopButton(row: AgentRow, t: Theme) {
     const spec: ButtonSpec = row.alive
       ? { id: `stop:${row.key}`, icon: "square", text: "停止", tooltip: "claude を終了し、一覧から消す（s）", look: "alert" }
@@ -256,7 +261,7 @@ export default class AgentBoard extends View {
         return base
           .pl(28)
           .on_click((_e, cx) => this.runRow(row, "go", cx))
-          .child(this.info([div().child(row.label), label(row.icon, color), label(row.status, color), this.tags(row.tags, t)]))
+          .child(this.info([div().child(row.label), label(row.icon, color), label(row.status, color), ...this.contextPie(row, t), this.tags(row.tags, t)]))
           .when(row.canResume, (el) =>
             el.child(
               button({ id: `resume:${row.key}`, icon: "play", text: "再開", tooltip: "claude --resume で会話を再開する（R）", look: "primary" }, t, (cx) =>

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { usageFromStatusLine } from "../../src/claude-code";
+import { contextUsedPercentageFromStatusLine, usageFromStatusLine } from "../../src/claude-code";
 import { openWindows, sameUsage } from "../../src/domain/usage";
 
 const NOW = 1_800_000_000;
@@ -32,5 +32,17 @@ describe("sameUsage", () => {
     expect(sameUsage({ fiveHour, sevenDay }, { fiveHour, sevenDay })).toBe(true);
     expect(sameUsage({ fiveHour, sevenDay }, { fiveHour: { ...fiveHour, usedPercentage: 24 }, sevenDay })).toBe(false);
     expect(sameUsage(undefined, { fiveHour })).toBe(false);
+  });
+});
+
+describe("statusLine の context_window から context 使用率を取る", () => {
+  test("整数に丸め、0〜100 に収める", () => {
+    expect(contextUsedPercentageFromStatusLine(JSON.stringify({ context_window: { used_percentage: 41.6 } }))).toBe(42);
+    expect(contextUsedPercentageFromStatusLine(JSON.stringify({ context_window: { used_percentage: 120 } }))).toBe(100);
+  });
+  test("null（開始直後）・無い・壊れた入力は undefined", () => {
+    expect(contextUsedPercentageFromStatusLine(JSON.stringify({ context_window: { used_percentage: null } }))).toBeUndefined();
+    expect(contextUsedPercentageFromStatusLine("{}")).toBeUndefined();
+    expect(contextUsedPercentageFromStatusLine("oops")).toBeUndefined();
   });
 });

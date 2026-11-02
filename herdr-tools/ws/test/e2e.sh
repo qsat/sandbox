@@ -172,6 +172,10 @@ status_line_json 30 | ws statusline >/dev/null
 check "変わったら書く" "$(state '.docs["claude-usage"].version')" "2"
 check "--quiet は記録だけで何も出さない" "$(status_line_json 31 | ws statusline --quiet)" ""
 check "rate_limits が無い入力（API アカウントなど）でも失敗しない" "$(echo '{}' | ws statusline >/dev/null; echo $?)" "0"
+printf '{"context_window":{"used_percentage":41.6}}' | HC_TERMINAL_ID=t1 ws statusline --quiet
+check "context 使用率を自分の端末のラベルに記録（整数）" "$(state '.terminals[] | select(.address=="t1") | .labels["claude.context"]')" "42"
+check "ws list --json のエージェントに contextUsedPercentage" "$(ws list --json | jq '[.workspaces[].worktrees[].agents[] | select(.id=="t1") | .contextUsedPercentage][0]')" "42"
+check "一覧のエージェントの行に ctx 42%" "$(ws list | without_color | grep -c 'ctx 42%')" "1"
 
 echo "list（テキスト）"
 ws list

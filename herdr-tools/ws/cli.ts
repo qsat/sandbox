@@ -156,7 +156,10 @@ async function main(argv: string[]) {
     }
     case "statusline": {
       const stdin = await readStdin();
-      const r = await core.recordClaudeUsageFromStatusLine(stdin).catch(() => undefined);
+      const [r] = await Promise.all([
+        core.recordClaudeUsageFromStatusLine(stdin).catch(() => undefined),
+        core.recordContextUsageFromStatusLine(stdin, process.env).catch(() => undefined),
+      ]);
       if (!has(p, "--quiet")) process.stdout.write(usageLine(r?.usage ?? {}, true) + "\n");
       return 0;
     }

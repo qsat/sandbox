@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { agentsInMissingWorktrees, WsCore, type AgentRecord, type AgentRuntime, type AgentStartSpec, type ClaudeUsage, type PathInspection, type UsageStore, type WorkspaceSource } from "../src";
 
 class InMemoryRuntime implements AgentRuntime {
+  contextWrites = 0;
   agents: AgentRecord[] = [];
   sent: [string, string][] = [];
   started: AgentStartSpec[] = [];
@@ -31,6 +32,10 @@ class InMemoryRuntime implements AgentRuntime {
   }
   async recordClaudeSession(id: string, claudeSessionId: string) {
     this.agents.find((a) => a.id === id)!.claudeSessionId = claudeSessionId;
+  }
+  async recordContextUsage(id: string, usedPercentage: number) {
+    this.agents.find((a) => a.id === id)!.contextUsedPercentage = usedPercentage;
+    this.contextWrites++;
   }
   async type(id: string, text: string) {
     this.sent.push([id, text]);
@@ -229,5 +234,28 @@ describe("WsCore の利用上限（statusLine で記録し、snapshot で読む�
     const unavailable: UsageStore = { read: () => Promise.reject(new Error("hc connect closed")), write: () => Promise.reject(new Error("x")) };
     const core = new WsCore(new InMemoryRuntime(), source(), { usageStore: unavailable, nowEpochSec: () => NOW });
     expect(await core.recordClaudeUsageFromStatusLine(statusLine(20))).toMatchObject({ recorded: false, reason: "store-unavailable", usage: { fiveHour: { usedPercentage: 20 } } });
+  });
+});
+
+describe("WsCore の context 使用率（statusLine で自分の端末に記録する）", () => {
+  const statusLine = (used: number | null) => JSON.stringify({ context_window: { used_percentage: used } });
+
+  test("自分の端末のエージェントに、整数の % で記録する", async () => {
+    const rt = new InMemoryRuntime();
+    const core = new WsCore(rt, source());
+    const { id } = await core.startAgent(WT);
+    expect(await core.recordContextUsageFromStatusLine(statusLine(41.6), { FAKE_AGENT: id })).toEqual({ recorded: true, used: 42 });
+    expect((await core.snapshot()).tree.workspaces[0]!.worktrees.find((w) => w.path === WT)!.agents[0]!.contextUsedPercentage).toBe(42);
+  });
+
+  test("同じ % なら書かない。null（開始直後）や実行環境の外では何もしない", async () => {
+    const rt = new InMemoryRuntime();
+    const core = new WsCore(rt, source());
+    const { id } = await core.startAgent(WT);
+    await core.recordContextUsageFromStatusLine(statusLine(42), { FAKE_AGENT: id });
+    expect(await core.recordContextUsageFromStatusLine(statusLine(42.2), { FAKE_AGENT: id })).toEqual({ recorded: false, reason: "unchanged" });
+    expect(await core.recordContextUsageFromStatusLine(statusLine(null), { FAKE_AGENT: id })).toEqual({ recorded: false, reason: "no-context" });
+    expect(await core.recordContextUsageFromStatusLine(statusLine(50), {})).toEqual({ recorded: false, reason: "not-in-runtime" });
+    expect(rt.contextWrites).toBe(1);
   });
 });
