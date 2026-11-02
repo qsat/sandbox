@@ -17,9 +17,13 @@ export function mostRecentClient(clients: TmuxClient[]) {
   return [...clients].sort((a, b) => b.activity - a.activity)[0];
 }
 
+function isUnexpandedFormat(s: string) {
+  return s.includes("#{");
+}
+
 export function chooseClient(opts: { explicit?: string; fromApp: boolean; callerClient?: string; clients: TmuxClient[] }) {
   const switchTo = (name: string) => ({ kind: "switch" as const, name });
-  if (opts.explicit) return switchTo(opts.explicit);
+  if (opts.explicit && !isUnexpandedFormat(opts.explicit)) return switchTo(opts.explicit);
   if (opts.fromApp) {
     const c = mostRecentClient(opts.clients);
     return c ? switchTo(c.name) : { kind: "newGhosttyWindow" as const };

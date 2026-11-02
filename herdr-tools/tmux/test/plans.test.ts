@@ -81,6 +81,8 @@ describe("chooseClient", () => {
   test("app からでクライアントが無ければ Ghostty 新規", () => expect(chooseClient({ fromApp: true, clients: [] })).toEqual({ kind: "newGhosttyWindow" }));
   test("tmux 内からは呼び出し元", () => expect(chooseClient({ fromApp: false, callerClient: "me", clients })).toEqual({ kind: "switch", name: "me" }));
   test("tmux の外のシェルからはその場で attach", () => expect(chooseClient({ fromApp: false, clients })).toEqual({ kind: "attachHere" }));
+  test("tmux が展開しなかった明示（#{client_name} のまま）は無視して呼び出し元へ", () =>
+    expect(chooseClient({ explicit: "#{client_name}", fromApp: false, callerClient: "me", clients })).toEqual({ kind: "switch", name: "me" }));
 });
 
 describe("planGo（判断フローの全分岐）", () => {
