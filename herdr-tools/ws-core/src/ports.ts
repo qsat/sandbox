@@ -1,5 +1,6 @@
 import type { AgentRecord } from "./domain/agent";
 import type { PathInspection } from "./domain/tree";
+import type { ClaudeUsage } from "./domain/usage";
 
 export interface AgentStartSpec {
   workspace: string;
@@ -27,4 +28,9 @@ export interface WorkspaceSource {
   entries(root: string): Promise<string[]>;
   inspect(paths: string[]): Promise<PathInspection[]>;
   worktrees(repo: string): Promise<string[]>;
+}
+
+export interface UsageStore {
+  read(): Promise<ClaudeUsage | undefined>;
+  write(usage: ClaudeUsage): Promise<void>;
 }

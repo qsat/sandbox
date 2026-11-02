@@ -93,12 +93,14 @@ export function toggleCollapsed(collapsed: string[], key: string) {
   return [...s];
 }
 
+export const EMPTY_LIST: ListedTree = { workspaces: [], usage: {} };
+
 export function parseList(stdout: string): ListedTree {
   try {
     const v = JSON.parse(stdout);
-    return v && Array.isArray(v.workspaces) ? v : { workspaces: [] };
+    return v && Array.isArray(v.workspaces) ? { ...v, usage: v.usage ?? {} } : EMPTY_LIST;
   } catch {
-    return { workspaces: [] };
+    return EMPTY_LIST;
   }
 }
 

@@ -155,6 +155,24 @@ check "止めた" "$(ws stop t4)" "stopped t4"
 check "herdr-core から消えた" "$(state '[.terminals[] | select(.address=="t4")] | length')" "0"
 check "無いものは止めない" "$(ws stop t4 || true)" "skip t4: not-found"
 
+echo "statusline（Claude Code の rate_limits を herdr-core に記録して表示）"
+NOW="$(date +%s)"
+IN_2H30M=$((NOW + 2 * 3600 + 30 * 60 + 30))
+IN_3D5H30M=$((NOW + 3 * 86400 + 5 * 3600 + 30 * 60 + 30))
+status_line_json() { printf '{"rate_limits":{"five_hour":{"used_percentage":%s,"resets_at":%s},"seven_day":{"used_percentage":41.2,"resets_at":%s}}}' "$1" "$IN_2H30M" "$IN_3D5H30M"; }
+without_color() { sed 's/\x1b\[[0-9;]*m//g'; }
+OUT="$(status_line_json 23.5 | ws statusline | without_color)"
+check "消費した % とリセットまでの残り時間（5時間枠 → 週、週は分なし）" "$(without_color <<<"$OUT")" "24% 0d 2h 30m 41% 3d 5h"
+check "herdr-core の doc（claude-usage）に記録" "$(state '.docs["claude-usage"].value.fiveHour.usedPercentage')" "23.5"
+check "ws list --json に usage" "$(ws list --json | jq '.usage.sevenDay.usedPercentage')" "41.2"
+check "ws list の先頭行に出す" "$(ws list | head -1 | without_color)" "24% 0d 2h 30m 41% 3d 5h"
+status_line_json 23.5 | ws statusline >/dev/null
+check "同じ値なら書き直さない" "$(state '.docs["claude-usage"].version')" "1"
+status_line_json 30 | ws statusline >/dev/null
+check "変わったら書く" "$(state '.docs["claude-usage"].version')" "2"
+check "--quiet は記録だけで何も出さない" "$(status_line_json 31 | ws statusline --quiet)" ""
+check "rate_limits が無い入力（API アカウントなど）でも失敗しない" "$(echo '{}' | ws statusline >/dev/null; echo $?)" "0"
+
 echo "list（テキスト）"
 ws list
 

@@ -1,16 +1,19 @@
 import { basename } from "@herdr-tools/utils/basename";
 import { mapLimit } from "@herdr-tools/utils/map-limit";
-import { claudeResumeCommand, sessionIdFromSessionStartHook } from "./claude-code";
+import { claudeResumeCommand, sessionIdFromSessionStartHook, usageFromStatusLine } from "./claude-code";
 import { resumable, type AgentNode } from "./domain/agent";
 import { makeLocator } from "./domain/locate";
 import { buildTree, mainRepositoryOf, pathsToInspect, type PathInspection } from "./domain/tree";
-import type { AgentRuntime, WorkspaceSource } from "./ports";
+import { openWindows, sameUsage } from "./domain/usage";
+import type { AgentRuntime, UsageStore, WorkspaceSource } from "./ports";
 
 interface WsCoreOptions {
   home?: string;
   claudeBin?: string;
   resumeWaitMs?: number;
   stopWaitMs?: number;
+  usageStore?: UsageStore;
+  nowEpochSec?: () => number;
 }
 
 export class WsCore {
@@ -34,7 +37,31 @@ export class WsCore {
     const inspections = [...requestedInspections, ...(await this.source.inspect(siblings.filter((p) => !inspected.has(p))))];
     const alwaysShow = [...requested, ...siblings];
     const tree = buildTree({ agents, inspections, alwaysShow, ghqRoot, home: this.opts.home });
-    return { tree, locate: makeLocator(tree, inspections) };
+    return { tree, locate: makeLocator(tree, inspections), usage: await this.claudeUsage() };
+  }
+
+  private now() {
+    return this.opts.nowEpochSec?.() ?? Math.floor(Date.now() / 1000);
+  }
+
+  async claudeUsage() {
+    const stored = await this.opts.usageStore?.read().catch(() => undefined);
+    return openWindows(stored, this.now());
+  }
+
+  async recordClaudeUsageFromStatusLine(stdin: string) {
+    const observed = usageFromStatusLine(stdin);
+    if (!observed) return { recorded: false, reason: "no-rate-limits", usage: await this.claudeUsage() } as const;
+    const usage = openWindows(observed, this.now());
+    const store = this.opts.usageStore;
+    if (!store) return { recorded: false, reason: "no-store", usage } as const;
+    try {
+      if (sameUsage(await store.read(), observed)) return { recorded: false, reason: "unchanged", usage } as const;
+      await store.write(observed);
+      return { recorded: true, usage } as const;
+    } catch {
+      return { recorded: false, reason: "store-unavailable", usage } as const;
+    }
   }
 
   private async siblingWorktreesOf(inspections: PathInspection[]) {

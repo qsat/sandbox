@@ -4,4 +4,7 @@ export * from "./domain/locate";
 export * from "./ports";
 export * from "./ws-core";
 export { GhqWorkspaceSource } from "./ghq-workspace-source";
+export * from "./domain/usage";
+export { HcClient } from "./herdr-core/hc-client";
 export { HerdrRuntime } from "./herdr-core/herdr-runtime";
+export { HerdrUsageStore } from "./herdr-core/herdr-usage-store";

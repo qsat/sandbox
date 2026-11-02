@@ -15,6 +15,7 @@ interface FakeTerminal {
 interface State {
   next: number;
   terminals: FakeTerminal[];
+  docs?: Record<string, { value: unknown; version: number }>;
   log: [string, unknown][];
 }
 
@@ -88,6 +89,14 @@ function handle(s: State, method: string, p: any): unknown {
       must(s, p.terminal);
       s.terminals = s.terminals.filter((t) => t.address !== p.terminal);
       return {};
+    case "doc.get":
+      return s.docs?.[p.name] ?? { value: null, version: 0 };
+    case "doc.set": {
+      const current = s.docs?.[p.name]?.version ?? 0;
+      if (p.version !== current) throw new RpcError(`version ${current}`, "conflict");
+      s.docs = { ...s.docs, [p.name]: { value: p.value, version: current + 1 } };
+      return { version: current + 1 };
+    }
     case "events.subscribe":
       return { seq: 0, terminals: s.terminals };
     default:

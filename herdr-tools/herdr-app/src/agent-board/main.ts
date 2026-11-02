@@ -2,7 +2,8 @@ import { View, div, svg, type AsyncContext, type Color, type Context, type Eleme
 import { closeOverlay, exec, openOverlay, props, setShared, shared, terminals, theme } from "herdr";
 import type { Tag } from "@herdr-tools/utils/tag";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { boardRows, keyActionFor, moveSelection, parseList, rowId, toggleCollapsed, WS, wsCommandFor, type BoardAction, type BoardRow, type LiveTerminal } from "./board";
+import { usageSegments } from "@herdr-tools/utils/usage-segments";
+import { boardRows, EMPTY_LIST, keyActionFor, moveSelection, parseList, rowId, toggleCollapsed, WS, wsCommandFor, type BoardAction, type BoardRow, type LiveTerminal } from "./board";
 
 const MOD_NAME = "agent-board";
 const LIST_REFRESH_MS = 4000;
@@ -13,6 +14,7 @@ const ROW_HEIGHT = 22;
 const REPOSITORY_SPACING = ROW_HEIGHT * 0.5;
 const REPOSITORY_COLOR: Color = "#b8ff3cb3";
 const BRANCH_COLOR: Color = "#fff03c80";
+const PIE_SIZE = 12;
 
 type Theme = Record<
   "foreground" | "muted" | "dim" | "accent" | "raised" | "hover" | "solid" | "solid_foreground" | "background" | "popover" | "blocked" | "unknown" | "ansi1",
@@ -64,6 +66,20 @@ function label(text: string, color: Color) {
   return div().text_color(color).child(text);
 }
 
+function pieColor(t: Theme, tone: Tag["tone"]) {
+  return { strong: t.blocked, muted: t.accent, danger: t.ansi1 }[tone];
+}
+
+function pie(usedPercentage: number, fill: Color, t: Theme) {
+  return div()
+    .flex_none()
+    .size(PIE_SIZE)
+    .rounded(PIE_SIZE / 2)
+    .border_1()
+    .border_color(t.dim)
+    .when(usedPercentage > 0, (el) => el.child(svg(`mods/agent-board/pie/${usedPercentage}.svg`).size(PIE_SIZE - 2).text_color(fill)));
+}
+
 function styled(el: Element, look: ButtonLook, t: Theme) {
   switch (look) {
     case "primary":
@@ -113,7 +129,7 @@ export default class AgentBoard extends View {
   selected!: string | null;
 
   init(_props: unknown, cx: AsyncContext) {
-    this.list = { workspaces: [] };
+    this.list = EMPTY_LIST;
     this.error = "";
     this.fetching = false;
     this.confirmRequest = (props()?.confirm as ConfirmRequest | undefined) ?? null;
@@ -317,6 +333,27 @@ export default class AgentBoard extends View {
     return true;
   }
 
+  renderUsage(t: Theme) {
+    const segments = usageSegments(this.list.usage, Math.floor(Date.now() / 1000));
+    return div()
+      .flex()
+      .gap(12)
+      .min_h(segments.length > 0 ? ROW_HEIGHT : 0)
+      .items_center()
+      .children(
+        segments.map((s, i) =>
+          div()
+            .id(`usage-${i}`)
+            .flex()
+            .items_center()
+            .gap(4)
+            .tooltip(`${s.windowName} ${s.used}% 使用`)
+            .child(pie(s.used, pieColor(t, s.tone), t))
+            .child(label(s.timeLeft, toneColor(t, s.tone))),
+        ),
+      );
+  }
+
   render() {
     const t = theme() as unknown as Theme;
     if (this.confirmRequest) return this.renderConfirmDialog(this.confirmRequest, t);
@@ -337,6 +374,7 @@ export default class AgentBoard extends View {
       .text_size(13)
       .text_color(t.foreground)
       .overflow_y_scrollbar()
+      .child(this.renderUsage(t))
       .when(rows.length === 0, (el) => el.child(label("エージェントもセッションもありません", t.muted)))
       .children(rows.map((r, i) => this.renderRow(r, t, i === 0, showSelection && rowId(r) === this.selected)))
       .when(this.error !== "", (el) => el.child(label(this.error, t.ansi1)));

@@ -1,7 +1,7 @@
 import { basename } from "@herdr-tools/utils/basename";
 import type { AgentRecord, AgentStatus } from "../domain/agent";
 import type { AgentRuntime, AgentStartSpec } from "../ports";
-import { HcClient } from "./hc-client";
+import type { HcClient } from "./hc-client";
 import type { HcTerminal } from "./hc-terminal";
 
 export const LABEL = { workspace: "ws", worktree: "wt", claudeSession: "claude.session" };
@@ -57,11 +57,12 @@ export function toAgentRecord(t: HcTerminal, claudeSessionLabel: string): AgentR
 }
 
 export class HerdrRuntime implements AgentRuntime {
-  private readonly hc: HcClient;
   private readonly claudeSessionLabel: string;
 
-  constructor(opts: { hcBin?: string; claudeSessionLabel?: string } = {}) {
-    this.hc = new HcClient(opts.hcBin);
+  constructor(
+    private readonly hc: HcClient,
+    opts: { claudeSessionLabel?: string } = {},
+  ) {
     this.claudeSessionLabel = opts.claudeSessionLabel ?? LABEL.claudeSession;
   }
 

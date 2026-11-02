@@ -15,6 +15,7 @@ const agent = (p: { id: string; name: string; status: "working" | "idle"; resuma
 });
 
 const tree: ListedTree = {
+  usage: {},
   workspaces: [
     {
       path: "/g/o/api",
@@ -125,7 +126,7 @@ describe("その他", () => {
     expect(toggleCollapsed(["a"], "a")).toEqual([]);
   });
   test("parseList は壊れた出力でも空の木", () => {
-    expect(parseList("oops")).toEqual({ workspaces: [] });
+    expect(parseList("oops")).toEqual({ workspaces: [], usage: {} });
   });
 });
 

@@ -59,7 +59,7 @@ describe("索引", () => {
     expect(idx.isAttached("t4")).toBe(false);
   });
   test("toListJson は tmux キーで添える（core の木は変えない）", () => {
-    const j = toListJson(tree, idx);
+    const j = toListJson(tree, idx, {});
     const wt = j.workspaces[0]!.worktrees[0]!;
     expect(wt.tmux.session).toEqual({ name: "api", attached: true });
     expect(wt.agents[0]!.tmux).toEqual({ attached: true, panes: ["%5"] });
