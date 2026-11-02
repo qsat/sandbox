@@ -1,23 +1,32 @@
-import { View, div, svg, type AsyncContext, type Color, type Context, type Element } from "gpui-kit";
-import { exec, setShared, shared, terminals, theme } from "herdr";
+import { View, div, svg, type AsyncContext, type Color, type Context, type Element, type FocusHandle } from "gpui-kit";
+import { closeOverlay, exec, openOverlay, props, setShared, shared, terminals, theme } from "herdr";
 import type { Tag } from "@herdr-tools/utils/tag";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
 import { boardRows, parseList, toggleCollapsed, WS, wsCommandFor, type BoardAction, type BoardRow, type LiveTerminal } from "./board";
 
+const MOD_NAME = "agent-board";
 const LIST_REFRESH_MS = 4000;
+const STOP_DIALOG_WIDTH = 340;
+const STOP_DIALOG_HEIGHT = 150;
 const COLLAPSED_KEY = "agent-board.collapsed";
 const ROW_HEIGHT = 22;
 const REPOSITORY_SPACING = ROW_HEIGHT * 0.5;
 const REPOSITORY_COLOR: Color = "#b8ff3cb3";
 
 type Theme = Record<
-  "foreground" | "muted" | "dim" | "accent" | "raised" | "hover" | "solid" | "solid_foreground" | "background" | "blocked" | "unknown" | "ansi1",
+  "foreground" | "muted" | "dim" | "accent" | "raised" | "hover" | "solid" | "solid_foreground" | "background" | "popover" | "blocked" | "unknown" | "ansi1",
   Color
 >;
 
 type AgentRow = Extract<BoardRow, { kind: "agent" }>;
 
-type ButtonLook = "secondary" | "primary" | "quiet" | "danger";
+type ButtonLook = "secondary" | "outline" | "primary" | "quiet" | "alert" | "danger";
+
+interface StopRequest {
+  key: string;
+  label: string;
+  alive: boolean;
+}
 
 interface ButtonSpec {
   id: string;
@@ -58,6 +67,10 @@ function styled(el: Element, look: ButtonLook, t: Theme) {
       return el.bg(t.raised).text_color(t.foreground).hover((s) => s.bg(t.hover));
     case "quiet":
       return el.text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.ansi1));
+    case "outline":
+      return el.text_size(11).border_1().border_color(t.dim).text_color(t.foreground).hover((s) => s.bg(t.hover));
+    case "alert":
+      return el.text_color(t.ansi1).hover((s) => s.bg(t.hover));
     case "danger":
       return el.bg(t.ansi1).text_color(t.background).hover((s) => s.opacity(0.88));
   }
@@ -89,11 +102,21 @@ export default class AgentBoard extends View {
   list!: ListedTree;
   error!: string;
   fetching!: boolean;
+  stopRequest!: StopRequest | null;
+  stopping!: boolean;
+  focus!: FocusHandle;
 
   init(_props: unknown, cx: AsyncContext) {
     this.list = { workspaces: [] };
     this.error = "";
     this.fetching = false;
+    this.stopRequest = (props()?.stop as StopRequest | undefined) ?? null;
+    this.stopping = false;
+    if (this.stopRequest) {
+      this.focus = cx.focus_handle();
+      this.focus.focus();
+      return;
+    }
     cx.timer.every(LIST_REFRESH_MS, (cx) => this.refresh(cx));
     this.refresh(cx);
   }
@@ -129,46 +152,12 @@ export default class AgentBoard extends View {
     }, { owner: this });
   }
 
-  confirmStop(row: AgentRow, t: Theme) {
-    const question = row.alive
-      ? { title: `${row.label} を停止しますか？`, body: "claude を終了し、一覧から消します。", icon: "square" as const, action: "停止する" }
-      : { title: `${row.label} を一覧から消しますか？`, body: "終了したエージェントの記録を herdr-core から消します。", icon: "x" as const, action: "消す" };
-    window.open_dialog(
-      () =>
-        div()
-          .flex()
-          .flex_col()
-          .gap(12)
-          .w(320)
-          .p(16)
-          .rounded(10)
-          .bg(t.background)
-          .text_size(13)
-          .text_color(t.foreground)
-          .child(div().font_semibold().child(question.title))
-          .child(label(question.body, t.muted))
-          .child(
-            div()
-              .flex()
-              .justify_end()
-              .gap(8)
-              .child(button({ id: "stop-dialog:cancel", text: "キャンセル", tooltip: "何もせずに閉じる", look: "secondary" }, t, () => window.close_dialog()))
-              .child(
-                button({ id: "stop-dialog:confirm", icon: question.icon, text: question.action, tooltip: question.body, look: "danger" }, t, (cx) => {
-                  window.close_dialog();
-                  this.runRow(row, "stop", cx);
-                }),
-              ),
-          ),
-      { escape_dismissable: true, backdrop_dismissable: true },
-    );
-  }
-
   stopButton(row: AgentRow, t: Theme) {
     const spec: ButtonSpec = row.alive
-      ? { id: `stop:${row.key}`, icon: "square", text: "停止", tooltip: "claude を終了し、一覧から消す", look: "quiet" }
-      : { id: `stop:${row.key}`, icon: "x", text: "消す", tooltip: "終了したエージェントを一覧から消す", look: "quiet" };
-    return button(spec, t, () => this.confirmStop(row, t));
+      ? { id: `stop:${row.key}`, icon: "square", text: "停止", tooltip: "claude を終了し、一覧から消す", look: "alert" }
+      : { id: `stop:${row.key}`, icon: "x", text: "削除", tooltip: "終了したエージェントを一覧から削除する", look: "quiet" };
+    const request: StopRequest = { key: row.key, label: row.label, alive: row.alive };
+    return button(spec, t, () => openOverlay({ mod: MOD_NAME, kind: "dialog", width: STOP_DIALOG_WIDTH, height: STOP_DIALOG_HEIGHT, props: { stop: request } }));
   }
 
   tags(tags: Tag[], t: Theme) {
@@ -196,7 +185,7 @@ export default class AgentBoard extends View {
           .child(this.info([div().when(row.isMain, (el) => el.font_semibold()).child(row.label), this.tags(row.tags, t)]))
           .when(row.exists, (el) =>
             el.child(
-              button({ id: `new:${row.key}`, icon: "plus", text: "claude", tooltip: "この worktree で claude を起動する", look: "secondary" }, t, (cx) =>
+              button({ id: `new:${row.key}`, icon: "plus", text: "claude", tooltip: "この worktree で claude を起動する", look: "outline" }, t, (cx) =>
                 this.runRow(row, "new", cx),
               ),
             ),
@@ -219,8 +208,62 @@ export default class AgentBoard extends View {
     }
   }
 
+  confirmStop(request: StopRequest, cx: Context) {
+    if (this.stopping) return;
+    this.stopping = true;
+    this.error = "";
+    cx.notify();
+    cx.spawn(
+      async (cx) => {
+        const r = await exec(WS, ["stop", request.key]).catch((e: Error) => ({ code: 1, stdout: "", stderr: String(e?.message ?? e) }));
+        if (r.code === 0) return closeOverlay(props().overlay);
+        this.stopping = false;
+        this.error = r.stderr.trim() || r.stdout.trim();
+        cx.notify();
+      },
+      { owner: this },
+    );
+  }
+
+  renderStopDialog(request: StopRequest, t: Theme) {
+    const question = request.alive
+      ? { title: `${request.label} を停止しますか？`, body: "claude を終了し、一覧から消します。", icon: "square" as const, action: "停止する" }
+      : { title: `${request.label} を削除しますか？`, body: "終了したエージェントを herdr-core の一覧から削除します。", icon: "x" as const, action: "削除する" };
+    const large = (el: Element) => el.h(28).px(12);
+    return div()
+      .id("agent-board-stop")
+      .track_focus(this.focus)
+      .on_key_down((e, cx) => {
+        if (e.key === "enter") this.confirmStop(request, cx);
+        else if (e.key === "escape") closeOverlay(props().overlay);
+        else return;
+        cx.stop_propagation();
+      })
+      .size_full()
+      .flex()
+      .flex_col()
+      .gap(12)
+      .p(18)
+      .bg(t.popover)
+      .text_size(13)
+      .text_color(t.foreground)
+      .child(div().text_size(15).font_semibold().child(question.title))
+      .child(div().flex_1().text_color(this.error ? t.ansi1 : t.muted).child(this.error || (this.stopping ? "止めています…" : question.body)))
+      .child(
+        div()
+          .flex()
+          .justify_end()
+          .gap(8)
+          .child(large(button({ id: "stop-dialog:cancel", text: "キャンセル", tooltip: "Esc", look: "secondary" }, t, () => closeOverlay(props().overlay))))
+          .child(
+            large(button({ id: "stop-dialog:confirm", icon: question.icon, text: question.action, tooltip: "Enter", look: "danger" }, t, (cx) => this.confirmStop(request, cx))),
+          ),
+      );
+  }
+
   render() {
     const t = theme() as unknown as Theme;
+    if (this.stopRequest) return this.renderStopDialog(this.stopRequest, t);
     const rows = boardRows(this.list, liveTerminals(), collapsedState());
     return div()
       .id("agent-board")
