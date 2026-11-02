@@ -55,8 +55,6 @@ export class TmuxNavigator {
     switch (step.op) {
       case "newSession":
         return this.tmux.newSession(step.name, step.cwd);
-      case "resumeIfNeeded":
-        return this.core.resumeIfNeeded(step.agentId);
       case "selectPane":
         return this.tmux.selectPane(step.paneId);
       case "openAgentPane":
@@ -81,7 +79,6 @@ export class TmuxNavigator {
 
     const plan = planPanes(wt, view.idx, opts);
     for (const a of plan.open) {
-      await this.core.resumeIfNeeded(a.id);
       await this.tmux.openAgentPane(pane.session, AGENTS_WINDOW, workingDir(wt, this.cwdWhenMissing), a.id, this.core.attachCommand(a.id));
     }
     return { opened: plan.open.length, overLimit: plan.overLimit.length, alreadyOpen: wt.agents.filter((a) => view.idx.isAttached(a.id)).length };

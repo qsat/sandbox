@@ -14,7 +14,8 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
                                                    移動。ref は worktree のパスかエージェントの id／名前
   ws new [<worktree>] [--attach] [--client <name> | --from-app] [-- <claude の引数>]
                                                    エージェント起動
-  ws resume <agent>                                要再開なら claude --resume <id> を送る（何度呼んでも安全）
+  ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
+  ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す
   ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる
   ws ui [--client <name>]                          tmux popup 用の対話一覧
   ws hook session-start                            Claude Code の SessionStart hook
@@ -109,9 +110,16 @@ async function main(argv: string[]) {
     case "resume": {
       const ref = p.positional[0];
       if (!ref) throw new Error("ws resume <agent>");
-      const r = await core.resumeIfNeeded(ref);
+      const r = await core.resume(ref);
       process.stdout.write(r.resumed ? `resumed ${ref} (${r.claudeSessionId})\n` : `skip ${ref}: ${r.reason}\n`);
       return r.resumed || r.reason !== "not-found" ? 0 : 1;
+    }
+    case "stop": {
+      const ref = p.positional[0];
+      if (!ref) throw new Error("ws stop <agent>");
+      const r = await core.stopAgent(ref);
+      process.stdout.write(r.stopped ? `stopped ${ref}\n` : `skip ${ref}: ${r.reason}\n`);
+      return r.stopped ? 0 : 1;
     }
     case "panes": {
       const pane = str(p, "--pane") ?? process.env.TMUX_PANE;

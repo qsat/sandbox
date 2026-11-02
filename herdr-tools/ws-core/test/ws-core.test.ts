@@ -5,12 +5,23 @@ class InMemoryRuntime implements AgentRuntime {
   agents: AgentRecord[] = [];
   sent: [string, string][] = [];
   started: AgentStartSpec[] = [];
+  getsUntilKilledAgentFinishes = 0;
+  private finishing = new Map<string, number>();
   async list() {
     return this.agents.map((a) => ({ ...a }));
   }
   async get(id: string) {
+    const left = this.finishing.get(id);
+    if (left !== undefined) {
+      if (left <= 1) this.finish(id);
+      else this.finishing.set(id, left - 1);
+    }
     const a = this.agents.find((x) => x.id === id);
     return a ? { ...a } : undefined;
+  }
+  private finish(id: string) {
+    this.finishing.delete(id);
+    this.agents.find((a) => a.id === id)!.alive = false;
   }
   async start(spec: AgentStartSpec) {
     this.started.push(spec);
@@ -26,9 +37,11 @@ class InMemoryRuntime implements AgentRuntime {
     this.agents.find((a) => a.id === id)!.programLost = false;
   }
   async stop(id: string) {
-    this.agents.find((a) => a.id === id)!.alive = false;
+    if (this.getsUntilKilledAgentFinishes === 0) this.finish(id);
+    else this.finishing.set(id, this.getsUntilKilledAgentFinishes);
   }
   async remove(id: string) {
+    if (this.agents.find((a) => a.id === id)?.alive) throw new Error(`${id} is still running`);
     this.agents = this.agents.filter((a) => a.id !== id);
   }
   agentIdOfCurrentProcess(env: Record<string, string | undefined>) {
@@ -94,18 +107,18 @@ describe("WsCore", () => {
     expect(rt.agents[0]!.claudeSessionId).toBe("s1");
   });
 
-  test("resume は要再開のときだけ送り、2回目は何もしない", async () => {
+  test("resume は再開できるときだけ送り、2回目は何もしない", async () => {
     const rt = new InMemoryRuntime();
     const core = new WsCore(rt, source(), { resumeWaitMs: 500 });
     await core.startAgent(WT);
-    expect(await core.resumeIfNeeded("a1")).toEqual({ resumed: false, reason: "no-session-id" });
+    expect(await core.resume("a1")).toEqual({ resumed: false, reason: "no-session-id" });
     rt.agents[0]!.claudeSessionId = "s'1";
-    expect(await core.resumeIfNeeded("a1")).toEqual({ resumed: false, reason: "running" });
+    expect(await core.resume("a1")).toEqual({ resumed: false, reason: "running" });
     rt.agents[0]!.programLost = true;
-    expect(await core.resumeIfNeeded("a1")).toEqual({ resumed: true, claudeSessionId: "s'1" });
+    expect(await core.resume("a1")).toEqual({ resumed: true, claudeSessionId: "s'1" });
     expect(rt.sent).toEqual([["a1", `claude --resume 's'\\''1'`]]);
-    expect(await core.resumeIfNeeded("a1")).toEqual({ resumed: false, reason: "running" });
-    expect(await core.resumeIfNeeded("zz")).toEqual({ resumed: false, reason: "not-found" });
+    expect(await core.resume("a1")).toEqual({ resumed: false, reason: "running" });
+    expect(await core.resume("zz")).toEqual({ resumed: false, reason: "not-found" });
   });
 
   test("prune は場所が消えた worktree のエージェントを止めて消す", async () => {
@@ -116,5 +129,39 @@ describe("WsCore", () => {
     expect(plan.map((a) => a.id)).toEqual(["x"]);
     await core.removeAgents(plan);
     expect(rt.agents).toEqual([]);
+  });
+
+  test("prune は終了に時間がかかるエージェントも、終了を待ってから消す", async () => {
+    const rt = new InMemoryRuntime();
+    rt.getsUntilKilledAgentFinishes = 3;
+    rt.agents.push({ id: "x", name: "x", cwd: "/", status: "idle", alive: true, parent: null, recordedWorktree: "/g/o/api=gone" });
+    const core = new WsCore(rt, source());
+    await core.removeAgents(agentsInMissingWorktrees((await core.snapshot()).tree));
+    expect(rt.agents).toEqual([]);
+  });
+});
+
+describe("WsCore.stopAgent（ws stop: エージェントを止めて一覧から消す）", () => {
+  test("動いているエージェントは、終了を待ってから消す", async () => {
+    const rt = new InMemoryRuntime();
+    rt.getsUntilKilledAgentFinishes = 3;
+    const core = new WsCore(rt, source());
+    await core.startAgent(WT);
+    expect(await core.stopAgent("a1")).toEqual({ stopped: true });
+    expect(rt.agents).toEqual([]);
+  });
+
+  test("終了済みのエージェントは、そのまま消す", async () => {
+    const rt = new InMemoryRuntime();
+    const core = new WsCore(rt, source());
+    await core.startAgent(WT);
+    rt.agents[0]!.alive = false;
+    expect(await core.stopAgent("a1")).toEqual({ stopped: true });
+    expect(rt.agents).toEqual([]);
+  });
+
+  test("エージェントの一覧に無いもの（手で開いたシェルなど）は触らない", async () => {
+    const core = new WsCore(new InMemoryRuntime(), source());
+    expect(await core.stopAgent("t1")).toEqual({ stopped: false, reason: "not-found" });
   });
 });

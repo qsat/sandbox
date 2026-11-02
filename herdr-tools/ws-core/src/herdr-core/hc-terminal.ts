@@ -6,5 +6,6 @@ export interface HcTerminal {
   parent: string | null;
   state: "live" | "finished";
   status: { state: string; kind?: string | null; msg?: string } | null;
+  reported?: boolean;
   foreground: { name: string } | null;
 }

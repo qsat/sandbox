@@ -93,24 +93,21 @@ describe("planGo（判断フローの全分岐）", () => {
       { op: "switchClient", client: "c1", target: "api=feat-auth" },
     ]);
   });
-  test("agent・会話ペインあり → 準備（再開の判定）してからそのペインを選ぶ", () => {
+  test("agent・会話ペインあり → そのペインを選ぶ", () => {
     expect(planGo(r("t1"), idx, ctx)).toEqual([
-      { op: "resumeIfNeeded", agentId: "t1" },
       { op: "selectPane", paneId: "%5" },
       { op: "switchClient", client: "c1", target: "%5" },
     ]);
   });
-  test("agent・会話ペイン無し → agents ウィンドウに作る（要再開かどうかに関わらず準備は毎回）", () => {
+  test("agent・会話ペイン無し → agents ウィンドウに作る", () => {
     expect(planGo(r("t2"), idx, ctx)).toEqual([
       { op: "newSession", name: "api=feat-auth", cwd: FEAT },
-      { op: "resumeIfNeeded", agentId: "t2" },
       { op: "openAgentPane", session: "api=feat-auth", window: "agents", cwd: FEAT, agentId: "t2" },
       { op: "switchClient", client: "c1", target: "api=feat-auth:agents" },
     ]);
   });
-  test("agent・要再開 → 準備（再開）してから。場所消失なら cwdWhenMissing", () => {
+  test("agent・再開できる → 移動だけで勝手に再開しない（再開は ws resume・ボタン・R）。場所消失なら cwdWhenMissing", () => {
     expect(planGo(r("t3"), idx, ctx)).toEqual([
-      { op: "resumeIfNeeded", agentId: "t3" },
       { op: "openAgentPane", session: "api=gone", window: "agents", cwd: "/Users/me", agentId: "t3" },
       { op: "switchClient", client: "c1", target: "api=gone:agents" },
     ]);

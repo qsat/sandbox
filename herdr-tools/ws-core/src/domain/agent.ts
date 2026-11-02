@@ -16,17 +16,17 @@ export interface AgentRecord {
 }
 
 export type AgentNode = Omit<AgentRecord, "recordedWorkspace" | "recordedWorktree" | "programLost"> & {
-  needsResume: boolean;
+  resumable: boolean;
   missingLocation: boolean;
 };
 
-export function needsResume(a: AgentRecord) {
+export function resumable(a: AgentRecord) {
   return a.alive && a.programLost === true && !!a.claudeSessionId;
 }
 
 export function toAgentNode(a: AgentRecord, worktreeExists: boolean): AgentNode {
   const { recordedWorkspace: _ws, recordedWorktree, programLost: _lost, ...rest } = a;
-  return { ...rest, needsResume: needsResume(a), missingLocation: !!recordedWorktree && !worktreeExists };
+  return { ...rest, resumable: resumable(a), missingLocation: !!recordedWorktree && !worktreeExists };
 }
 
 export function agentLocation(a: AgentRecord) {
@@ -35,9 +35,7 @@ export function agentLocation(a: AgentRecord) {
 
 const ATTENTION_ORDER: AgentStatus[] = ["blocked", "error", "idle", "working", "done", "unknown"];
 
-export function attentionRank(a: { status: AgentStatus; needsResume: boolean }) {
-  if (a.status === "blocked") return 0;
-  if (a.needsResume) return 0.5;
+export function attentionRank(a: { status: AgentStatus }) {
   return ATTENTION_ORDER.indexOf(a.status);
 }
 

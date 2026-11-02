@@ -31,6 +31,13 @@ export function uniqueTerminalName(repo: string, branch: string | null | undefin
   }
 }
 
+export function isAgentTerminal(t: HcTerminal, claudeSessionLabel: string) {
+  const reportsStatus = t.reported === true || t.status !== null;
+  const startedByWs = !!(t.labels[LABEL.workspace] || t.labels[LABEL.worktree]);
+  const hasClaudeSession = !!t.labels[claudeSessionLabel];
+  return reportsStatus || startedByWs || hasClaudeSession;
+}
+
 export function toAgentRecord(t: HcTerminal, claudeSessionLabel: string): AgentRecord {
   const state = t.status?.state;
   return {
@@ -59,7 +66,9 @@ export class HerdrRuntime implements AgentRuntime {
   }
 
   async list() {
-    return (await this.hc.listIncludingFinished()).map((t) => toAgentRecord(t, this.claudeSessionLabel));
+    return (await this.hc.listIncludingFinished())
+      .filter((t) => isAgentTerminal(t, this.claudeSessionLabel))
+      .map((t) => toAgentRecord(t, this.claudeSessionLabel));
   }
 
   async get(id: string) {

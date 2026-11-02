@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { HcTerminal } from "../../src/herdr-core/hc-terminal";
-import { isShell, toAgentRecord, uniqueTerminalName } from "../../src/herdr-core/herdr-runtime";
+import { isAgentTerminal, isShell, toAgentRecord, uniqueTerminalName } from "../../src/herdr-core/herdr-runtime";
 
 describe("端末名（core の規則: 英小文字・数字・-・_ の1〜32文字）", () => {
   test("<repo>-<branch> を slug 化（= や大文字・/ は使えない）", () => {
@@ -53,5 +53,34 @@ describe("toAgentRecord（herdr-core の言葉 → ドメインの言葉）", ()
   test("isShell", () => {
     expect(isShell("/bin/bash")).toBe(true);
     expect(isShell("node")).toBe(false);
+  });
+});
+
+describe("isAgentTerminal（herdr-core の端末のうち、エージェントとして一覧に出すもの）", () => {
+  const L = "claude.session";
+  const plainShell: HcTerminal = {
+    address: "t1",
+    name: null,
+    cwd: "/Users/me",
+    labels: { "herdr.space": "sp1", "herdr.tab": "tb1", where: "~ / 1" },
+    parent: null,
+    state: "live",
+    status: null,
+    reported: false,
+    foreground: { name: "zsh" },
+  };
+  test("Herdr app で開いただけのシェルは出さない", () => {
+    expect(isAgentTerminal(plainShell, L)).toBe(false);
+  });
+  test("状態を報告したことがあれば出す（いま status が無くても）", () => {
+    expect(isAgentTerminal({ ...plainShell, reported: true }, L)).toBe(true);
+    expect(isAgentTerminal({ ...plainShell, status: { state: "working" } }, L)).toBe(true);
+  });
+  test("ws new が起動した端末は、claude が落ちてシェルに戻っても出す（再開の対象）", () => {
+    expect(isAgentTerminal({ ...plainShell, labels: { ws: "/repo", wt: "/repo=feat" } }, L)).toBe(true);
+  });
+  test("SessionStart hook が会話IDを記録した端末は出す", () => {
+    expect(isAgentTerminal({ ...plainShell, labels: { [L]: "abc" } }, L)).toBe(true);
+    expect(isAgentTerminal({ ...plainShell, labels: { [L]: "abc" } }, "claude_sid")).toBe(false);
   });
 });

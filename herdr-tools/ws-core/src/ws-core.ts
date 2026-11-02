@@ -1,6 +1,6 @@
 import { basename } from "@herdr-tools/utils/basename";
 import { claudeResumeCommand, sessionIdFromSessionStartHook } from "./claude-code";
-import { needsResume, type AgentNode } from "./domain/agent";
+import { resumable, type AgentNode } from "./domain/agent";
 import { makeLocator } from "./domain/locate";
 import { buildTree, mainRepositoryOf, pathsToInspect } from "./domain/tree";
 import type { AgentRuntime, WorkspaceSource } from "./ports";
@@ -9,6 +9,7 @@ interface WsCoreOptions {
   home?: string;
   claudeBin?: string;
   resumeWaitMs?: number;
+  stopWaitMs?: number;
 }
 
 export class WsCore {
@@ -39,10 +40,10 @@ export class WsCore {
     return this.runtime.subscribe(onChange);
   }
 
-  async resumeIfNeeded(id: string) {
+  async resume(id: string) {
     const a = await this.runtime.get(id);
     if (!a) return { resumed: false, reason: "not-found" } as const;
-    if (!needsResume(a)) {
+    if (!resumable(a)) {
       if (!a.alive) return { resumed: false, reason: "finished" } as const;
       if (!a.claudeSessionId) return { resumed: false, reason: "no-session-id" } as const;
       return { resumed: false, reason: "running" } as const;
@@ -77,10 +78,30 @@ export class WsCore {
     return { recorded: true } as const;
   }
 
+  async stopAgent(id: string) {
+    const agent = (await this.runtime.list()).find((a) => a.id === id);
+    if (!agent) return { stopped: false, reason: "not-found" } as const;
+    await this.stopAndRemove(agent);
+    return { stopped: true } as const;
+  }
+
   async removeAgents(agents: AgentNode[]) {
-    for (const a of agents) {
-      if (a.alive) await this.runtime.stop(a.id).catch(() => {});
-      await this.runtime.remove(a.id).catch(() => {});
+    for (const a of agents) await this.stopAndRemove(a).catch(() => {});
+  }
+
+  private async stopAndRemove(agent: { id: string; alive: boolean }) {
+    if (agent.alive) {
+      await this.runtime.stop(agent.id);
+      await this.waitUntilFinished(agent.id);
+    }
+    await this.runtime.remove(agent.id);
+  }
+
+  private async waitUntilFinished(id: string) {
+    const deadline = Date.now() + (this.opts.stopWaitMs ?? 3000);
+    while (Date.now() < deadline) {
+      if ((await this.runtime.get(id))?.alive !== true) return;
+      await Bun.sleep(100);
     }
   }
 }

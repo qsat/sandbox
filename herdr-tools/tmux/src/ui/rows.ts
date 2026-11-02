@@ -10,7 +10,10 @@ import type { TmuxIndex } from "../tmux-index";
 interface RowOptions {
   attentionFirst: boolean;
   color: boolean;
+  keyHints?: boolean;
 }
+
+const RESUME_HINT = "R で再開";
 
 const STATUS_COLOR: Record<string, string> = { blocked: "\x1b[33m", error: "\x1b[31m", idle: "\x1b[36m", working: "\x1b[32m" };
 const TONE: Record<Tag["tone"], string> = { strong: "\x1b[1m", muted: "\x1b[2m", danger: "\x1b[31m" };
@@ -30,9 +33,10 @@ function rankOfWorktree(wt: WorktreeNode) {
   return Math.min(99, ...wt.agents.map(attentionRank));
 }
 
-export function agentLabel(a: AgentNode, idx: TmuxIndex, color: boolean) {
+export function agentLabel(a: AgentNode, idx: TmuxIndex, color: boolean, keyHints = false) {
   const sc = STATUS_COLOR[a.status] ?? GRAY;
-  const tags = tagsText(agentTags(a, idx.isAttached(a.id)), color);
+  const hints: Tag[] = keyHints && a.resumable ? [{ text: RESUME_HINT, tone: "muted" }] : [];
+  const tags = tagsText([...agentTags(a, idx.isAttached(a.id)), ...hints], color);
   return `${paint(color, sc, statusIcon(a.status))} ${a.id.padEnd(4)} ${a.name}  ${paint(color, sc, statusLabel(a))}${tags ? "  " + tags : ""}`;
 }
 
@@ -48,7 +52,7 @@ export function toRows(tree: Tree, idx: TmuxIndex, opts: RowOptions) {
     { kind: "workspace" as const, depth: 0, text: paint(opts.color, BOLD, ws.name) },
     ...sorted(ws.worktrees, (a, b) => rankOfWorktree(a) - rankOfWorktree(b) || Number(b.isMain) - Number(a.isMain) || a.path.localeCompare(b.path)).flatMap((wt) => [
       { kind: "worktree" as const, depth: 1, ref: wt.path, worktree: wt, text: worktreeLabel(wt, idx, opts.color) },
-      ...sorted(wt.agents, byAttention).map((a) => ({ kind: "agent" as const, depth: 2, ref: a.id, agent: a, worktree: wt, text: agentLabel(a, idx, opts.color) })),
+      ...sorted(wt.agents, byAttention).map((a) => ({ kind: "agent" as const, depth: 2, ref: a.id, agent: a, worktree: wt, text: agentLabel(a, idx, opts.color, opts.keyHints) })),
     ]),
   ]);
 }

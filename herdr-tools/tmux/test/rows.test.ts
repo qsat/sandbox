@@ -39,6 +39,15 @@ describe("toRows", () => {
     expect(keepSelectionOn(rows, "t1")).toBe(6);
     expect(keepSelectionOn(rows, "gone")).toBe(1);
   });
+
+  test("再開できるエージェントは、popup にだけ「R で再開」を添える（ws list の出力には出さない）", () => {
+    const lost = { ...t("t4", A, "unknown"), claudeSessionId: "s", programLost: true };
+    const withLost = buildTree({ agents: [lost], inspections: infos, alwaysShow: [], ghqRoot: "/g" });
+    const lostIdx = indexTmux(makeLocator(withLost, infos), { sessions: [], panes: [] });
+    const popupRow = toRows(withLost, lostIdx, { attentionFirst: true, color: false, keyHints: true }).find((r) => r.kind === "agent")!;
+    expect(popupRow.text).toContain("R で再開");
+    expect(renderText(withLost, lostIdx, false)).not.toContain("R で再開");
+  });
 });
 
 describe("splitKeys", () => {

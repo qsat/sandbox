@@ -6,7 +6,6 @@ export const AGENTS_WINDOW = "agents";
 
 export type Step =
   | { op: "newSession"; name: string; cwd: string }
-  | { op: "resumeIfNeeded"; agentId: string }
   | { op: "selectPane"; paneId: string }
   | { op: "openAgentPane"; session: string; window: string; cwd: string; agentId: string }
   | { op: "switchClient"; client: string; target: string }
@@ -55,10 +54,9 @@ function ensureSession(wt: WorktreeNode, idx: TmuxIndex, cwd: string): { name: s
 }
 
 function enterConversation(agent: AgentNode, session: string, cwd: string, idx: TmuxIndex): { target: string; steps: Step[] } {
-  const resume: Step = { op: "resumeIfNeeded", agentId: agent.id };
   const pane = idx.panesOf(agent.id)[0];
-  if (pane) return { target: pane.paneId, steps: [resume, { op: "selectPane", paneId: pane.paneId }] };
-  return { target: `${session}:${AGENTS_WINDOW}`, steps: [resume, { op: "openAgentPane", session, window: AGENTS_WINDOW, cwd, agentId: agent.id }] };
+  if (pane) return { target: pane.paneId, steps: [{ op: "selectPane", paneId: pane.paneId }] };
+  return { target: `${session}:${AGENTS_WINDOW}`, steps: [{ op: "openAgentPane", session, window: AGENTS_WINDOW, cwd, agentId: agent.id }] };
 }
 
 function bringClientTo(target: string, ctx: GoContext): Step[] {

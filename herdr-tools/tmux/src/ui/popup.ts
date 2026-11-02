@@ -48,7 +48,7 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
     try {
       const current = rows[sel];
       const view = await nav.view({ allEntries: all });
-      rows = toRows(view.snap.tree, view.idx, { attentionFirst: true, color: true });
+      rows = toRows(view.snap.tree, view.idx, { attentionFirst: true, color: true, keyHints: true });
       sel = keepSelectionOn(rows, current && current.kind !== "workspace" ? current.ref : undefined);
     } catch (e) {
       message = `読み込み失敗: ${(e as Error).message}`;
@@ -159,7 +159,7 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
         case "R":
           if (!r || r.kind !== "agent") return;
           return void act(async () => {
-            const res = await nav.core.resumeIfNeeded(r.agent.id);
+            const res = await nav.core.resume(r.agent.id);
             return res.resumed ? `再開しました: ${r.agent.id}` : `再開不要: ${res.reason}`;
           }, false);
       }

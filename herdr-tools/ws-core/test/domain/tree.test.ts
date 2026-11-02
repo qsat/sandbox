@@ -3,7 +3,7 @@ import {
   buildTree,
   pathsToInspect,
   makeLocator,
-  needsResume,
+  resumable,
   agentsInMissingWorktrees,
   resolveRef,
   type AgentRecord,
@@ -38,13 +38,13 @@ const GHQ_ENTRIES = [API, FEAT, WEB];
 const tree = (opts: { allEntries?: boolean; alwaysShow?: string[] } = {}) =>
   buildTree({ agents, inspections: infos, alwaysShow: [...(opts.alwaysShow ?? []), ...(opts.allEntries ? GHQ_ENTRIES : [])], ghqRoot: "/Users/me/ghq", home: "/Users/me" });
 
-describe("要再開", () => {
+describe("再開できる（claude --resume を打ち込める）", () => {
   const base = agent({ id: "t1", claudeSessionId: "abc", programLost: true });
-  test("生きている・プログラムを失った・会話IDあり", () => expect(needsResume(base)).toBe(true));
-  test("プログラムが動いていれば不要", () => expect(needsResume({ ...base, programLost: false })).toBe(false));
-  test("分からなければ不要", () => expect(needsResume({ ...base, programLost: undefined })).toBe(false));
-  test("会話IDが無ければ不要", () => expect(needsResume({ ...base, claudeSessionId: undefined })).toBe(false));
-  test("終了済みは不要", () => expect(needsResume({ ...base, alive: false })).toBe(false));
+  test("生きている・claude が前面にいない・会話IDあり", () => expect(resumable(base)).toBe(true));
+  test("claude が動いていれば再開しない", () => expect(resumable({ ...base, programLost: false })).toBe(false));
+  test("前面が分からなければ再開しない", () => expect(resumable({ ...base, programLost: undefined })).toBe(false));
+  test("会話IDが無ければ再開できない", () => expect(resumable({ ...base, claudeSessionId: undefined })).toBe(false));
+  test("端末が終了していれば打ち込む先が無い", () => expect(resumable({ ...base, alive: false })).toBe(false));
 });
 
 describe("buildTree", () => {
@@ -67,10 +67,10 @@ describe("buildTree", () => {
     expect(feat.agents.map((a) => a.id).sort()).toEqual([unrecordedInSubdirOfFeat.id, childOfT2.id]);
   });
 
-  test("場所消失と要再開を導く", () => {
+  test("場所消失と、再開できることを導く", () => {
     const gone = tree().workspaces[0]!.worktrees[2]!;
     expect(gone.exists).toBe(false);
-    expect(gone.agents[0]).toMatchObject({ id: lostInDeletedWorktree.id, missingLocation: true, needsResume: true });
+    expect(gone.agents[0]).toMatchObject({ id: lostInDeletedWorktree.id, missingLocation: true, resumable: true });
   });
 
   test("alwaysShow はエージェントがいなくても出す（クライアントのセッションの場所など）", () => {
