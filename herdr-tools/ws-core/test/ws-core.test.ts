@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { agentsInMissingWorktrees, WsCore, type AgentRecord, type AgentRuntime, type AgentStartSpec, type PathInspection, type WorkspaceSource } from "../src";
+import { agentsInMissingWorktrees, WsCore, type AgentRecord, type AgentRuntime, type AgentStartSpec, type ClaudeUsage, type PathInspection, type UsageStore, type WorkspaceSource } from "../src";
 
 class InMemoryRuntime implements AgentRuntime {
   agents: AgentRecord[] = [];
@@ -175,5 +175,59 @@ describe("WsCore.stopAgent（ws stop: エージェントを止めて一覧から
   test("エージェントの一覧に無いもの（手で開いたシェルなど）は触らない", async () => {
     const core = new WsCore(new InMemoryRuntime(), source());
     expect(await core.stopAgent("t1")).toEqual({ stopped: false, reason: "not-found" });
+  });
+});
+
+class InMemoryUsageStore implements UsageStore {
+  stored?: ClaudeUsage;
+  writes = 0;
+  async read() {
+    return this.stored;
+  }
+  async write(usage: ClaudeUsage) {
+    this.stored = usage;
+    this.writes++;
+  }
+}
+
+describe("WsCore の利用上限（statusLine で記録し、snapshot で読む）", () => {
+  const NOW = 1_800_000_000;
+  const statusLine = (used5h: number) =>
+    JSON.stringify({ rate_limits: { five_hour: { used_percentage: used5h, resets_at: NOW + 3600 }, seven_day: { used_percentage: 40, resets_at: NOW + 86400 } } });
+  const coreWith = (store: InMemoryUsageStore) => new WsCore(new InMemoryRuntime(), source(), { usageStore: store, nowEpochSec: () => NOW });
+
+  test("記録した利用量が snapshot に出る", async () => {
+    const store = new InMemoryUsageStore();
+    const core = coreWith(store);
+    expect(await core.recordClaudeUsageFromStatusLine(statusLine(20))).toMatchObject({ recorded: true });
+    expect((await core.snapshot()).usage).toEqual({ fiveHour: { usedPercentage: 20, resetsAtEpochSec: NOW + 3600 }, sevenDay: { usedPercentage: 40, resetsAtEpochSec: NOW + 86400 } });
+  });
+
+  test("同じ値なら書かない（statusLine は頻繁に走るので、変化のたびだけ通知する）", async () => {
+    const store = new InMemoryUsageStore();
+    const core = coreWith(store);
+    await core.recordClaudeUsageFromStatusLine(statusLine(20));
+    expect(await core.recordClaudeUsageFromStatusLine(statusLine(20))).toMatchObject({ recorded: false, reason: "unchanged" });
+    await core.recordClaudeUsageFromStatusLine(statusLine(21));
+    expect(store.writes).toBe(2);
+  });
+
+  test("rate_limits が無ければ記録せず、前に記録した値を返す", async () => {
+    const store = new InMemoryUsageStore();
+    const core = coreWith(store);
+    await core.recordClaudeUsageFromStatusLine(statusLine(20));
+    expect(await core.recordClaudeUsageFromStatusLine("{}")).toMatchObject({ recorded: false, reason: "no-rate-limits", usage: { fiveHour: { usedPercentage: 20 } } });
+  });
+
+  test("リセット時刻を過ぎた枠は出さない", async () => {
+    const store = new InMemoryUsageStore();
+    store.stored = { fiveHour: { usedPercentage: 90, resetsAtEpochSec: NOW - 1 }, sevenDay: { usedPercentage: 40, resetsAtEpochSec: NOW + 10 } };
+    expect((await coreWith(store).snapshot()).usage).toEqual({ sevenDay: { usedPercentage: 40, resetsAtEpochSec: NOW + 10 } });
+  });
+
+  test("保存先に繋がらなくても、受け取った値は返す（statusLine の表示を止めない）", async () => {
+    const unavailable: UsageStore = { read: () => Promise.reject(new Error("hc connect closed")), write: () => Promise.reject(new Error("x")) };
+    const core = new WsCore(new InMemoryRuntime(), source(), { usageStore: unavailable, nowEpochSec: () => NOW });
+    expect(await core.recordClaudeUsageFromStatusLine(statusLine(20))).toMatchObject({ recorded: false, reason: "store-unavailable", usage: { fiveHour: { usedPercentage: 20 } } });
   });
 });

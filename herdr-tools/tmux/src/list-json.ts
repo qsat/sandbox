@@ -1,8 +1,10 @@
 import type { Tree } from "@herdr-tools/ws-core/domain/tree";
+import type { ClaudeUsage } from "@herdr-tools/ws-core/domain/usage";
 import type { TmuxIndex } from "./tmux-index";
 
-export function toListJson(tree: Tree, idx: TmuxIndex) {
+export function toListJson(tree: Tree, idx: TmuxIndex, usage: ClaudeUsage) {
   return {
+    usage,
     workspaces: tree.workspaces.map((ws) => ({
       ...ws,
       worktrees: ws.worktrees.map((wt) => {

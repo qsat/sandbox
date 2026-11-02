@@ -2,7 +2,8 @@ import { View, div, svg, type AsyncContext, type Color, type Context, type Eleme
 import { closeOverlay, exec, openOverlay, props, setShared, shared, terminals, theme } from "herdr";
 import type { Tag } from "@herdr-tools/utils/tag";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { boardRows, keyActionFor, moveSelection, parseList, rowId, toggleCollapsed, WS, wsCommandFor, type BoardAction, type BoardRow, type LiveTerminal } from "./board";
+import { usageSegments } from "@herdr-tools/utils/usage-segments";
+import { boardRows, EMPTY_LIST, keyActionFor, moveSelection, parseList, rowId, toggleCollapsed, WS, wsCommandFor, type BoardAction, type BoardRow, type LiveTerminal } from "./board";
 
 const MOD_NAME = "agent-board";
 const LIST_REFRESH_MS = 4000;
@@ -113,7 +114,7 @@ export default class AgentBoard extends View {
   selected!: string | null;
 
   init(_props: unknown, cx: AsyncContext) {
-    this.list = { workspaces: [] };
+    this.list = EMPTY_LIST;
     this.error = "";
     this.fetching = false;
     this.confirmRequest = (props()?.confirm as ConfirmRequest | undefined) ?? null;
@@ -317,6 +318,16 @@ export default class AgentBoard extends View {
     return true;
   }
 
+  renderUsage(t: Theme) {
+    const segments = usageSegments(this.list.usage);
+    return div()
+      .flex()
+      .gap(8)
+      .min_h(segments.length > 0 ? ROW_HEIGHT : 0)
+      .items_center()
+      .children(segments.map((s) => label(s.text, toneColor(t, s.tone))));
+  }
+
   render() {
     const t = theme() as unknown as Theme;
     if (this.confirmRequest) return this.renderConfirmDialog(this.confirmRequest, t);
@@ -337,6 +348,7 @@ export default class AgentBoard extends View {
       .text_size(13)
       .text_color(t.foreground)
       .overflow_y_scrollbar()
+      .child(this.renderUsage(t))
       .when(rows.length === 0, (el) => el.child(label("エージェントもセッションもありません", t.muted)))
       .children(rows.map((r, i) => this.renderRow(r, t, i === 0, showSelection && rowId(r) === this.selected)))
       .when(this.error !== "", (el) => el.child(label(this.error, t.ansi1)));

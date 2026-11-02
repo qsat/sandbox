@@ -2,7 +2,7 @@ import type { TmuxNavigator } from "../navigator";
 import { agentDisplayName } from "@herdr-tools/utils/agent-display-name";
 import { basename } from "@herdr-tools/utils/basename";
 import { splitKeys } from "./keys";
-import { firstSelectable, isSelectable, keepSelectionOn, nextSelectable, toRows, type Row } from "./rows";
+import { firstSelectable, isSelectable, keepSelectionOn, nextSelectable, toRows, usageLine, type Row } from "./rows";
 
 const ESC = "\x1b";
 const NO_WRAP = `${ESC}[?7l`;
@@ -20,6 +20,7 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
   if (!stdin.isTTY) throw new Error("ws ui は端末（tmux の popup）から実行してください");
 
   let rows: Row[] = [];
+  let usageHeader = "";
   let sel = 0;
   let all = false;
   let message = "";
@@ -31,7 +32,7 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
 
   const render = () => {
     if (done) return;
-    const height = (out.rows || 24) - 3;
+    const height = (out.rows || 24) - 3 - (usageHeader ? 1 : 0);
     const width = out.columns || 80;
     const top = Math.max(0, Math.min(sel - Math.floor(height / 2), rows.length - height));
     const lines = rows.slice(top, top + height).map((r, i) => {
@@ -42,7 +43,7 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
     while (lines.length < height) lines.push("");
     const help = `${DIM}Enter:移動 n:新規 R:再開 s:停止 x:セッション終了 a:${all ? "絞込" : "全部"} r:再読込 q:閉じる${RESET}`;
     const prompt = confirming ? `${ESC}[33m${confirming.question} y/N${RESET}` : message;
-    out.write(CLEAR + lines.join("\r\n") + "\r\n" + prompt + "\r\n" + help);
+    out.write(CLEAR + (usageHeader ? usageHeader + "\r\n" : "") + lines.join("\r\n") + "\r\n" + prompt + "\r\n" + help);
   };
 
   const reload = async () => {
@@ -55,6 +56,7 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
       const current = rows[sel];
       const view = await nav.view({ allEntries: all });
       rows = toRows(view.snap.tree, view.idx, { attentionFirst: true, color: true, keyHints: true, look: "board" });
+      usageHeader = usageLine(view.snap.usage, true);
       sel = keepSelectionOn(rows, isSelectable(current) ? current.ref : undefined);
     } catch (e) {
       message = `読み込み失敗: ${(e as Error).message}`;

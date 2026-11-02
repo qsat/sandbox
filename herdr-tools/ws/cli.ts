@@ -3,7 +3,7 @@
 import { resolve as resolvePath } from "node:path";
 import { expandHome } from "@herdr-tools/utils/expand-home";
 import { agentsInMissingWorktrees, looksLikePath } from "@herdr-tools/ws-core";
-import { renderText, runPopup, sessionsOfMissingWorktrees, toListJson } from "@herdr-tools/tmux";
+import { renderText, runPopup, sessionsOfMissingWorktrees, toListJson, usageLine } from "@herdr-tools/tmux";
 import { composeFromEnv } from "./src/compose-from-env";
 
 const USAGE = `ws - エージェントを workspace > worktree > agent で一覧・移動する
@@ -20,6 +20,7 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
   ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる
   ws ui [--client <name>]                          tmux popup 用の対話一覧
   ws hook session-start                            Claude Code の SessionStart hook
+  ws statusline [--quiet]                          Claude Code の statusLine。5h / 週の利用上限を記録して表示する
   ws prune [--dry-run] [--yes]                     場所が消えた worktree のセッション・エージェントを片付ける
 `;
 
@@ -87,8 +88,8 @@ async function main(argv: string[]) {
   switch (cmd) {
     case "list": {
       const view = await nav.view({ allEntries: has(p, "--all") });
-      if (has(p, "--json")) process.stdout.write(JSON.stringify(toListJson(view.snap.tree, view.idx)) + "\n");
-      else process.stdout.write(renderText(view.snap.tree, view.idx, !!process.stdout.isTTY) + "\n");
+      if (has(p, "--json")) process.stdout.write(JSON.stringify(toListJson(view.snap.tree, view.idx, view.snap.usage)) + "\n");
+      else process.stdout.write(renderText(view.snap.tree, view.idx, view.snap.usage, !!process.stdout.isTTY) + "\n");
       return 0;
     }
     case "go": {
@@ -149,6 +150,12 @@ async function main(argv: string[]) {
       } catch (e) {
         process.stderr.write(`ws hook: ${(e as Error).message}\n`);
       }
+      return 0;
+    }
+    case "statusline": {
+      const stdin = await readStdin();
+      const r = await core.recordClaudeUsageFromStatusLine(stdin).catch(() => undefined);
+      if (!has(p, "--quiet")) process.stdout.write(usageLine(r?.usage ?? {}, true) + "\n");
       return 0;
     }
     case "prune": {

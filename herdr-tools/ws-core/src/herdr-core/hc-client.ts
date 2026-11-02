@@ -102,6 +102,14 @@ export class HcClient {
     await this.call("terminal.rm", { terminal });
   }
 
+  async docGet(name: string) {
+    return this.call<{ value: unknown; version: number }>("doc.get", { name });
+  }
+
+  async docSet(name: string, value: unknown, version: number) {
+    await this.call("doc.set", { name, value, version });
+  }
+
   subscribe(onChange: () => void) {
     let conn: HcConnection;
     try {

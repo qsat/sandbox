@@ -16,7 +16,8 @@ herdr-tools/
 │   │   └── locate.ts             パス・id から木の場所を引く
 │   ├── ports.ts                  AgentRuntime / WorkspaceSource（単体テストで偽物に差し替える継ぎ目）
 │   ├── ws-core.ts                WsCore: snapshot / resume / startAgent / stopAgent / recordClaudeSessionFromHook / removeAgents
-│   ├── claude-code.ts            会話の再開コマンドと SessionStart hook の入力
+│   │   └── usage.ts              Claude の利用上限（5h / 週）の枠、期限切れの扱い
+│   ├── claude-code.ts            会話の再開コマンド、SessionStart hook と statusLine の入力
 │   ├── ghq-workspace-source.ts   WorkspaceSource の実装
 │   └── herdr-core/               AgentRuntime の実装（hc-terminal: schema/hc.openrpc.json の Terminal、hc-client: JSON-RPC、herdr-runtime: 翻訳）
 ├── tmux/src/                     クライアント: tmux でエージェントへ移動し、会話する
@@ -52,7 +53,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
    - `ws` をビルドして `~/.local/bin/ws` に置く（`bun build --compile` の単一バイナリ）
    - mod をバンドル（`dist/mods/agent-board/`）して `~/.config/herdr-app/mods/agent-board/` に、レイアウトを `~/.config/herdr-app/layouts/agents.json` に置く
    - `herdr-app` があれば `herdr-app check` を通す
-4. `ws/config/claude-settings.json` の SessionStart hook を `~/.claude/settings.json` に足す
+4. `ws/config/claude-settings.json` の SessionStart hook と statusLine を `~/.claude/settings.json` に足す
 5. `tmux/config/tmux.conf` のキー（`prefix a` 一覧を枠線なしの popup で開く、`prefix A` 全ペイン表示）を `~/.tmux.conf` に足す
 6. 一覧だけの画面にしたければ `mod.json` を `{"place": "none"}` にし、`ctrl-shift-l` か `herdr-app do layout.switch '{"name":"agents"}'` で切り替える
 
@@ -85,6 +86,7 @@ ws close [<ref>]                                 ref（既定は今いる worktr
 ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる
 ws ui [--client <name>]                          tmux popup 用の対話一覧
 ws hook session-start                            Claude Code の SessionStart hook
+ws statusline [--quiet]                          Claude Code の statusLine。5h / 週の利用上限を記録して表示する
 ws prune [--dry-run] [--yes]                     場所が消えた worktree のセッションを閉じ、エージェントを確認のうえ終了
 ```
 
@@ -99,6 +101,18 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 2. agent なら（移動では再開しない。再開は `ws resume`・ボタン・`R` だけで行う）: `@ws_agent` が一致する生きたペインがあればそれを選ぶ／無ければ `agents` ウィンドウに `hc attach` ペインを作る（無ければウィンドウごと）
 3. tmux クライアントを切り替える: `--client` 指定 > `--from-app` なら最後に使われたクライアント > tmux 内なら呼び出し元 > tmux の外ならその場で `tmux attach`
 4. app からなら Ghostty を前面へ（クライアントが1つも無ければ Ghostty の新しいウィンドウで attach）
+
+### Claude の利用上限（5h / 週）
+
+Claude Code は statusLine のコマンドに `rate_limits.five_hour` / `rate_limits.seven_day`（使用率とリセット時刻）を渡す。
+`ws statusline` がそれを herdr-core のドキュメント `claude-usage` に記録し（値が変わったときだけ）、
+`ws list`・popup（`prefix a`）・Herdr app の mod の先頭に「5h 残り77%（14:00）週 残り59%（11/5 09:30）」と出す。
+残りが 30% 以下で強調、10% 以下で警告の色。リセット時刻を過ぎた枠は出さない。
+
+- `rate_limits` が来るのは claude.ai の Pro / Max / Ultra だけで、セッションの最初の応答のあとから。API キーで使っているときは何も出ない
+- 利用上限はアカウント単位なので、どのセッションの statusLine から記録しても同じ値になる
+- statusLine をすでに自作しているなら、そのスクリプトから `ws statusline --quiet` に同じ入力を渡す（記録だけして何も出さない）。
+  例: `input=$(cat); printf '%s' "$input" | ws statusline --quiet; printf '%s' "$input" | your-statusline`
 
 ### ラベル（herdr-core への記録。ドメインでは「本体リポジトリ・worktree・会話ID」として扱う）
 

@@ -26,7 +26,7 @@ describe("toRows", () => {
   });
 
   test("tmux の情報（セッション・未attach）を添える", () => {
-    const text = renderText(tree, idx, false);
+    const text = renderText(tree, idx, {}, false);
     expect(text).toContain("a [main] tmux*");
     expect(text).toMatch(/t1 +t1 +working$/m);
     expect(text).toMatch(/t2 +t2 +idle +未attach/);
@@ -46,7 +46,7 @@ describe("toRows", () => {
     const lostIdx = indexTmux(makeLocator(withLost, infos), { sessions: [], panes: [] });
     const popupRow = toRows(withLost, lostIdx, { attentionFirst: true, color: false, keyHints: true }).find((r) => r.kind === "agent")!;
     expect(popupRow.text).toContain("R で再開");
-    expect(renderText(withLost, lostIdx, false)).not.toContain("R で再開");
+    expect(renderText(withLost, lostIdx, {}, false)).not.toContain("R で再開");
   });
 });
 
@@ -63,7 +63,7 @@ describe("toRows（popup はボードと同じ見せ方）", () => {
     expect(rows[3]!.text).toBe("agent-2 ○ idle 未attach");
   });
   test("ws list（plain）はアドレスを出したまま、空行を入れない", () => {
-    expect(renderText(tree, idx, false)).not.toContain("agent-");
+    expect(renderText(tree, idx, {}, false)).not.toContain("agent-");
     expect(toRows(tree, idx, { attentionFirst: true, color: false }).some((r) => r.kind === "spacer")).toBe(false);
   });
   test("tmux セッションの無い worktree の名前はグレーにする", () => {

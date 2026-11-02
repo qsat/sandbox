@@ -6,7 +6,8 @@ import { statusLabel } from "@herdr-tools/utils/status-label";
 import type { Tag } from "@herdr-tools/utils/tag";
 import { worktreeDisplayName } from "@herdr-tools/utils/worktree-display-name";
 import { worktreeTags } from "@herdr-tools/utils/worktree-tags";
-import { attentionRank, byAttention, type AgentNode, type Tree, type WorkspaceNode, type WorktreeNode } from "@herdr-tools/ws-core";
+import { usageSegments } from "@herdr-tools/utils/usage-segments";
+import { attentionRank, byAttention, type AgentNode, type ClaudeUsage, type Tree, type WorkspaceNode, type WorktreeNode } from "@herdr-tools/ws-core";
 import type { TmuxIndex } from "../tmux-index";
 
 interface RowOptions {
@@ -98,10 +99,13 @@ export function toRows(tree: Tree, idx: TmuxIndex, opts: RowOptions) {
 export type Row = ReturnType<typeof toRows>[number];
 type SelectableRow = Extract<Row, { kind: "worktree" | "agent" }>;
 
-export function renderText(tree: Tree, idx: TmuxIndex, color: boolean) {
-  return toRows(tree, idx, { attentionFirst: false, color })
-    .map((r) => "  ".repeat(r.depth) + r.text)
-    .join("\n");
+export function usageLine(usage: ClaudeUsage, color: boolean) {
+  return tagsText(usageSegments(usage), color);
+}
+
+export function renderText(tree: Tree, idx: TmuxIndex, usage: ClaudeUsage, color: boolean) {
+  const rows = toRows(tree, idx, { attentionFirst: false, color }).map((r) => "  ".repeat(r.depth) + r.text);
+  return [usageLine(usage, color), ...rows].filter(Boolean).join("\n");
 }
 
 export function isSelectable(r: Row | undefined): r is SelectableRow {
