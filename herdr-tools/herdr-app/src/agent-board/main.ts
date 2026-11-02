@@ -12,6 +12,7 @@ const COLLAPSED_KEY = "agent-board.collapsed";
 const ROW_HEIGHT = 22;
 const REPOSITORY_SPACING = ROW_HEIGHT * 0.5;
 const REPOSITORY_COLOR: Color = "#b8ff3cb3";
+const BRANCH_COLOR: Color = "#f0ff3c80";
 
 type Theme = Record<
   "foreground" | "muted" | "dim" | "accent" | "raised" | "hover" | "solid" | "solid_foreground" | "background" | "popover" | "blocked" | "unknown" | "ansi1",
@@ -35,7 +36,7 @@ interface ConfirmRequest {
 interface ButtonSpec {
   id: string;
   icon?: "plus" | "play" | "square" | "x";
-  text: string;
+  text?: string;
   tooltip: string;
   look: ButtonLook;
 }
@@ -72,7 +73,7 @@ function styled(el: Element, look: ButtonLook, t: Theme) {
     case "quiet":
       return el.text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.ansi1));
     case "outline":
-      return el.text_size(11).border_1().border_color(t.dim).text_color(t.foreground).hover((s) => s.bg(t.hover));
+      return el.h(ROW_HEIGHT - 4).text_size(11).border_1().border_color(t.dim).text_color(t.foreground).hover((s) => s.bg(t.hover));
     case "alert":
       return el.text_color(t.ansi1).hover((s) => s.bg(t.hover));
     case "danger":
@@ -88,7 +89,7 @@ function button(spec: ButtonSpec, t: Theme, onClick: (cx: Context) => void) {
     .items_center()
     .gap(4)
     .h(ROW_HEIGHT - 2)
-    .px(8)
+    .px(spec.text === undefined ? 4 : 8)
     .rounded(6)
     .text_size(12)
     .cursor_pointer()
@@ -98,7 +99,7 @@ function button(spec: ButtonSpec, t: Theme, onClick: (cx: Context) => void) {
       onClick(cx);
     })
     .when(spec.icon !== undefined, (el) => el.child(svg(`mods/agent-board/${spec.icon}.svg`).size(12)))
-    .child(spec.text);
+    .when(spec.text !== undefined, (el) => el.child(spec.text!));
   return styled(base, spec.look, t);
 }
 
@@ -176,7 +177,7 @@ export default class AgentBoard extends View {
 
   closeSessionButton(row: WorktreeRow, t: Theme) {
     const command = wsCommandFor(row, "close")!;
-    return button({ id: `close:${row.key}`, icon: "x", text: "閉じる", tooltip: "この worktree の tmux セッションを閉じる（エージェントは止めない）", look: "quiet" }, t, () =>
+    return button({ id: `close:${row.key}`, icon: "x", tooltip: "この worktree の tmux セッションを閉じる（エージェントは止めない）", look: "quiet" }, t, () =>
       this.askConfirm({
         title: `${row.label} の tmux セッションを閉じますか？`,
         body: "セッションの中のペインもすべて閉じます。エージェントは herdr-core で動き続けます。",
@@ -210,7 +211,7 @@ export default class AgentBoard extends View {
         return base
           .pl(16)
           .on_click((_e, cx) => this.runRow(row, "go", cx))
-          .child(this.info([div().when(row.isMain, (el) => el.font_semibold()).child(row.label), this.tags(row.tags, t)]))
+          .child(this.info([div().text_color(BRANCH_COLOR).when(row.isMain, (el) => el.font_semibold()).child(row.label), this.tags(row.tags, t)]))
           .when(row.hasSession, (el) => el.child(this.closeSessionButton(row, t)))
           .when(row.exists, (el) =>
             el.child(
