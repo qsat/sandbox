@@ -1,8 +1,9 @@
 import { basename } from "@herdr-tools/utils/basename";
+import { mapLimit } from "@herdr-tools/utils/map-limit";
 import { claudeResumeCommand, sessionIdFromSessionStartHook } from "./claude-code";
 import { resumable, type AgentNode } from "./domain/agent";
 import { makeLocator } from "./domain/locate";
-import { buildTree, mainRepositoryOf, pathsToInspect } from "./domain/tree";
+import { buildTree, mainRepositoryOf, pathsToInspect, type PathInspection } from "./domain/tree";
 import type { AgentRuntime, WorkspaceSource } from "./ports";
 
 interface WsCoreOptions {
@@ -26,10 +27,19 @@ export class WsCore {
   async snapshot(opts: { allEntries?: boolean; alwaysShow?: string[] } = {}) {
     const ghqRoot = await this.source.root();
     const [agents, entries] = await Promise.all([this.runtime.list(), opts.allEntries ? this.source.entries(ghqRoot) : []]);
-    const alwaysShow = [...(opts.alwaysShow ?? []), ...entries];
-    const inspections = await this.source.inspect(pathsToInspect(agents, alwaysShow));
+    const requested = [...(opts.alwaysShow ?? []), ...entries];
+    const requestedInspections = await this.source.inspect(pathsToInspect(agents, requested));
+    const siblings = await this.siblingWorktreesOf(requestedInspections);
+    const inspected = new Set(requestedInspections.map((i) => i.path));
+    const inspections = [...requestedInspections, ...(await this.source.inspect(siblings.filter((p) => !inspected.has(p))))];
+    const alwaysShow = [...requested, ...siblings];
     const tree = buildTree({ agents, inspections, alwaysShow, ghqRoot, home: this.opts.home });
     return { tree, locate: makeLocator(tree, inspections) };
+  }
+
+  private async siblingWorktreesOf(inspections: PathInspection[]) {
+    const repos = [...new Set(inspections.flatMap((i) => (i.commonDir ? [mainRepositoryOf(i.commonDir)] : [])))];
+    return (await mapLimit(repos, 16, (repo) => this.source.worktrees(repo))).flat();
   }
 
   attachCommand(id: string) {

@@ -26,4 +26,5 @@ export interface WorkspaceSource {
   root(): Promise<string>;
   entries(root: string): Promise<string[]>;
   inspect(paths: string[]): Promise<PathInspection[]>;
+  worktrees(repo: string): Promise<string[]>;
 }

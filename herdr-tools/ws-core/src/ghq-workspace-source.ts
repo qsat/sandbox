@@ -34,6 +34,11 @@ export class GhqWorkspaceSource implements WorkspaceSource {
     return mapLimit(paths, 16, (p) => this.inspectOne(p));
   }
 
+  async worktrees(repo: string) {
+    const r = await run(this.bins.git ?? "git", ["-C", repo, "worktree", "list", "--porcelain"]);
+    return r.code === 0 ? checkedOutWorktreePaths(r.stdout) : [];
+  }
+
   private async inspectOne(path: string) {
     if (!isDir(path)) return { path, exists: false };
     const r = await run(this.bins.git ?? "git", ["-C", path, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir", "--abbrev-ref", "HEAD"]);
@@ -57,4 +62,12 @@ function visibleDirs(p: string) {
   } catch {
     return [];
   }
+}
+
+export function checkedOutWorktreePaths(porcelain: string) {
+  return porcelain
+    .split("\n\n")
+    .map((block) => block.split("\n"))
+    .filter((lines) => !lines.some((l) => l === "bare" || l.startsWith("prunable")))
+    .flatMap((lines) => lines.filter((l) => l.startsWith("worktree ")).map((l) => l.slice("worktree ".length)));
 }

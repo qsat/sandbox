@@ -84,7 +84,7 @@ check "hook は壊れた入力でも失敗しない" "$(echo 'not json' | HC_TER
 
 echo "list（core × tmux × git）"
 J="$(ws list --json)"
-check "worktree 2つ（セッションのある api、エージェントのいる feat）" "$(jq '[.workspaces[].worktrees[]] | length' <<<"$J")" "2"
+check "worktree 3つ（セッションのある api、エージェントのいる feat、どちらも無い gone も並べる）" "$(jq '[.workspaces[].worktrees[]] | length' <<<"$J")" "3"
 check "エージェントは feat に入る" "$(jq -r '.workspaces[0].worktrees[] | select(.agents|length>0) | .path' <<<"$J")" "$FEAT"
 check "未 attach" "$(jq '.workspaces[0].worktrees[].agents[] | .tmux.attached' <<<"$J")" "false"
 

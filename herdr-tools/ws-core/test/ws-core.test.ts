@@ -66,6 +66,9 @@ class InMemoryWorkspaceSource implements WorkspaceSource {
   async inspect(paths: string[]) {
     return paths.map((p) => this.infos.find((i) => i.path === p) ?? { path: p, exists: false });
   }
+  async worktrees(repo: string) {
+    return this.infos.filter((i) => i.commonDir === `${repo}/.git`).map((i) => i.path);
+  }
 }
 
 const REPO = "/g/o/api";
@@ -90,11 +93,20 @@ describe("WsCore", () => {
     await expect(core.startAgent("/nope")).rejects.toThrow("ディレクトリがありません");
   });
 
-  test("snapshot は include の場所をエージェントが無くても出す", async () => {
+  test("snapshot は include の場所をエージェントが無くても出し、そのリポジトリの worktree をすべて並べる", async () => {
     const core = new WsCore(new InMemoryRuntime(), source());
     const snap = await core.snapshot({ alwaysShow: [REPO] });
-    expect(snap.tree.workspaces[0]!.worktrees.map((w) => w.path)).toEqual([REPO]);
+    expect(snap.tree.workspaces[0]!.worktrees.map((w) => w.path)).toEqual([REPO, WT]);
     expect(snap.locate(`${REPO}/src`)?.worktree.path).toBe(REPO);
+    expect(snap.locate(`${WT}/src`)?.worktree.path).toBe(WT);
+  });
+
+  test("エージェントがいる worktree からも、同じリポジトリの他の worktree を並べる", async () => {
+    const rt = new InMemoryRuntime();
+    const core = new WsCore(rt, source());
+    await core.startAgent(WT);
+    const snap = await core.snapshot();
+    expect(snap.tree.workspaces[0]!.worktrees.map((w) => w.path)).toEqual([REPO, WT]);
   });
 
   test("hook: 実行環境の中なら会話IDを記録、外なら何もしない", async () => {
