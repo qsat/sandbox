@@ -139,7 +139,7 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 bun install
 bun test            # utils / ws-core（herdr-core の翻訳を含む）/ tmux / mod / アーキテクチャの検査
 bun run typecheck
-bun run e2e         # スタブの herdr-core と実際の tmux（専用ソケット）で全コマンドを通す
+bun run e2e         # 偽の herdr-core（ws-core/test/fake-hc）と実際の tmux（専用ソケット）で全コマンドを通す。E2E_KEEP_TMP=1 で後片付けしない
 bun run build       # dist/ws（単一バイナリ）と dist/mods/agent-board/（バンドルした mod）
 bun run build:mod   # mod だけ
 ```

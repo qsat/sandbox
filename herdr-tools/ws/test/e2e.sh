@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# E2E: スタブの herdr-core（ws-core/test/stub/hc）と実際の tmux（専用ソケット）で ws の全コマンドを通す。
-#   bash ws/test/e2e.sh（または herdr-tools で bun run e2e）
-# 必要なもの: bun, tmux 3.2+, git, jq
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -9,17 +6,18 @@ ROOT="$(cd "$HERE/.." && pwd)"
 TMP="$(mktemp -d)"
 SOCK="ws-e2e-$$"
 
-export HC_BIN="$ROOT/../ws-core/test/stub/hc"
-export HC_STUB_STATE="$TMP/hc.json"
+export HC_BIN="$ROOT/../ws-core/test/fake-hc/hc"
+export FAKE_HC_STATE="$TMP/hc.json"
 export WS_TMUX_SOCKET="$SOCK"
 export GHQ_ROOT="$TMP/ghq"
-export GHQ_BIN="/nonexistent-ghq" # ghq が無いときの走査で一覧を作る
+export GHQ_BIN="ghq-not-installed"
 export WS_PANES_MAX=8
 unset TMUX TMUX_PANE
 
 ws() { bun "$ROOT/cli.ts" "$@"; }
 t() { tmux -L "$SOCK" "$@"; }
-state() { jq -r "$1" "$HC_STUB_STATE"; }
+state() { jq -r "$1" "$FAKE_HC_STATE"; }
+edit_state() { jq "$1" "$FAKE_HC_STATE" >"$TMP/s" && mv "$TMP/s" "$FAKE_HC_STATE"; }
 pass=0
 ok() { pass=$((pass + 1)); printf '  \033[32mok\033[0m %s\n' "$1"; }
 fail() { printf '  \033[31mNG\033[0m %s\n' "$1" >&2; exit 1; }
@@ -30,36 +28,41 @@ cleanup() {
   [ -n "${CLIENT_PID:-}" ] && kill "$CLIENT_PID" 2>/dev/null || true
   rm -rf "$TMP"
 }
-trap cleanup EXIT
-# E2E_DEBUG=1 なら一時ディレクトリと tmux サーバを残す
-if [ -n "${E2E_DEBUG:-}" ]; then trap - EXIT; fi
+[ -n "${E2E_KEEP_TMP:-}" ] || trap cleanup EXIT
 
-# --- 作業場所: ghq + gwq と同じ並び（repo と repo=branch が横並び） ---
-API="$GHQ_ROOT/github.com/o/api"
-FEAT="$GHQ_ROOT/github.com/o/api=feat-auth"
-GONE="$GHQ_ROOT/github.com/o/api=gone"
-mkdir -p "$API"
-git -C "$API" init -q -b main
-git -C "$API" -c user.email=e2e@example.com -c user.name=e2e commit -q --allow-empty -m init
-git -C "$API" worktree add -q -b feat-auth "$FEAT"
-git -C "$API" worktree add -q -b gone "$GONE"
-API="$(cd "$API" && pwd -P)"; FEAT="$(cd "$FEAT" && pwd -P)"; GONE="$(cd "$GONE" && pwd -P)"
+create_repo_and_worktrees_side_by_side_like_gwq() {
+  API="$GHQ_ROOT/github.com/o/api"
+  FEAT="$GHQ_ROOT/github.com/o/api=feat-auth"
+  GONE="$GHQ_ROOT/github.com/o/api=gone"
+  mkdir -p "$API"
+  git -C "$API" init -q -b main
+  git -C "$API" -c user.email=e2e@example.com -c user.name=e2e commit -q --allow-empty -m init
+  git -C "$API" worktree add -q -b feat-auth "$FEAT"
+  git -C "$API" worktree add -q -b gone "$GONE"
+  API="$(cd "$API" && pwd -P)"; FEAT="$(cd "$FEAT" && pwd -P)"; GONE="$(cd "$GONE" && pwd -P)"
+}
+
+start_control_mode_client_on_session_api() {
+  t new-session -d -s api -c "$API"
+  mkfifo "$TMP/client.in"
+  (t -C attach -t api <"$TMP/client.in" >/dev/null 2>&1) &
+  CLIENT_PID=$!
+  exec 9>"$TMP/client.in"
+  for _ in $(seq 50); do [ -n "$(t list-clients -F '#{client_name}')" ] && break; sleep 0.1; done
+  CLIENT="$(t list-clients -F '#{client_name}' | head -1)"
+  [ -n "$CLIENT" ] || fail "tmux クライアントが作れない"
+}
+
+client_session() { t list-clients -F '#{client_name} #{client_session}' | awk -v c="$CLIENT" '$1==c{print $2}'; }
+
+create_repo_and_worktrees_side_by_side_like_gwq
 
 echo "list"
 check "最初は空" "$(ws list --json | jq '.workspaces | length')" "0"
 check "--all で ghq の全エントリ" "$(ws list --json --all | jq '[.workspaces[].worktrees[]] | length')" "3"
 check "repo と repo=branch が同じ workspace" "$(ws list --json --all | jq '.workspaces | length')" "1"
 
-# --- tmux: セッションと、切り替え対象のクライアント（コントロールモード） ---
-t new-session -d -s api -c "$API"
-mkfifo "$TMP/client.in"
-(t -C attach -t api <"$TMP/client.in" >/dev/null 2>&1) &
-CLIENT_PID=$!
-exec 9>"$TMP/client.in"
-for _ in $(seq 50); do [ -n "$(t list-clients -F '#{client_name}')" ] && break; sleep 0.1; done
-CLIENT="$(t list-clients -F '#{client_name}' | head -1)"
-[ -n "$CLIENT" ] || fail "tmux クライアントが作れない"
-client_session() { t list-clients -F '#{client_name} #{client_session}' | awk -v c="$CLIENT" '$1==c{print $2}'; }
+start_control_mode_client_on_session_api
 
 echo "new / hook"
 out="$(cd "$FEAT/" && ws new)"
@@ -96,7 +99,7 @@ ws go "$FEAT/" --client "$CLIENT"
 check "パス指定でも移動（末尾 / 付き）" "$(client_session)" "api=feat-auth"
 
 echo "resume（claude を失って --keep のシェルに置き換わった状態）"
-jq '.terminals[0].foreground = {"name":"zsh","argv":["zsh"],"cwd":"/"}' "$HC_STUB_STATE" >"$TMP/s" && mv "$TMP/s" "$HC_STUB_STATE"
+edit_state '.terminals[0].foreground = {"name":"zsh"}'
 check "要再開と判定" "$(ws list --json | jq '.workspaces[0].worktrees[].agents[] | .needsResume')" "true"
 ws go t1 --client "$CLIENT"
 check "go の中で claude --resume を送る" "$(state '[.log[] | select(.[0]=="terminal.send")][0][1].text')" "claude --resume sess-1"
@@ -110,7 +113,7 @@ check "計画だけ出す" "$(ws go "$API" --client "$CLIENT" --dry-run | jq -r 
 echo "panes（worktree のエージェントを並べる）"
 (cd "$FEAT" && ws new >/dev/null && ws new >/dev/null)
 check "重複名は -2, -3" "$(state '[.terminals[].name] | join(",")')" "api-feat-auth,api-feat-auth-2,api-feat-auth-3"
-jq '.terminals[2].parent = "t1"' "$HC_STUB_STATE" >"$TMP/s" && mv "$TMP/s" "$HC_STUB_STATE"
+edit_state '.terminals[2].parent = "t1"'
 PANE="$(t list-panes -t '=api=feat-auth:agents' -F '#{pane_id}' | head -1)"
 check "既定は子を含めない" "$(ws panes --pane "$PANE")" "ws panes: 1 開いた / 1 表示済み"
 check "-a で子も" "$(ws panes -a --pane "$PANE")" "ws panes: 1 開いた / 2 表示済み"
@@ -143,10 +146,9 @@ ws list
 
 echo "ui（pty で開いてキー操作）"
 ws go "$FEAT" --client "$CLIENT"
-# 先頭の選択行は api（main worktree）。Enter で ws go が走り、popup は閉じる
 UI_OUT="$( (sleep 2.5; printf '\r') | script -qec "bun $ROOT/cli.ts ui --client '$CLIENT'" /dev/null | tr -d '\r')"
 check "一覧に worktree とエージェントが出る" "$(grep -c 'api-feat-auth' <<<"$UI_OUT" | awk '{print ($1>0)}')" "1"
-check "Enter で選択行へ移動" "$(client_session)" "api"
+check "先頭の行（main worktree の api）で Enter → そこへ移動して閉じる" "$(client_session)" "api"
 UI_OUT="$( (sleep 2.5; printf 'jjq') | script -qec "bun $ROOT/cli.ts ui --client '$CLIENT'" /dev/null; echo "exit=$?")"
 check "q で閉じる" "$(grep -o 'exit=[0-9]*' <<<"$UI_OUT" | tail -1)" "exit=0"
 

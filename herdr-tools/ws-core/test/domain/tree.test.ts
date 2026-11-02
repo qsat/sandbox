@@ -28,17 +28,15 @@ const infos: PathInspection[] = [
   { path: GONE, exists: false },
 ];
 
-const agents: AgentRecord[] = [
-  agent({ id: "t1", name: "api-main", cwd: API, recordedWorkspace: API, recordedWorktree: API, status: "working" }),
-  agent({ id: "t2", name: "api-feat-auth", cwd: `${FEAT}/src`, status: "blocked", blockedReason: "permission" }), // 記録なし、cwd から推定
-  agent({ id: "t3", name: "old", cwd: "/", recordedWorkspace: API, recordedWorktree: GONE, claudeSessionId: "s3", programLost: true }),
-  agent({ id: "t4", name: "child", cwd: FEAT, recordedWorktree: FEAT, parent: "t2" }),
-];
+const recordedAtMain = agent({ id: "t1", name: "api-main", cwd: API, recordedWorkspace: API, recordedWorktree: API, status: "working" });
+const unrecordedInSubdirOfFeat = agent({ id: "t2", name: "api-feat-auth", cwd: `${FEAT}/src`, status: "blocked", blockedReason: "permission" });
+const lostInDeletedWorktree = agent({ id: "t3", name: "old", cwd: "/", recordedWorkspace: API, recordedWorktree: GONE, claudeSessionId: "s3", programLost: true });
+const childOfT2 = agent({ id: "t4", name: "child", cwd: FEAT, recordedWorktree: FEAT, parent: "t2" });
+const agents = [recordedAtMain, unrecordedInSubdirOfFeat, lostInDeletedWorktree, childOfT2];
 
-const ENTRIES = [API, FEAT, WEB];
-// snapshot と同じく、--all のときは全エントリを include に足す
-const tree = (opts: { all?: boolean; include?: string[] } = {}) =>
-  buildTree({ agents, inspections: infos, alwaysShow: [...(opts.include ?? []), ...(opts.all ? ENTRIES : [])], ghqRoot: "/Users/me/ghq", home: "/Users/me" });
+const GHQ_ENTRIES = [API, FEAT, WEB];
+const tree = (opts: { allEntries?: boolean; alwaysShow?: string[] } = {}) =>
+  buildTree({ agents, inspections: infos, alwaysShow: [...(opts.alwaysShow ?? []), ...(opts.allEntries ? GHQ_ENTRIES : [])], ghqRoot: "/Users/me/ghq", home: "/Users/me" });
 
 describe("要再開", () => {
   const base = agent({ id: "t1", claudeSessionId: "abc", programLost: true });
@@ -61,29 +59,32 @@ describe("buildTree", () => {
     const api = t.workspaces[0]!;
     expect(api.worktrees.map((w) => w.path)).toEqual([API, FEAT, GONE]);
     expect(api.worktrees[0]!.isMain).toBe(true);
-    expect(api.worktrees[0]!.agents.map((a) => a.id)).toEqual(["t1"]);
-    // サブディレクトリの cwd でも worktree に入る。子エージェントも同じ worktree
-    expect(api.worktrees[1]!.agents.map((a) => a.id).sort()).toEqual(["t2", "t4"]);
+    expect(api.worktrees[0]!.agents.map((a) => a.id)).toEqual([recordedAtMain.id]);
+  });
+
+  test("記録が無くても cwd（サブディレクトリでも）から worktree に入り、子エージェントも同じ worktree", () => {
+    const feat = tree().workspaces[0]!.worktrees.find((w) => w.path === FEAT)!;
+    expect(feat.agents.map((a) => a.id).sort()).toEqual([unrecordedInSubdirOfFeat.id, childOfT2.id]);
   });
 
   test("場所消失と要再開を導く", () => {
     const gone = tree().workspaces[0]!.worktrees[2]!;
     expect(gone.exists).toBe(false);
-    expect(gone.agents[0]).toMatchObject({ id: "t3", missingLocation: true, needsResume: true });
+    expect(gone.agents[0]).toMatchObject({ id: lostInDeletedWorktree.id, missingLocation: true, needsResume: true });
   });
 
-  test("include はエージェントがいなくても出す（クライアントのセッションの場所など）", () => {
+  test("alwaysShow はエージェントがいなくても出す（クライアントのセッションの場所など）", () => {
     expect(tree().workspaces.some((w) => w.path === WEB)).toBe(false);
-    expect(tree({ include: [WEB] }).workspaces.some((w) => w.path === WEB)).toBe(true);
+    expect(tree({ alwaysShow: [WEB] }).workspaces.some((w) => w.path === WEB)).toBe(true);
   });
 
   test("all で全エントリ", () => {
-    expect(tree({ all: true }).workspaces.map((w) => w.path)).toEqual([API, WEB]);
+    expect(tree({ allEntries: true }).workspaces.map((w) => w.path)).toEqual([API, WEB]);
   });
 });
 
 describe("makeLocator", () => {
-  const t = tree({ include: [WEB] });
+  const t = tree({ alwaysShow: [WEB] });
   const locate = makeLocator(t, infos);
   test("生のパスから worktree", () => expect(locate(`${FEAT}/src`)?.worktree.path).toBe(FEAT));
   test("末尾 / 付き・配下のパスでも", () => {
@@ -94,9 +95,9 @@ describe("makeLocator", () => {
 });
 
 describe("resolveRef", () => {
-  const LINK = "/Users/me/link-to-api"; // シンボリックリンク（git の toplevel は realpath で API になる）
+  const SYMLINK_TO_API = "/Users/me/link-to-api";
   const t = tree();
-  const snap = { tree: t, locate: makeLocator(t, [...infos, { path: LINK, exists: true, toplevel: API, commonDir: `${API}/.git`, branch: "main" }]) };
+  const snap = { tree: t, locate: makeLocator(t, [...infos, { path: SYMLINK_TO_API, exists: true, toplevel: API, commonDir: `${API}/.git`, branch: "main" }]) };
   test("id", () => expect(resolveRef(snap, "t2")?.kind).toBe("agent"));
   test("名前", () => expect(resolveRef(snap, "api-main")).toMatchObject({ kind: "agent", agent: { id: "t1" } }));
   test("worktree のパス（配下でも）", () => {
@@ -104,7 +105,7 @@ describe("resolveRef", () => {
     expect(resolveRef(snap, `${FEAT}/src/x`)).toMatchObject({ kind: "worktree", worktree: { path: FEAT } });
   });
   test("リンク経由のパスも調べた toplevel で解決する", () => {
-    expect(resolveRef(snap, LINK)).toMatchObject({ kind: "worktree", worktree: { path: API } });
+    expect(resolveRef(snap, SYMLINK_TO_API)).toMatchObject({ kind: "worktree", worktree: { path: API } });
   });
   test("見つからない", () => {
     expect(resolveRef(snap, "t99")).toBeUndefined();
@@ -114,6 +115,6 @@ describe("resolveRef", () => {
 
 describe("agentsInMissingWorktrees", () => {
   test("場所が消えた worktree のエージェント", () => {
-    expect(agentsInMissingWorktrees(tree()).map((a) => a.id)).toEqual(["t3"]);
+    expect(agentsInMissingWorktrees(tree()).map((a) => a.id)).toEqual([lostInDeletedWorktree.id]);
   });
 });

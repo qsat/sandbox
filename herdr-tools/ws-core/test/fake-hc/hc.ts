@@ -1,12 +1,6 @@
-// テスト用のスタブ herdr-core。schema/hc.openrpc.json の形で JSON-RPC（plain mode）に答える。
-// 状態は $HC_STUB_STATE の JSON に持ち、呼ばれたメソッドを log に [method, params] で追記する。
-//
-//   hc connect   … terminal.list / get / run / label / send / kill / rm、events.subscribe
-//   hc attach t  … 会話ペイン用（接続したふりをして待ち続ける）
-
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
-interface StubTerminal {
+interface FakeTerminal {
   address: string;
   name: string | null;
   cwd: string;
@@ -20,13 +14,13 @@ interface StubTerminal {
 }
 interface State {
   next: number;
-  terminals: StubTerminal[];
+  terminals: FakeTerminal[];
   log: [string, unknown][];
 }
 
-const file = process.env.HC_STUB_STATE;
+const file = process.env.FAKE_HC_STATE;
 if (!file) {
-  console.error("HC_STUB_STATE is not set");
+  console.error("FAKE_HC_STATE is not set");
   process.exit(2);
 }
 const load = (): State => (existsSync(file!) ? JSON.parse(readFileSync(file!, "utf8")) : { next: 1, terminals: [], log: [] });
@@ -42,7 +36,7 @@ class RpcError extends Error {
   }
 }
 
-function must(s: State, ref: string): StubTerminal {
+function must(s: State, ref: string): FakeTerminal {
   const t = find(s, ref);
   if (!t) throw new RpcError(`no terminal ${ref}`, "not_found");
   return t;
@@ -57,7 +51,7 @@ function handle(s: State, method: string, p: any): unknown {
     case "terminal.run": {
       if (!/^[a-z0-9_-]{1,32}$/.test(p.name)) throw new RpcError(`invalid name: ${p.name}`, "invalid");
       if (s.terminals.some((t) => t.name === p.name && t.state === "live")) throw new RpcError(`name in use: ${p.name}`, "conflict");
-      const t: StubTerminal = {
+      const t: FakeTerminal = {
         address: `t${s.next++}`,
         name: p.name,
         cwd: p.cwd,
@@ -104,7 +98,7 @@ function handle(s: State, method: string, p: any): unknown {
 const [cmd, ...args] = process.argv.slice(2);
 
 if (cmd === "attach") {
-  console.log(`[stub] attached to ${args[0]}`);
+  console.log(`[fake-hc] attached to ${args[0]}`);
   await new Promise(() => {});
 } else if (cmd === "connect") {
   const s0 = load();
@@ -133,6 +127,6 @@ if (cmd === "attach") {
     }
   }
 } else {
-  console.error(`stub hc: unsupported command ${cmd}（ws は connect と attach だけを使う）`);
+  console.error(`fake-hc: ws が使うのは connect と attach だけ: ${cmd}`);
   process.exit(2);
 }

@@ -1,12 +1,3 @@
-// 依存の向きの検査:
-//   utils      … どのパッケージにも依存しない共通関数（1ファイル1関数）
-//   ws-core    … utils だけ。事実の出どころ（herdr-core、git / ghq）は知ってよいが、
-//                クライアント（tmux、Herdr app）の名前は出さない
-//   tmux       … ws-core と utils。herdr-core（hc）を直接触らない
-//   herdr-app  … Herdr app の mod。I/O の無いモジュール（ws-core のモデル、ws list --json の型）と utils だけを使い、
-//                ws とは exec で話す。
-//                バンドル結果（main.js）は Herdr app の API（herdr / gpui-kit）以外を import しない
-//   ws（CLI）  … すべてをつなぐ
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -62,7 +53,7 @@ function codeHits(dir: string, pattern: RegExp): string[] {
 
 const UTILS = "@herdr-tools/utils/*";
 
-describe("依存の向き", () => {
+describe("依存の向き（ws → ws-core / tmux、tmux → ws-core、herdr-app → I/O の無いモジュール、全員 → utils）", () => {
   test("utils はどこにも依存しない", () => expect(check("utils", [])).toEqual([]));
   test("ws-core は utils だけ", () => expect(check("ws-core", [UTILS])).toEqual([]));
   test("tmux は ws-core と utils だけ", () => expect(check("tmux", ["@herdr-tools/ws-core", "@herdr-tools/ws-core/domain/tree", UTILS])).toEqual([]));
