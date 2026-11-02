@@ -104,18 +104,17 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 
 ### `cc`: herdr-core で起動して、今の端末で会話する
 
-`claude` はそのままにして、herdr-core で動かしたいときは `cc` で起動する。`ws/config/cc.sh` を `~/.zshrc` などから source する。
+`claude` はそのままにして、herdr-core で動かしたいときは `cc` で起動する。`cc` は `ws new --here` のエイリアスで、
+`ws/config/cc.sh` を `~/.zshrc` などから source する。`cc` に続けた引数は claude に渡る（`cc --model opus`）。
 
 ```sh
-cc() {
-  if [ -n "${HC_TERMINAL_ID:-}" ]; then command claude "$@"; else ws new --here -- "$@"; fi
-}
+alias cc='ws new --here --'
 ```
 
 - `ws new --here` は今の worktree で herdr-core に起動し、今の端末で `hc attach` する。tmux の中なら今のペインに `@ws_agent` を付け、一覧では会話中になる
 - 抜ける（切り離す）と元のシェルに戻り、ペインの印を外す。エージェントは動き続け、一覧からまた会話に入れる
-- herdr-core の端末の中（`$HC_TERMINAL_ID` がある）で打ったときは、子端末を作らずにそのまま claude を動かす
-- `cc` は C コンパイラの名前だが、シェルの関数は対話シェルで打ったときだけ効くので、`make` などが呼ぶ `cc` には影響しない
+- herdr-core の端末の中（Herdr app のタブなど）で打つと、その端末の中に子端末を作って attach する。そこではそのまま `claude` を使う
+- `cc` は C コンパイラの名前だが、エイリアスは対話シェルで打ったときだけ効くので、`make` などが呼ぶ `cc` には影響しない
 
 ### tmux のセッション内のウィンドウを1つのウィンドウのペインにまとめる
 
