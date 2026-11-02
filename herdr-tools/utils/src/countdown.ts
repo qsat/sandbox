@@ -1,4 +1,5 @@
-export function countdown(seconds: number) {
+export function countdown(seconds: number, unit: "minutes" | "hours" = "minutes") {
   const s = Math.max(0, Math.floor(seconds));
-  return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+  const days = `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
+  return unit === "hours" ? days : `${days} ${Math.floor((s % 3600) / 60)}m`;
 }

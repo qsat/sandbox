@@ -162,10 +162,10 @@ IN_3D5H30M=$((NOW + 3 * 86400 + 5 * 3600 + 30 * 60 + 30))
 status_line_json() { printf '{"rate_limits":{"five_hour":{"used_percentage":%s,"resets_at":%s},"seven_day":{"used_percentage":41.2,"resets_at":%s}}}' "$1" "$IN_2H30M" "$IN_3D5H30M"; }
 without_color() { sed 's/\x1b\[[0-9;]*m//g'; }
 OUT="$(status_line_json 23.5 | ws statusline | without_color)"
-check "消費した % とリセットまでの残り時間（0d 0h 0m）を出す" "$(grep -oE '(5h|週) [0-9]+% [0-9]+d [0-9]+h [0-9]+m' <<<"$OUT" | tr '\n' ' ')" "5h 24% 0d 2h 30m 週 41% 3d 5h 30m "
+check "消費した % とリセットまでの残り時間（5時間枠 → 週、週は分なし）" "$(without_color <<<"$OUT")" "24% 0d 2h 30m 41% 3d 5h"
 check "herdr-core の doc（claude-usage）に記録" "$(state '.docs["claude-usage"].value.fiveHour.usedPercentage')" "23.5"
 check "ws list --json に usage" "$(ws list --json | jq '.usage.sevenDay.usedPercentage')" "41.2"
-check "ws list の先頭行に出す" "$(ws list | head -1 | without_color | grep -c '5h 24%')" "1"
+check "ws list の先頭行に出す" "$(ws list | head -1 | without_color)" "24% 0d 2h 30m 41% 3d 5h"
 status_line_json 23.5 | ws statusline >/dev/null
 check "同じ値なら書き直さない" "$(state '.docs["claude-usage"].version')" "1"
 status_line_json 30 | ws statusline >/dev/null

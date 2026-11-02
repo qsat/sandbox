@@ -347,8 +347,7 @@ export default class AgentBoard extends View {
             .flex()
             .items_center()
             .gap(4)
-            .tooltip(`${s.used}% 使用`)
-            .child(label(s.label, t.muted))
+            .tooltip(`${s.windowName} ${s.used}% 使用`)
             .child(pie(s.used, pieColor(t, s.tone), t))
             .child(label(s.timeLeft, toneColor(t, s.tone))),
         ),
