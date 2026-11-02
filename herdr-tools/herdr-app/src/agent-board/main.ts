@@ -14,6 +14,7 @@ const ROW_HEIGHT = 22;
 const REPOSITORY_SPACING = ROW_HEIGHT * 0.5;
 const REPOSITORY_COLOR: Color = "#b8ff3cb3";
 const BRANCH_COLOR: Color = "#fff03c80";
+const PIE_SIZE = 12;
 
 type Theme = Record<
   "foreground" | "muted" | "dim" | "accent" | "raised" | "hover" | "solid" | "solid_foreground" | "background" | "popover" | "blocked" | "unknown" | "ansi1",
@@ -63,6 +64,20 @@ function toneColor(t: Theme, tone: Tag["tone"]) {
 
 function label(text: string, color: Color) {
   return div().text_color(color).child(text);
+}
+
+function pieColor(t: Theme, tone: Tag["tone"]) {
+  return { strong: t.blocked, muted: t.accent, danger: t.ansi1 }[tone];
+}
+
+function pie(usedPercentage: number, fill: Color, t: Theme) {
+  return div()
+    .flex_none()
+    .size(PIE_SIZE)
+    .rounded(PIE_SIZE / 2)
+    .border_1()
+    .border_color(t.dim)
+    .when(usedPercentage > 0, (el) => el.child(svg(`mods/agent-board/pie/${usedPercentage}.svg`).size(PIE_SIZE - 2).text_color(fill)));
 }
 
 function styled(el: Element, look: ButtonLook, t: Theme) {
@@ -319,13 +334,25 @@ export default class AgentBoard extends View {
   }
 
   renderUsage(t: Theme) {
-    const segments = usageSegments(this.list.usage);
+    const segments = usageSegments(this.list.usage, Math.floor(Date.now() / 1000));
     return div()
       .flex()
-      .gap(8)
+      .gap(12)
       .min_h(segments.length > 0 ? ROW_HEIGHT : 0)
       .items_center()
-      .children(segments.map((s) => label(s.text, toneColor(t, s.tone))));
+      .children(
+        segments.map((s, i) =>
+          div()
+            .id(`usage-${i}`)
+            .flex()
+            .items_center()
+            .gap(4)
+            .tooltip(`${s.used}% 使用`)
+            .child(label(s.label, t.muted))
+            .child(pie(s.used, pieColor(t, s.tone), t))
+            .child(label(s.timeLeft, toneColor(t, s.tone))),
+        ),
+      );
   }
 
   render() {

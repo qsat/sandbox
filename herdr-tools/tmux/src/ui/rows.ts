@@ -99,8 +99,8 @@ export function toRows(tree: Tree, idx: TmuxIndex, opts: RowOptions) {
 export type Row = ReturnType<typeof toRows>[number];
 type SelectableRow = Extract<Row, { kind: "worktree" | "agent" }>;
 
-export function usageLine(usage: ClaudeUsage, color: boolean) {
-  return tagsText(usageSegments(usage), color);
+export function usageLine(usage: ClaudeUsage, color: boolean, nowEpochSec = Math.floor(Date.now() / 1000)) {
+  return tagsText(usageSegments(usage, nowEpochSec), color);
 }
 
 export function renderText(tree: Tree, idx: TmuxIndex, usage: ClaudeUsage, color: boolean) {

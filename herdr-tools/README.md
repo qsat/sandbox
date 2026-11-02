@@ -106,8 +106,12 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 
 Claude Code は statusLine のコマンドに `rate_limits.five_hour` / `rate_limits.seven_day`（使用率とリセット時刻）を渡す。
 `ws statusline` がそれを herdr-core のドキュメント `claude-usage` に記録し（値が変わったときだけ）、
-`ws list`・popup（`prefix a`）・Herdr app の mod の先頭に「5h 残り77%（14:00）週 残り59%（11/5 09:30）」と出す。
-残りが 30% 以下で強調、10% 以下で警告の色。リセット時刻を過ぎた枠は出さない。
+先頭に、消費した割合とリセットまでの残り時間を出す。
+- `ws list`・popup（`prefix a`）: `5h 24% 0d 2h 14m  週 41% 3d 5h 0m`
+- Herdr app の mod: `5h ◔ 0d 2h 14m` のように、% の代わりに円グラフ（1px のグレーの枠の上に消費した割合の扇形）。
+  扇形は `bun run build:mod` が 1〜100% の SVG を `dist/mods/agent-board/pie/` に生成する
+
+消費が 70% 以上で強調、90% 以上で警告の色。リセット時刻を過ぎた枠は出さない。
 
 - `rate_limits` が来るのは claude.ai の Pro / Max / Ultra だけで、セッションの最初の応答のあとから。API キーで使っているときは何も出ない
 - 利用上限はアカウント単位なので、どのセッションの statusLine から記録しても同じ値になる
