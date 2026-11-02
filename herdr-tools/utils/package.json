@@ -1,0 +1,8 @@
+{
+  "name": "@herdr-tools/utils",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "依存を持たない共通関数。1ファイル1関数で、@herdr-tools/utils/<name> として関数単位で import する",
+  "exports": { "./*": "./src/*.ts" }
+}

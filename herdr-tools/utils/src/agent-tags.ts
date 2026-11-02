@@ -1,0 +1,11 @@
+import type { Tag } from "./tag";
+
+export function agentTags(a: { needsResume: boolean; missingLocation: boolean; parent: string | null; alive: boolean }, attached?: boolean) {
+  const tags: Tag[] = [];
+  if (a.needsResume) tags.push({ text: "要再開", tone: "strong" });
+  if (attached === false) tags.push({ text: "未attach", tone: "muted" });
+  if (a.missingLocation) tags.push({ text: "場所消失", tone: "danger" });
+  if (a.parent) tags.push({ text: `子:${a.parent}`, tone: "muted" });
+  if (!a.alive) tags.push({ text: "終了", tone: "muted" });
+  return tags;
+}

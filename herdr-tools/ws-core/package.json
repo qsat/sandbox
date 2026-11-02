@@ -1,0 +1,15 @@
+{
+  "name": "@herdr-tools/ws-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Workspace > Worktree > Agent のドメインとユースケース。herdr-core と ghq / git の上に立ち、tmux / Herdr app は知らない",
+  "exports": {
+    ".": "./src/index.ts",
+    "./domain/*": "./src/domain/*.ts",
+    "./herdr-core/hc-terminal": "./src/herdr-core/hc-terminal.ts"
+  },
+  "dependencies": {
+    "@herdr-tools/utils": "workspace:*"
+  }
+}
