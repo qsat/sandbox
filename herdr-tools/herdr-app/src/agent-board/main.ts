@@ -2,7 +2,7 @@ import { View, div, svg, type AsyncContext, type Color, type Context, type Eleme
 import { closeOverlay, exec, openOverlay, props, setShared, shared, terminals, theme } from "herdr";
 import type { Tag } from "@herdr-tools/utils/tag";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { boardRows, moveSelection, parseList, rowId, toggleCollapsed, WS, wsCommandFor, type BoardAction, type BoardRow, type LiveTerminal } from "./board";
+import { boardRows, keyActionFor, moveSelection, parseList, rowId, toggleCollapsed, WS, wsCommandFor, type BoardAction, type BoardRow, type LiveTerminal } from "./board";
 
 const MOD_NAME = "agent-board";
 const LIST_REFRESH_MS = 4000;
@@ -163,31 +163,34 @@ export default class AgentBoard extends View {
     openOverlay({ mod: MOD_NAME, kind: "dialog", width: CONFIRM_DIALOG_WIDTH, height: CONFIRM_DIALOG_HEIGHT, props: { confirm: request } });
   }
 
-  stopButton(row: AgentRow, t: Theme) {
+  stopRequest(row: AgentRow): ConfirmRequest {
     const command = wsCommandFor(row, "stop")!;
-    const [spec, request]: [ButtonSpec, ConfirmRequest] = row.alive
-      ? [
-          { id: `stop:${row.key}`, icon: "square", text: "停止", tooltip: "claude を終了し、一覧から消す", look: "alert" },
-          { title: `${row.label} を停止しますか？`, body: "claude を終了し、一覧から消します。", busy: "止めています…", icon: "square", action: "停止する", command },
-        ]
-      : [
-          { id: `stop:${row.key}`, icon: "x", text: "削除", tooltip: "終了したエージェントを一覧から削除する", look: "quiet" },
-          { title: `${row.label} を削除しますか？`, body: "終了したエージェントを herdr-core の一覧から削除します。", busy: "削除しています…", icon: "x", action: "削除する", command },
-        ];
-    return button(spec, t, () => this.askConfirm(request));
+    return row.alive
+      ? { title: `${row.label} を停止しますか？`, body: "claude を終了し、一覧から消します。", busy: "止めています…", icon: "square", action: "停止する", command }
+      : { title: `${row.label} を削除しますか？`, body: "終了したエージェントを herdr-core の一覧から削除します。", busy: "削除しています…", icon: "x", action: "削除する", command };
+  }
+
+  closeSessionRequest(row: WorktreeRow): ConfirmRequest {
+    return {
+      title: `${row.label} の tmux セッションを閉じますか？`,
+      body: "セッションの中のペインもすべて閉じます。エージェントは herdr-core で動き続けます。",
+      busy: "閉じています…",
+      icon: "x",
+      action: "閉じる",
+      command: wsCommandFor(row, "close")!,
+    };
+  }
+
+  stopButton(row: AgentRow, t: Theme) {
+    const spec: ButtonSpec = row.alive
+      ? { id: `stop:${row.key}`, icon: "square", text: "停止", tooltip: "claude を終了し、一覧から消す（s）", look: "alert" }
+      : { id: `stop:${row.key}`, icon: "x", text: "削除", tooltip: "終了したエージェントを一覧から削除する（s）", look: "quiet" };
+    return button(spec, t, () => this.askConfirm(this.stopRequest(row)));
   }
 
   closeSessionButton(row: WorktreeRow, t: Theme) {
-    const command = wsCommandFor(row, "close")!;
-    return button({ id: `close:${row.key}`, icon: "x", tooltip: "この worktree の tmux セッションを閉じる（エージェントは止めない）", look: "quiet" }, t, () =>
-      this.askConfirm({
-        title: `${row.label} の tmux セッションを閉じますか？`,
-        body: "セッションの中のペインもすべて閉じます。エージェントは herdr-core で動き続けます。",
-        busy: "閉じています…",
-        icon: "x",
-        action: "閉じる",
-        command,
-      }),
+    return button({ id: `close:${row.key}`, icon: "x", tooltip: "この worktree の tmux セッションを閉じる。エージェントは止めない（x）", look: "quiet" }, t, () =>
+      this.askConfirm(this.closeSessionRequest(row)),
     );
   }
 
@@ -227,7 +230,7 @@ export default class AgentBoard extends View {
           .when(row.hasSession, (el) => el.child(this.closeSessionButton(row, t)))
           .when(row.exists, (el) =>
             el.child(
-              button({ id: `new:${row.key}`, icon: "plus", text: "claude", tooltip: "この worktree で claude を起動する", look: "outline" }, t, (cx) =>
+              button({ id: `new:${row.key}`, icon: "plus", text: "claude", tooltip: "この worktree で claude を起動する（n）", look: "outline" }, t, (cx) =>
                 this.runRow(row, "new", cx),
               ),
             ),
@@ -240,7 +243,7 @@ export default class AgentBoard extends View {
           .child(this.info([div().child(row.label), label(row.icon, color), label(row.status, color), this.tags(row.tags, t)]))
           .when(row.canResume, (el) =>
             el.child(
-              button({ id: `resume:${row.key}`, icon: "play", text: "再開", tooltip: "claude --resume で会話を再開する", look: "primary" }, t, (cx) =>
+              button({ id: `resume:${row.key}`, icon: "play", text: "再開", tooltip: "claude --resume で会話を再開する（R）", look: "primary" }, t, (cx) =>
                 this.runRow(row, "resume", cx),
               ),
             ),
@@ -300,25 +303,17 @@ export default class AgentBoard extends View {
       );
   }
 
-  onBoardKey(key: string, rows: BoardRow[], cx: Context) {
-    switch (key) {
-      case "j":
-      case "down":
-        this.selected = moveSelection(rows, this.selected, 1);
-        break;
-      case "k":
-      case "up":
-        this.selected = moveSelection(rows, this.selected, -1);
-        break;
-      case "enter": {
-        const row = rows.find((r) => rowId(r) === this.selected);
-        if (row) this.runRow(row, "go", cx);
-        break;
-      }
-      default:
-        return false;
+  onBoardKey(keystroke: string, rows: BoardRow[], cx: Context) {
+    if (keystroke === "j" || keystroke === "down" || keystroke === "k" || keystroke === "up") {
+      this.selected = moveSelection(rows, this.selected, keystroke === "j" || keystroke === "down" ? 1 : -1);
+      cx.notify();
+      return true;
     }
-    cx.notify();
+    const hit = keyActionFor(rows, this.selected, keystroke);
+    if (!hit) return false;
+    if (hit.action === "stop" && hit.row.kind === "agent") this.askConfirm(this.stopRequest(hit.row));
+    else if (hit.action === "close" && hit.row.kind === "worktree") this.askConfirm(this.closeSessionRequest(hit.row));
+    else this.runRow(hit.row, hit.action, cx);
     return true;
   }
 
@@ -332,7 +327,7 @@ export default class AgentBoard extends View {
       .track_focus(this.focus)
       .on_mouse_down("left", () => this.focus.focus())
       .on_key_down((e, cx) => {
-        if (this.onBoardKey(e.key, rows, cx)) cx.stop_propagation();
+        if (this.onBoardKey(e.keystroke, rows, cx)) cx.stop_propagation();
       })
       .size_full()
       .flex()

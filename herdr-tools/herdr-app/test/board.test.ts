@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { boardRows, moveSelection, rowId, wsCommandFor, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
+import { boardRows, keyActionFor, moveSelection, rowId, wsCommandFor, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
 
 const agent = (p: { id: string; name: string; status: "working" | "idle"; resumable: boolean; attached: boolean }) => ({
   id: p.id,
@@ -143,4 +143,37 @@ describe("moveSelection（j / k で上下に動かす）", () => {
   });
   test("選んでいた行が消えたら、選び直す", () => expect(moveSelection(rows, "agent:gone", 1)).toBe(ids[0]!));
   test("選べる行が無ければ null", () => expect(moveSelection([], null, 1)).toBeNull());
+});
+
+describe("keyActionFor（選んだ行へのキー操作）", () => {
+  const rows = boardRows(tree, [], []);
+  const main = rowId(rows[1]!);
+  const feat = rowId(rows[2]!);
+  const t1 = "agent:t1";
+  const t2 = "agent:t2";
+  const act = (selected: string | null, key: string) => {
+    const hit = keyActionFor(rows, selected, key);
+    return hit && { action: hit.action, row: rowId(hit.row) };
+  };
+  test("Enter は移動、n は ＋ claude（エージェントの行ならその worktree）", () => {
+    expect(act(feat, "enter")).toEqual({ action: "go", row: feat });
+    expect(act(t1, "n")).toEqual({ action: "new", row: t1 });
+  });
+  test("s は停止で、エージェントの行だけ", () => {
+    expect(act(t1, "s")).toEqual({ action: "stop", row: t1 });
+    expect(act(feat, "s")).toBeNull();
+  });
+  test("x は tmux セッションを閉じる。エージェントの行ならその worktree のセッション。セッションが無ければ何もしない", () => {
+    expect(act(main, "x")).toEqual({ action: "close", row: main });
+    expect(act(feat, "x")).toBeNull();
+    expect(act(t1, "x")).toBeNull();
+  });
+  test("R（shift-r）は再開できるエージェントだけ", () => {
+    expect(act(t2, "shift-r")).toEqual({ action: "resume", row: t2 });
+    expect(act(t1, "shift-r")).toBeNull();
+  });
+  test("割り当ての無いキーと、何も選んでいないときは何もしない", () => {
+    expect(act(t1, "q")).toBeNull();
+    expect(act(null, "enter")).toBeNull();
+  });
 });

@@ -101,3 +101,13 @@ export function parseList(stdout: string): ListedTree {
     return { workspaces: [] };
   }
 }
+
+const KEY_ACTIONS: Record<string, BoardAction> = { enter: "go", n: "new", "shift-r": "resume", s: "stop", x: "close" };
+
+export function keyActionFor(rows: BoardRow[], selected: string | null, keystroke: string) {
+  const action = KEY_ACTIONS[keystroke];
+  const row = rows.find((r) => rowId(r) === selected);
+  if (!action || !row) return null;
+  const target = action === "close" && row.kind === "agent" ? rows.find((r) => r.kind === "worktree" && r.key === row.worktree) : row;
+  return target && wsCommandFor(target, action) ? { action, row: target } : null;
+}
