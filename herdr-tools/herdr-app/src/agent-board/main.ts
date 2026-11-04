@@ -345,6 +345,7 @@ export default class AgentBoard extends View {
     const segments = usageSegments(this.list.usage, Math.floor(Date.now() / 1000));
     return div()
       .flex()
+      .justify_end()
       .gap(12)
       .min_h(segments.length > 0 ? ROW_HEIGHT : 0)
       .items_center()

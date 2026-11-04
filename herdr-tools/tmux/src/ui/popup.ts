@@ -36,7 +36,7 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
     if (done) return;
     const size = { columns: out.columns || 80, rows: out.rows || 24 };
     const inner = size.columns - PADDING * 2;
-    const header = usageHeader ? [usageHeader] : [];
+    const header = usageHeader ? [" ".repeat(Math.max(0, inner - Bun.stringWidth(stripAnsi(usageHeader)))) + usageHeader] : [];
     const height = size.rows - PADDING * 2 - 2 - header.length;
     const top = Math.max(0, Math.min(sel - Math.floor(height / 2), rows.length - height));
     const lines = rows.slice(top, top + height).map((r, i) => {
