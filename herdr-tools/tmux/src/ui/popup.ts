@@ -2,6 +2,7 @@ import type { TmuxNavigator } from "../navigator";
 import { agentDisplayName } from "@herdr-tools/utils/agent-display-name";
 import { basename } from "@herdr-tools/utils/basename";
 import { splitKeys } from "./keys";
+import { fitToWidth, frame } from "./screen";
 import { firstSelectable, isSelectable, keepSelectionOn, nextSelectable, toRows, usageLine, type Row } from "./rows";
 
 const ESC = "\x1b";
@@ -13,6 +14,7 @@ const CLEAR = `${ESC}[H${ESC}[2J`;
 const INVERT = `${ESC}[7m`;
 const RESET = `${ESC}[0m`;
 const DIM = `${ESC}[2m`;
+const PADDING = 1;
 
 export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
   const out = process.stdout;
@@ -32,18 +34,22 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
 
   const render = () => {
     if (done) return;
-    const height = (out.rows || 24) - 3 - (usageHeader ? 1 : 0);
-    const width = out.columns || 80;
+    const size = { columns: out.columns || 80, rows: out.rows || 24 };
+    const inner = size.columns - PADDING * 2;
+    const header = usageHeader ? [usageHeader] : [];
+    const height = size.rows - PADDING * 2 - 2 - header.length;
     const top = Math.max(0, Math.min(sel - Math.floor(height / 2), rows.length - height));
     const lines = rows.slice(top, top + height).map((r, i) => {
       const text = "  ".repeat(r.depth) + r.text;
-      return top + i === sel && isSelectable(r) ? INVERT + stripAnsi(text).slice(0, width) + RESET : text;
+      if (top + i !== sel || !isSelectable(r)) return text;
+      const plain = fitToWidth(stripAnsi(text), inner);
+      return INVERT + plain + " ".repeat(Math.max(0, inner - Bun.stringWidth(plain))) + RESET;
     });
     if (rows.length === 0) lines.push(DIM + "（表示するものがありません。a で全 worktree を表示）" + RESET);
     while (lines.length < height) lines.push("");
     const help = `${DIM}Enter:移動 n:新規 R:再開 s:停止 x:セッション終了 a:${all ? "絞込" : "全部"} r:再読込 q:閉じる${RESET}`;
     const prompt = confirming ? `${ESC}[33m${confirming.question} y/N${RESET}` : message;
-    out.write(CLEAR + (usageHeader ? usageHeader + "\r\n" : "") + lines.join("\r\n") + "\r\n" + prompt + "\r\n" + help);
+    out.write(CLEAR + frame([...header, ...lines, prompt, help], size, PADDING));
   };
 
   const reload = async () => {
