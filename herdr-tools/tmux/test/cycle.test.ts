@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildTree, type AgentRecord, type PathInspection } from "@herdr-tools/ws-core";
-import { cycleCandidates, decideCurrentPane, messageWhenNoCandidate, nextCandidate } from "../src/plans/cycle";
+import { cycleCandidates, decideCurrentPane, isCycleStatus, messageWhenNoCandidate, nextCandidate } from "../src/plans/cycle";
 
 const G = "/Users/me/ghq/github.com/o";
 const API = `${G}/api`;
@@ -23,12 +23,16 @@ const tree = buildTree({
   ghqRoot: "/Users/me/ghq",
   alwaysShow: [],
 });
-const ids = (s: "blocked" | "working") => cycleCandidates(tree, s).map((c) => c.agent.id);
+const ids = (s: "blocked" | "working" | "idle") => cycleCandidates(tree, s).map((c) => c.agent.id);
 
 describe("巡回の候補", () => {
   test("status と alive で絞り、workspace → worktree → id の安定した順に並べる", () => {
     expect(ids("blocked")).toEqual(["b1", "b2", "b3", "w2"]);
     expect(ids("working")).toEqual(["work"]);
+    expect(ids("idle")).toEqual(["idle"]);
+  });
+  test("巡回できる status は blocked / working / idle", () => {
+    expect(["blocked", "working", "idle", "done", "toString"].map(isCycleStatus)).toEqual([true, true, true, false, false]);
   });
 });
 
@@ -48,6 +52,7 @@ describe("次の候補", () => {
   test("候補が無いときの文言は status ごとに違う", () => {
     expect(messageWhenNoCandidate("blocked")).toBe("入力待ちのエージェントはありません");
     expect(messageWhenNoCandidate("working")).toBe("作業中のエージェントはありません");
+    expect(messageWhenNoCandidate("idle")).toBe("待機中のエージェントはありません");
   });
 });
 

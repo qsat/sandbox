@@ -97,6 +97,8 @@ export function wsArgsForModCommand(command: string): string[] | null {
       return ["next", "blocked", "--from-app"];
     case "next-working":
       return ["next", "working", "--from-app"];
+    case "next-idle":
+      return ["next", "idle", "--from-app"];
     default:
       return null;
   }

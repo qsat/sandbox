@@ -1,6 +1,12 @@
 import type { AgentNode, AgentStatus, Tree } from "@herdr-tools/ws-core";
 
-export type CycleStatus = Extract<AgentStatus, "blocked" | "working">;
+export type CycleStatus = Extract<AgentStatus, "blocked" | "working" | "idle">;
+
+const MESSAGE_WHEN_NO_CANDIDATE: Record<CycleStatus, string> = {
+  blocked: "入力待ちのエージェントはありません",
+  working: "作業中のエージェントはありません",
+  idle: "待機中のエージェントはありません",
+};
 
 export interface CycleCandidate {
   agent: AgentNode;
@@ -9,7 +15,7 @@ export interface CycleCandidate {
 }
 
 export function isCycleStatus(s: string): s is CycleStatus {
-  return s === "blocked" || s === "working";
+  return Object.hasOwn(MESSAGE_WHEN_NO_CANDIDATE, s);
 }
 
 export function cycleCandidates(tree: Tree, status: CycleStatus): CycleCandidate[] {
@@ -25,7 +31,7 @@ export function nextCandidate(candidates: CycleCandidate[], currentAgentId: stri
 }
 
 export function messageWhenNoCandidate(status: CycleStatus) {
-  return status === "blocked" ? "入力待ちのエージェントはありません" : "作業中のエージェントはありません";
+  return MESSAGE_WHEN_NO_CANDIDATE[status];
 }
 
 /**
