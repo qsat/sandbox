@@ -18,6 +18,7 @@ const tree = buildTree({
     a({ id: "dead", cwd: API, status: "blocked", alive: false }),
     a({ id: "work", cwd: API, status: "working" }),
     a({ id: "idle", cwd: API, status: "idle" }),
+    a({ id: "done", cwd: WEB, status: "done" }),
   ],
   inspections: infos,
   ghqRoot: "/Users/me/ghq",
@@ -29,7 +30,9 @@ describe("巡回の候補", () => {
   test("status と alive で絞り、workspace → worktree → id の安定した順に並べる", () => {
     expect(ids("blocked")).toEqual(["b1", "b2", "b3", "w2"]);
     expect(ids("working")).toEqual(["work"]);
-    expect(ids("idle")).toEqual(["idle"]);
+  });
+  test("idle の巡回は、応答を終えて次の指示を待つ done も含める", () => {
+    expect(ids("idle")).toEqual(["idle", "done"]);
   });
   test("巡回できる status は blocked / working / idle", () => {
     expect(["blocked", "working", "idle", "done", "toString"].map(isCycleStatus)).toEqual([true, true, true, false, false]);

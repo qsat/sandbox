@@ -79,7 +79,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | 待っているエージェントを探す | `prefix a`（blocked が先頭） | 一覧を見る（常時表示） |
 | 入力待ちのエージェントへ移る | `prefix b`、または Ghostty の `alt+b`（`ws next blocked`。押すたびに次の入力待ちへ巡回。無ければステータス行に表示） | `alt+b`（`ws next blocked --from-app`） |
 | 作業中のエージェントを巡回する | `prefix B`、または Ghostty の `ctrl+alt+b`（`ws next working`） | `ctrl+alt+b`（`ws next working --from-app`） |
-| 待機中（idle）のエージェントを巡回する | Ghostty の `ctrl+alt+cmd+b`（`ws next idle`） | `ctrl+alt+cmd+b`（`ws next idle --from-app`） |
+| 待機中（idle と、応答を終えた done）のエージェントを巡回する | Ghostty の `ctrl+alt+cmd+b`（`ws next idle`） | `ctrl+alt+cmd+b`（`ws next idle --from-app`） |
 | そのエージェントと話す | 一覧で `Enter` → 会話ペインへ | クリック → Ghostty の会話ペインへ |
 | 一覧をキーで操作する | 一覧で `j` / `k`（↓ / ↑）で選び、`Enter` 移動、`n` ＋ claude、`R` 再開、`s` 停止・削除、`x` セッションを閉じる（停止と閉じるは y で確かめる） | ボードを一度クリックしてから `j` / `k`（↓ / ↑）で選び、`Enter` 移動、`n` ＋ claude、`R` 再開、`s` 停止・削除、`x` セッションを閉じる（停止と閉じるは確認のダイアログを出す）。選んだ行は濃い黄色、今いるペイン（会話ペインならそのエージェント）の行は薄い黄色で示す |
 | tmux のペインへ移動する | 一覧で worktree の下のペインの行（実行中のコマンド名。会話ペインと死んだペインは出ない）を `j` / `k` で選び `Enter`。または `ws go %12`。移動だけで、停止・閉じるは付かない | ペインの行をクリック（`Enter` でも移動） |

@@ -8,6 +8,12 @@ const MESSAGE_WHEN_NO_CANDIDATE: Record<CycleStatus, string> = {
   idle: "待機中のエージェントはありません",
 };
 
+const STATUSES_TO_VISIT: Record<CycleStatus, AgentStatus[]> = {
+  blocked: ["blocked"],
+  working: ["working"],
+  idle: ["idle", "done"],
+};
+
 export interface CycleCandidate {
   agent: AgentNode;
   workspace: string;
@@ -21,7 +27,7 @@ export function isCycleStatus(s: string): s is CycleStatus {
 export function cycleCandidates(tree: Tree, status: CycleStatus): CycleCandidate[] {
   return tree.workspaces
     .flatMap((ws) => ws.worktrees.flatMap((wt) => wt.agents.map((agent) => ({ agent, workspace: ws.name, worktree: wt.path }))))
-    .filter((c) => c.agent.alive && c.agent.status === status)
+    .filter((c) => c.agent.alive && STATUSES_TO_VISIT[status].includes(c.agent.status))
     .sort((a, b) => a.workspace.localeCompare(b.workspace) || a.worktree.localeCompare(b.worktree) || a.agent.id.localeCompare(b.agent.id));
 }
 
