@@ -67,6 +67,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
    keybind = ctrl+alt+b=text:\x1bW
    keybind = ctrl+alt+super+b=text:\x1bI
    ```
+   - （任意）手順 6・7 の代わりに skhd でキーを取ると、Herdr app と Ghostty のどちらが前にあっても同じ経路（`ws next --from-app`）で巡回する。設定例は `tmux/config/skhdrc`。skhd に寄せるなら、手順 6・7 と `tmux.conf` の `bind -n M-B` / `M-W` / `M-I` は要らない（`prefix b` / `prefix B` は残してよい）。skhd は PATH が短いので、`ws` と、`ws` が呼ぶ `tmux` / `hc` / `ghq` / `git` が見つかる PATH を設定例のように書く。tmux のクライアントが複数あるときは、最後に使ったクライアントが移動する
 8. 一覧だけの画面にしたければ `mod.json` を `{"place": "none"}` にし、`ctrl-shift-l` か `herdr-app do layout.switch '{"name":"agents"}'` で切り替える
 
 ## 使い方
