@@ -6,6 +6,10 @@ export function tmSessionName(worktreePath: string) {
   return basename(worktreePath).replace(/[.:]/g, "_");
 }
 
+export function isPaneId(ref: string) {
+  return /^%\d+$/.test(ref);
+}
+
 export function sessionPaths(facts: TmuxFacts) {
   return facts.sessions.map((s) => s.path).filter(Boolean);
 }
@@ -17,12 +21,19 @@ export function indexTmux(locate: Locate, facts: TmuxFacts) {
     (p) => p.agentId,
   );
   const panesOf = (agentId: string) => livePanesByAgent.get(agentId) ?? [];
+  const sessionOf = (worktreePath: string) => {
+    const sessions = sessionsByWorktree.get(worktreePath) ?? [];
+    return sessions.find((s) => s.name === tmSessionName(worktreePath)) ?? sessions[0];
+  };
+  const otherLivePanes = facts.panes.filter((p) => !p.agentId && !p.dead);
   return {
     facts,
-    sessionOf: (worktreePath: string) => {
-      const sessions = sessionsByWorktree.get(worktreePath) ?? [];
-      return sessions.find((s) => s.name === tmSessionName(worktreePath)) ?? sessions[0];
+    sessionOf,
+    otherPanesOf: (worktreePath: string) => {
+      const session = sessionOf(worktreePath);
+      return session ? otherLivePanes.filter((p) => p.session === session.name) : [];
     },
+    livePaneById: (paneId: string) => facts.panes.find((p) => p.paneId === paneId && !p.dead),
     panesOf,
     isAttached: (agentId: string) => panesOf(agentId).length > 0,
   };

@@ -42,7 +42,13 @@ interface GoContext {
   cwdWhenMissing: string;
 }
 
-export function planGo(target: Resolved, idx: TmuxIndex, ctx: GoContext) {
+export interface PaneTarget {
+  kind: "pane";
+  paneId: string;
+}
+
+export function planGo(target: Resolved | PaneTarget, idx: TmuxIndex, ctx: GoContext) {
+  if (target.kind === "pane") return [{ op: "selectPane", paneId: target.paneId } as Step, ...bringClientTo(target.paneId, ctx)];
   const cwd = workingDir(target.worktree, ctx.cwdWhenMissing);
   const session = ensureSession(target.worktree, idx, cwd);
   const conversation = target.kind === "agent" ? enterConversation(target.agent, session.name, cwd, idx) : { target: session.name, steps: [] };

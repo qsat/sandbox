@@ -8,6 +8,8 @@ export interface TmuxPane {
   paneId: string;
   agentId: string | null;
   dead: boolean;
+  session: string;
+  command: string;
 }
 
 export interface TmuxClient {

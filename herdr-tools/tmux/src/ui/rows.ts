@@ -68,6 +68,10 @@ function boardAgentLabel(a: AgentNode, idx: TmuxIndex, color: boolean, keyHints 
   return joinParts([paint(color, BOLD, agentDisplayName(a)), paint(color, sc, statusIcon(a.status)), paint(color, sc, statusLabel(a)), tags], " ");
 }
 
+function paneLabel(command: string, color: boolean) {
+  return paint(color, GRAY, command);
+}
+
 export function worktreeLabel(wt: WorktreeNode, idx: TmuxIndex, color: boolean) {
   const name = basename(wt.path);
   return joinParts([wt.isMain ? paint(color, BOLD, name) : name, tagsText(worktreeTags(wt, idx.sessionOf(wt.path)), color)], " ");
@@ -105,12 +109,19 @@ export function toRows(tree: Tree, idx: TmuxIndex, opts: RowOptions) {
         worktree: wt,
         text: (board ? boardAgentLabel : agentLabel)(a, idx, opts.color, opts.keyHints),
       })),
+      ...idx.otherPanesOf(wt.path).map((p) => ({
+        kind: "pane" as const,
+        depth: 2,
+        ref: p.paneId,
+        worktree: wt,
+        text: paneLabel(p.command, opts.color),
+      })),
     ]),
   ]);
 }
 
 export type Row = ReturnType<typeof toRows>[number];
-type SelectableRow = Extract<Row, { kind: "worktree" | "agent" }>;
+type SelectableRow = Extract<Row, { kind: "worktree" | "agent" | "pane" }>;
 
 export function usageLine(usage: ClaudeUsage, color: boolean, nowEpochSec = Math.floor(Date.now() / 1000)) {
   return tagsText(usageSegments(usage, nowEpochSec), color);
@@ -122,7 +133,7 @@ export function renderText(tree: Tree, idx: TmuxIndex, usage: ClaudeUsage, color
 }
 
 export function isSelectable(r: Row | undefined): r is SelectableRow {
-  return !!r && (r.kind === "worktree" || r.kind === "agent");
+  return !!r && (r.kind === "worktree" || r.kind === "agent" || r.kind === "pane");
 }
 
 export function nextSelectable(rows: Row[], from: number, delta: 1 | -1) {

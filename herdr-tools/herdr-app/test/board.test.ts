@@ -22,13 +22,13 @@ const tree: ListedTree = {
       path: "/g/o/api",
       name: "github.com/o/api",
       worktrees: [
-        { path: "/g/o/api", branch: "main", exists: true, isMain: true, tmux: { session: { name: "api", attached: true } }, agents: [] },
+        { path: "/g/o/api", branch: "main", exists: true, isMain: true, tmux: { session: { name: "api", attached: true }, panes: [] }, agents: [] },
         {
           path: "/g/o/api=feat",
           branch: "feat",
           exists: true,
           isMain: false,
-          tmux: { session: null },
+          tmux: { session: null, panes: [] },
           agents: [
             agent({ id: "t1", name: "api-feat", status: "working", resumable: false, attached: true, contextUsedPercentage: 75 }),
             agent({ id: "t2", name: "api-feat-2", status: "idle", resumable: true, attached: false }),
@@ -83,6 +83,34 @@ describe("boardRows", () => {
     const rows = boardRows(tree, [], ["/g/o/api"]);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ collapsed: true });
+  });
+});
+
+const treeWithPanes: ListedTree = {
+  usage: {},
+  workspaces: [
+    {
+      ...tree.workspaces[0]!,
+      worktrees: [{ ...tree.workspaces[0]!.worktrees[0]!, tmux: { session: { name: "api", attached: true }, panes: [{ paneId: "%12", command: "nvim" }] } }, tree.workspaces[0]!.worktrees[1]!],
+    },
+  ],
+};
+
+describe("ペインの行", () => {
+  const rows = boardRows(treeWithPanes, [], []);
+  const pane = rows.find((r) => r.kind === "pane")!;
+  test("worktree の下に並ぶ（実行中のコマンドが名前）", () => {
+    expect(rows.map((r) => r.kind)).toEqual(["workspace", "worktree", "pane", "worktree", "agent", "agent"]);
+    expect(pane).toMatchObject({ key: "%12", label: "nvim", worktree: "/g/o/api" });
+  });
+  test("クリック → ws go %12 --from-app。停止・閉じる・新規・再開は何もしない", () => {
+    expect(wsCommandFor(pane, "go")).toEqual(["ws", ["go", "%12", "--from-app"]]);
+    for (const action of ["stop", "close", "new", "resume"] as const) expect(wsCommandFor(pane, action)).toBeNull();
+  });
+  test("j / k で選べて、Enter で移動し、s / x / n では何も起きない", () => {
+    expect(moveSelection(rows, "worktree:/g/o/api", 1)).toBe("pane:%12");
+    expect(keyActionFor(rows, "pane:%12", "enter")).toMatchObject({ action: "go" });
+    for (const k of ["s", "x", "n", "shift-r"]) expect(keyActionFor(rows, "pane:%12", k)).toBeNull();
   });
 });
 

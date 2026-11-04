@@ -259,6 +259,11 @@ export default class AgentBoard extends View {
               ),
             ),
           );
+      case "pane":
+        return base
+          .pl(28)
+          .on_click((_e, cx) => this.runRow(row, "go", cx))
+          .child(this.info([div().text_color(t.muted).child(row.label)]));
       case "agent": {
         const color = statusColor(t, row.rawStatus);
         return base

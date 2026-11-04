@@ -2,9 +2,9 @@ import { homedir } from "node:os";
 import { runInteractive } from "@herdr-tools/utils/run-interactive";
 import { looksLikePath, resolveRef, type Resolved, type WsCore } from "@herdr-tools/ws-core";
 import { focusGhostty, openGhosttyWindowRunning } from "./ghostty";
-import { AGENTS_WINDOW, chooseClient, planGo, workingDir, type Step } from "./plans/go";
+import { AGENTS_WINDOW, chooseClient, planGo, workingDir, type PaneTarget, type Step } from "./plans/go";
 import { planPanes } from "./plans/panes";
-import { indexTmux, sessionPaths } from "./tmux-index";
+import { indexTmux, isPaneId, sessionPaths } from "./tmux-index";
 import { TmuxServer } from "./tmux-server";
 
 interface GoOptions {
@@ -28,7 +28,7 @@ export class TmuxNavigator {
     return { snap, idx: indexTmux(snap.locate, facts) };
   }
 
-  async go(target: Resolved, view: TmuxView, opts: GoOptions = {}) {
+  async go(target: Resolved | PaneTarget, view: TmuxView, opts: GoOptions = {}) {
     const client = chooseClient({
       explicit: opts.client,
       fromApp: !!opts.fromApp,
@@ -42,7 +42,7 @@ export class TmuxNavigator {
 
   async goRef(ref: string, opts: GoOptions = {}) {
     const view = await this.view({ alsoShow: looksLikePath(ref) ? [ref] : [] });
-    const target = resolveRef(view.snap, ref);
+    const target = isPaneId(ref) ? this.paneTarget(view, ref) : resolveRef(view.snap, ref);
     if (!target) throw new Error(`見つかりません: ${ref}`);
     return this.go(target, view, opts);
   }
@@ -109,6 +109,10 @@ export class TmuxNavigator {
 
   async killSessions(names: string[]) {
     for (const n of names) await this.tmux.killSession(n).catch(() => {});
+  }
+
+  private paneTarget(view: TmuxView, paneId: string): PaneTarget | undefined {
+    return view.idx.livePaneById(paneId) && { kind: "pane", paneId };
   }
 
   private worktreeOfSession(view: TmuxView, session: string) {

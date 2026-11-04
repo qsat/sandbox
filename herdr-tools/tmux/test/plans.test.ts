@@ -5,7 +5,7 @@ import { toListJson } from "../src/list-json";
 import { chooseClient, planGo } from "../src/plans/go";
 import { planPanes } from "../src/plans/panes";
 import { sessionsOfMissingWorktrees } from "../src/plans/prune";
-import { indexTmux, sessionPaths, tmSessionName } from "../src/tmux-index";
+import { indexTmux, isPaneId, sessionPaths, tmSessionName } from "../src/tmux-index";
 
 const G = "/Users/me/ghq/github.com/o";
 const API = `${G}/api`;
@@ -34,8 +34,11 @@ const facts: TmuxFacts = {
     { name: "api=gone", path: GONE, attached: false },
   ],
   panes: [
-    { paneId: "%5", agentId: "t1", dead: false },
-    { paneId: "%6", agentId: "t4", dead: true },
+    { paneId: "%5", agentId: "t1", dead: false, session: "api", command: "claude" },
+    { paneId: "%6", agentId: "t4", dead: true, session: "api", command: "claude" },
+    { paneId: "%7", agentId: null, dead: false, session: "api", command: "nvim" },
+    { paneId: "%8", agentId: null, dead: false, session: "web", command: "zsh" },
+    { paneId: "%9", agentId: null, dead: true, session: "web", command: "zsh" },
   ],
 };
 
@@ -68,6 +71,36 @@ describe("索引", () => {
   test("セッション名は basename、. と : は _", () => {
     expect(tmSessionName(FEAT)).toBe("api=feat-auth");
     expect(tmSessionName(`${G}/my.repo`)).toBe("my_repo");
+  });
+});
+
+describe("ペイン", () => {
+  test("会話ペインと死んだペインを除き、ペインのセッションの worktree に属させる", () => {
+    expect(idx.otherPanesOf(API).map((p) => [p.paneId, p.command])).toEqual([["%7", "nvim"]]);
+    expect(idx.otherPanesOf(WEB).map((p) => [p.paneId, p.command])).toEqual([["%8", "zsh"]]);
+    expect(idx.otherPanesOf(FEAT)).toEqual([]);
+  });
+  test("ws list --json の worktree.tmux.panes に出る", () => {
+    const listed = toListJson(tree, idx, {});
+    const api = listed.workspaces.flatMap((w) => w.worktrees).find((w) => w.path === API)!;
+    expect(api.tmux.panes).toEqual([{ paneId: "%7", command: "nvim" }]);
+  });
+  test("ws go %7 は、そのペインのセッションへの切り替えとペインの選択", () => {
+    expect(planGo({ kind: "pane", paneId: "%7" }, idx, ctx)).toEqual([
+      { op: "selectPane", paneId: "%7" },
+      { op: "switchClient", client: "c1", target: "%7" },
+    ]);
+    expect(planGo({ kind: "pane", paneId: "%7" }, idx, { ...ctx, fromApp: true })).toEqual([
+      { op: "selectPane", paneId: "%7" },
+      { op: "switchClient", client: "c1", target: "%7" },
+      { op: "focusGhostty" },
+    ]);
+  });
+  test("ペインの宛先は %数字 の形で、死んだペインは見つからない", () => {
+    expect(isPaneId("%12")).toBe(true);
+    expect(isPaneId("t1")).toBe(false);
+    expect(idx.livePaneById("%7")).toBeDefined();
+    expect(idx.livePaneById("%9")).toBeUndefined();
   });
 });
 

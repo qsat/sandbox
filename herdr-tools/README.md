@@ -43,7 +43,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 表示の部品（状態アイコン・文言・タグ）は utils にあり、tmux の popup と mod が同じものを使う。
 
 会話ペインの印は tmux のペインオプション `@ws_agent`（値はエージェントの id）。
-`ws list --json` は ws-core の木に tmux の情報を `tmux` キーで添えて出す（`worktree.tmux.session`、`agent.tmux.attached` / `agent.tmux.panes`）。
+`ws list --json` は ws-core の木に tmux の情報を `tmux` キーで添えて出す（`worktree.tmux.session`、`worktree.tmux.panes`（会話ペイン以外の生きたペイン）、`agent.tmux.attached` / `agent.tmux.panes`）。
 
 ## セットアップ（手元の Mac）
 
@@ -67,6 +67,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | 待っているエージェントを探す | `prefix a`（blocked が先頭） | 一覧を見る（常時表示） |
 | そのエージェントと話す | 一覧で `Enter` → 会話ペインへ | クリック → Ghostty の会話ペインへ |
 | 一覧をキーで操作する | 一覧で `j` / `k`（↓ / ↑）で選び、`Enter` 移動、`n` ＋ claude、`R` 再開、`s` 停止・削除、`x` セッションを閉じる（停止と閉じるは y で確かめる） | ボードを一度クリックしてから `j` / `k`（↓ / ↑）で選び、`Enter` 移動、`n` ＋ claude、`R` 再開、`s` 停止・削除、`x` セッションを閉じる（停止と閉じるは確認のダイアログを出す）。選んだ行は濃い黄色、今いる tmux セッションの worktree は薄い黄色で示す |
+| tmux のペインへ移動する | 一覧で worktree の下のペインの行（実行中のコマンド名。会話ペインと死んだペインは出ない）を `j` / `k` で選び `Enter`。または `ws go %12`。移動だけで、停止・閉じるは付かない | ペインの行をクリック（`Enter` でも移動） |
 | worktree のエージェントを全部並べる | `prefix A`（`ws panes`） | — |
 | 再起動後に続きをやる | 一覧で `R`（再開できる行に「R で再開」と出る）か `ws resume <agent>`。移動では再開しない | 「再開」ボタン |
 | エージェントを止める | `ws stop <agent>`（止めて一覧から消す）。claude の中なら `/exit` | エージェントの停止ボタン（■ のアイコン。確認のダイアログで「停止する」か Enter で止める。「キャンセル」か Esc で取りやめる）。終了済みなら「削除」。再開できる行には停止ボタンを出さない（`s` では止められる） |

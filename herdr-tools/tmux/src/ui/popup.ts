@@ -173,12 +173,12 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
             await nav.goRef(r.ref, { client: opts.client });
           }, true);
         case "n":
-          if (!isSelectable(r)) return;
+          if (!isSelectable(r) || r.kind === "pane") return;
           return void act(async () => {
             await nav.startAgentAndGo(r.worktree.path, [], { client: opts.client });
           }, true);
         case "x": {
-          if (!isSelectable(r)) return;
+          if (!isSelectable(r) || r.kind === "pane") return;
           const path = r.worktree.path;
           confirming = {
             question: `${basename(path)} の tmux セッションを閉じますか？`,

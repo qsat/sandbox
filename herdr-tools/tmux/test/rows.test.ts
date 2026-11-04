@@ -14,7 +14,27 @@ const infos: PathInspection[] = [
 const tree = buildTree({ agents: [t("t1", A, "working"), t("t2", B, "idle"), t("t3", B, "blocked")], inspections: infos, alwaysShow: [], ghqRoot: "/g" });
 const idx = indexTmux(makeLocator(tree, infos), {
   sessions: [{ name: "a", path: A, attached: true }],
-  panes: [{ paneId: "%1", agentId: "t1", dead: false }],
+  panes: [{ paneId: "%1", agentId: "t1", dead: false, session: "a", command: "claude" }],
+});
+
+describe("ペインの行", () => {
+  const withPanes = indexTmux(makeLocator(tree, infos), {
+    sessions: [{ name: "a", path: A, attached: true }],
+    panes: [
+      { paneId: "%1", agentId: "t1", dead: false, session: "a", command: "claude" },
+      { paneId: "%2", agentId: null, dead: false, session: "a", command: "nvim" },
+      { paneId: "%3", agentId: null, dead: true, session: "a", command: "zsh" },
+    ],
+  });
+  const rows = toRows(tree, withPanes, { attentionFirst: true, color: false });
+  test("エージェントの行の後ろに、同じ深さで並ぶ（会話ペインと死んだペインは出ない）", () => {
+    expect(rows.map((r) => r.kind)).toEqual(["workspace", "worktree", "agent", "agent", "workspace", "worktree", "agent", "pane"]);
+    expect(rows.at(-1)).toMatchObject({ kind: "pane", depth: 2, ref: "%2", text: "nvim" });
+  });
+  test("選べる行で、選択を保てる", () => {
+    expect(keepSelectionOn(rows, "%2")).toBe(rows.length - 1);
+    expect(nextSelectable(rows, 6, 1)).toBe(7);
+  });
 });
 
 describe("toRows", () => {

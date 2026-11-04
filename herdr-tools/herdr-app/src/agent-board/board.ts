@@ -54,6 +54,7 @@ export function boardRows(listJson: ListedTree, live: LiveTerminal[], collapsed:
           alive: a.alive,
           worktree: wt.path,
         })),
+        ...wt.tmux.panes.map((p) => ({ kind: "pane" as const, key: p.paneId, label: p.command, worktree: wt.path })),
       ]),
     ];
   });
@@ -75,6 +76,7 @@ export function moveSelection(rows: BoardRow[], current: string | null, delta: 1
 
 export function wsCommandFor(row: BoardRow, action: BoardAction): [string, string[]] | null {
   if (row.kind === "workspace") return null;
+  if (row.kind === "pane") return action === "go" ? [WS, ["go", row.key, "--from-app"]] : null;
   switch (action) {
     case "go":
       return [WS, ["go", row.key, "--from-app"]];

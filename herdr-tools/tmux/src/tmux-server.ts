@@ -46,10 +46,10 @@ export class TmuxServer {
   }
 
   async listPanes() {
-    const lines = await this.linesOrNoneWhenServerIsDown(["list-panes", "-a", "-F", format("#{pane_id}", `#{${AGENT_PANE_OPTION}}`, "#{pane_dead}")]);
+    const lines = await this.linesOrNoneWhenServerIsDown(["list-panes", "-a", "-F", format("#{pane_id}", `#{${AGENT_PANE_OPTION}}`, "#{pane_dead}", "#{session_name}", "#{pane_current_command}")]);
     return lines.map((l) => {
-      const [paneId = "", agentId = "", dead = "0"] = fields(l);
-      return { paneId, agentId: agentId || null, dead: dead === "1" };
+      const [paneId = "", agentId = "", dead = "0", session = "", command = ""] = fields(l);
+      return { paneId, agentId: agentId || null, dead: dead === "1", session, command };
     });
   }
 
