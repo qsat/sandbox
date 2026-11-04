@@ -11,8 +11,8 @@ export function toListJson(tree: Tree, idx: TmuxIndex, usage: ClaudeUsage) {
         const s = idx.sessionOf(wt.path);
         return {
           ...wt,
-          tmux: { session: s ? { name: s.name, attached: s.attached } : null, panes: idx.otherPanesOf(wt.path).map((p) => ({ paneId: p.paneId, command: p.command })) },
-          agents: wt.agents.map((a) => ({ ...a, tmux: { attached: idx.isAttached(a.id), panes: idx.panesOf(a.id).map((p) => p.paneId) } })),
+          tmux: { session: s ? { name: s.name, attached: s.attached } : null, panes: idx.otherPanesOf(wt.path).map((p) => ({ paneId: p.paneId, command: p.command, current: p.current })) },
+          agents: wt.agents.map((a) => ({ ...a, tmux: { attached: idx.isAttached(a.id), panes: idx.panesOf(a.id).map((p) => p.paneId), current: idx.isCurrentAgent(a.id) } })),
         };
       }),
     })),

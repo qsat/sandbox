@@ -34,11 +34,11 @@ const facts: TmuxFacts = {
     { name: "api=gone", path: GONE, attached: false },
   ],
   panes: [
-    { paneId: "%5", agentId: "t1", dead: false, session: "api", command: "claude" },
-    { paneId: "%6", agentId: "t4", dead: true, session: "api", command: "claude" },
-    { paneId: "%7", agentId: null, dead: false, session: "api", command: "nvim" },
-    { paneId: "%8", agentId: null, dead: false, session: "web", command: "zsh" },
-    { paneId: "%9", agentId: null, dead: true, session: "web", command: "zsh" },
+    { paneId: "%5", agentId: "t1", dead: false, session: "api", command: "claude", current: false },
+    { paneId: "%6", agentId: "t4", dead: true, session: "api", command: "claude", current: false },
+    { paneId: "%7", agentId: null, dead: false, session: "api", command: "nvim", current: true },
+    { paneId: "%8", agentId: null, dead: false, session: "web", command: "zsh", current: false },
+    { paneId: "%9", agentId: null, dead: true, session: "web", command: "zsh", current: false },
   ],
 };
 
@@ -65,7 +65,7 @@ describe("索引", () => {
     const j = toListJson(tree, idx, {});
     const wt = j.workspaces[0]!.worktrees[0]!;
     expect(wt.tmux.session).toEqual({ name: "api", attached: true });
-    expect(wt.agents[0]!.tmux).toEqual({ attached: true, panes: ["%5"] });
+    expect(wt.agents[0]!.tmux).toEqual({ attached: true, panes: ["%5"], current: false });
     expect("tmux" in tree.workspaces[0]!.worktrees[0]!).toBe(false);
   });
   test("セッション名は basename、. と : は _", () => {
@@ -83,7 +83,7 @@ describe("ペイン", () => {
   test("ws list --json の worktree.tmux.panes に出る", () => {
     const listed = toListJson(tree, idx, {});
     const api = listed.workspaces.flatMap((w) => w.worktrees).find((w) => w.path === API)!;
-    expect(api.tmux.panes).toEqual([{ paneId: "%7", command: "nvim" }]);
+    expect(api.tmux.panes).toEqual([{ paneId: "%7", command: "nvim", current: true }]);
   });
   test("ws go %7 は、そのペインのセッションへの切り替えとペインの選択", () => {
     expect(planGo({ kind: "pane", paneId: "%7" }, idx, ctx)).toEqual([

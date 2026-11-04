@@ -12,7 +12,7 @@ const ALT_ON = `${ESC}[?1049h${ESC}[?25l${NO_WRAP}`;
 const ALT_OFF = `${WRAP}${ESC}[?25h${ESC}[?1049l`;
 const CLEAR = `${ESC}[H${ESC}[2J`;
 const SELECTED_BG = `${ESC}[48;2;56;60;14m`;
-const CURRENT_SESSION_BG = `${ESC}[48;2;44;48;8m`;
+const CURRENT_PANE_BG = `${ESC}[48;2;44;48;8m`;
 const RESET = `${ESC}[0m`;
 const DIM = `${ESC}[2m`;
 const PADDING = { x: 3, y: 1 };
@@ -43,7 +43,7 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
     const lines = rows.slice(top, top + height).map((r, i) => {
       const text = "  ".repeat(r.depth) + r.text;
       if (top + i === sel && isSelectable(r)) return withBackground(text, SELECTED_BG, inner);
-      if (r.kind === "worktree" && r.isCurrentSession) return withBackground(text, CURRENT_SESSION_BG, inner);
+      if ((r.kind === "agent" || r.kind === "pane") && r.isCurrentPane) return withBackground(text, CURRENT_PANE_BG, inner);
       return text;
     });
     if (rows.length === 0) lines.push(DIM + "（表示するものがありません。a で全 worktree を表示）" + RESET);

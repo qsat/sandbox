@@ -14,16 +14,16 @@ const infos: PathInspection[] = [
 const tree = buildTree({ agents: [t("t1", A, "working"), t("t2", B, "idle"), t("t3", B, "blocked")], inspections: infos, alwaysShow: [], ghqRoot: "/g" });
 const idx = indexTmux(makeLocator(tree, infos), {
   sessions: [{ name: "a", path: A, attached: true }],
-  panes: [{ paneId: "%1", agentId: "t1", dead: false, session: "a", command: "claude" }],
+  panes: [{ paneId: "%1", agentId: "t1", dead: false, session: "a", command: "claude", current: false }],
 });
 
 describe("ペインの行", () => {
   const withPanes = indexTmux(makeLocator(tree, infos), {
     sessions: [{ name: "a", path: A, attached: true }],
     panes: [
-      { paneId: "%1", agentId: "t1", dead: false, session: "a", command: "claude" },
-      { paneId: "%2", agentId: null, dead: false, session: "a", command: "nvim" },
-      { paneId: "%3", agentId: null, dead: true, session: "a", command: "zsh" },
+      { paneId: "%1", agentId: "t1", dead: false, session: "a", command: "claude", current: false },
+      { paneId: "%2", agentId: null, dead: false, session: "a", command: "nvim", current: false },
+      { paneId: "%3", agentId: null, dead: true, session: "a", command: "zsh", current: false },
     ],
   });
   const rows = toRows(tree, withPanes, { attentionFirst: true, color: false });
@@ -52,11 +52,34 @@ describe("toRows", () => {
     expect(text).toMatch(/t2 +t2 +idle +未attach/);
   });
 
-  test("tmux のクライアントが表示しているセッション（attached）の worktree を、今いるセッションとして示す", () => {
-    const worktrees = toRows(tree, idx, { attentionFirst: false, color: false }).filter((r) => r.kind === "worktree");
-    expect(worktrees.map((r) => [r.ref, r.isCurrentSession])).toEqual([
-      [A, true],
-      [B, false],
+  test("今いるペインは、そのペインの行だけが示される（worktree の行は示されない）", () => {
+    const here = indexTmux(makeLocator(tree, infos), {
+      sessions: [{ name: "a", path: A, attached: true }],
+      panes: [
+        { paneId: "%1", agentId: "t1", dead: false, session: "a", command: "claude", current: false },
+        { paneId: "%2", agentId: null, dead: false, session: "a", command: "nvim", current: true },
+        { paneId: "%4", agentId: null, dead: false, session: "a", command: "zsh", current: false },
+      ],
+    });
+    const rows = toRows(tree, here, { attentionFirst: false, color: false });
+    expect(rows.filter((r) => r.kind === "pane").map((r) => [r.ref, r.isCurrentPane])).toEqual([
+      ["%2", true],
+      ["%4", false],
+    ]);
+    expect(rows.filter((r) => r.kind === "agent").map((r) => r.isCurrentPane)).toEqual([false, false, false]);
+    expect(rows.filter((r) => r.kind === "worktree").every((r) => !("isCurrentPane" in r))).toBe(true);
+  });
+
+  test("会話ペインが今いるペインなら、そのエージェントの行が示される", () => {
+    const here = indexTmux(makeLocator(tree, infos), {
+      sessions: [{ name: "a", path: A, attached: true }],
+      panes: [{ paneId: "%1", agentId: "t1", dead: false, session: "a", command: "claude", current: true }],
+    });
+    const rows = toRows(tree, here, { attentionFirst: false, color: false });
+    expect(rows.filter((r) => r.kind === "agent").map((r) => [r.ref, r.isCurrentPane])).toEqual([
+      ["t1", true],
+      ["t2", false],
+      ["t3", false],
     ]);
   });
 

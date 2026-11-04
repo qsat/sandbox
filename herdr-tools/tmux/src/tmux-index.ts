@@ -36,6 +36,7 @@ export function indexTmux(locate: Locate, facts: TmuxFacts) {
     livePaneById: (paneId: string) => facts.panes.find((p) => p.paneId === paneId && !p.dead),
     panesOf,
     isAttached: (agentId: string) => panesOf(agentId).length > 0,
+    isCurrentAgent: (agentId: string) => panesOf(agentId).some((p) => p.current),
   };
 }
 

@@ -39,7 +39,6 @@ export function boardRows(listJson: ListedTree, live: LiveTerminal[], collapsed:
           isMain: wt.isMain,
           exists: wt.exists,
           hasSession: wt.tmux.session !== null,
-          isCurrentSession: wt.tmux.session?.attached ?? false,
         },
         ...wt.agents.map((a) => ({
           kind: "agent" as const,
@@ -53,8 +52,9 @@ export function boardRows(listJson: ListedTree, live: LiveTerminal[], collapsed:
           canResume: a.resumable,
           alive: a.alive,
           worktree: wt.path,
+          isCurrentPane: a.tmux.current,
         })),
-        ...wt.tmux.panes.map((p) => ({ kind: "pane" as const, key: p.paneId, label: p.command, worktree: wt.path })),
+        ...wt.tmux.panes.map((p) => ({ kind: "pane" as const, key: p.paneId, label: p.command, worktree: wt.path, isCurrentPane: p.current })),
       ]),
     ];
   });

@@ -15,7 +15,7 @@ const REPOSITORY_SPACING = ROW_HEIGHT * 0.5;
 const REPOSITORY_COLOR: Color = "#b8ff3cb3";
 const BRANCH_COLOR: Color = "#fff03c80";
 const SELECTED_BG: Color = "#e6ff0033";
-const CURRENT_SESSION_BG: Color = "#e6ff0014";
+const CURRENT_PANE_BG: Color = "#e6ff0014";
 const PIE_SIZE = 12;
 
 type Theme = Record<
@@ -235,7 +235,7 @@ export default class AgentBoard extends View {
       .px(4)
       .rounded(6)
       .cursor_pointer()
-      .when(row.kind === "worktree" && row.isCurrentSession, (el) => el.bg(CURRENT_SESSION_BG))
+      .when((row.kind === "agent" || row.kind === "pane") && row.isCurrentPane, (el) => el.bg(CURRENT_PANE_BG))
       .when(selected, (el) => el.bg(SELECTED_BG))
       .hover((s) => s.bg(t.hover));
     switch (row.kind) {

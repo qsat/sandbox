@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
 import { boardRows, keyActionFor, moveSelection, rowId, wsCommandFor, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
 
-const agent = (p: { id: string; name: string; status: "working" | "idle"; resumable: boolean; attached: boolean; contextUsedPercentage?: number }) => ({
+const agent = (p: { id: string; name: string; status: "working" | "idle"; resumable: boolean; attached: boolean; current?: boolean; contextUsedPercentage?: number }) => ({
   contextUsedPercentage: p.contextUsedPercentage,
   id: p.id,
   name: p.name,
@@ -12,7 +12,7 @@ const agent = (p: { id: string; name: string; status: "working" | "idle"; resuma
   cwd: "/g/o/api=feat",
   missingLocation: false,
   parent: null,
-  tmux: { attached: p.attached, panes: p.attached ? ["%1"] : [] },
+  tmux: { attached: p.attached, panes: p.attached ? ["%1"] : [], current: p.current ?? false },
 });
 
 const tree: ListedTree = {
@@ -69,10 +69,9 @@ describe("boardRows", () => {
     expect(boardRows(detached, [], [])[2]).toMatchObject({ label: "api=feat", tags: [] });
   });
 
-  test("tmux のクライアントが表示しているセッション（attached）の worktree を、今いるセッションとして示す", () => {
+  test("worktree の行は、今いるペインを含んでいても示さない", () => {
     const rows = boardRows(tree, [], []);
-    expect(rows[1]).toMatchObject({ label: "main", isCurrentSession: true });
-    expect(rows[2]).toMatchObject({ label: "feat", isCurrentSession: false });
+    expect(rows.filter((r) => r.kind === "worktree").every((r) => !("isCurrentPane" in r))).toBe(true);
   });
 
   test("名乗っていない（status が null）なら ws list の状態のまま", () => {
@@ -91,7 +90,7 @@ const treeWithPanes: ListedTree = {
   workspaces: [
     {
       ...tree.workspaces[0]!,
-      worktrees: [{ ...tree.workspaces[0]!.worktrees[0]!, tmux: { session: { name: "api", attached: true }, panes: [{ paneId: "%12", command: "nvim" }] } }, tree.workspaces[0]!.worktrees[1]!],
+      worktrees: [{ ...tree.workspaces[0]!.worktrees[0]!, tmux: { session: { name: "api", attached: true }, panes: [{ paneId: "%12", command: "nvim", current: true }, { paneId: "%13", command: "zsh", current: false }] } }, tree.workspaces[0]!.worktrees[1]!],
     },
   ],
 };
@@ -100,8 +99,25 @@ describe("ペインの行", () => {
   const rows = boardRows(treeWithPanes, [], []);
   const pane = rows.find((r) => r.kind === "pane")!;
   test("worktree の下に並ぶ（実行中のコマンドが名前）", () => {
-    expect(rows.map((r) => r.kind)).toEqual(["workspace", "worktree", "pane", "worktree", "agent", "agent"]);
+    expect(rows.map((r) => r.kind)).toEqual(["workspace", "worktree", "pane", "pane", "worktree", "agent", "agent"]);
     expect(pane).toMatchObject({ key: "%12", label: "nvim", worktree: "/g/o/api" });
+  });
+  test("今いるペインのペインの行だけが、今いるペインとして示される", () => {
+    expect(rows.filter((r) => r.kind === "pane").map((r) => [r.key, r.isCurrentPane])).toEqual([
+      ["%12", true],
+      ["%13", false],
+    ]);
+  });
+  test("会話ペインが今いるペインなら、そのエージェントの行が示される", () => {
+    const t2 = {
+      ...tree,
+      workspaces: [{ ...tree.workspaces[0]!, worktrees: tree.workspaces[0]!.worktrees.map((w) => ({ ...w, agents: w.agents.map((a) => ({ ...a, tmux: { ...a.tmux, current: a.id === "t1" } })) })) }],
+    };
+    const agents = boardRows(t2, [], []).filter((r) => r.kind === "agent");
+    expect(agents.map((r) => [r.key, r.isCurrentPane]).sort()).toEqual([
+      ["t1", true],
+      ["t2", false],
+    ]);
   });
   test("クリック → ws go %12 --from-app。停止・閉じる・新規・再開は何もしない", () => {
     expect(wsCommandFor(pane, "go")).toEqual(["ws", ["go", "%12", "--from-app"]]);

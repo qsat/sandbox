@@ -98,7 +98,6 @@ export function toRows(tree: Tree, idx: TmuxIndex, opts: RowOptions) {
         depth: 1,
         ref: wt.path,
         worktree: wt,
-        isCurrentSession: idx.sessionOf(wt.path)?.attached ?? false,
         text: (board ? boardWorktreeLabel : worktreeLabel)(wt, idx, opts.color),
       },
       ...sorted(wt.agents, byAttention).map((a) => ({
@@ -107,6 +106,7 @@ export function toRows(tree: Tree, idx: TmuxIndex, opts: RowOptions) {
         ref: a.id,
         agent: a,
         worktree: wt,
+        isCurrentPane: idx.isCurrentAgent(a.id),
         text: (board ? boardAgentLabel : agentLabel)(a, idx, opts.color, opts.keyHints),
       })),
       ...idx.otherPanesOf(wt.path).map((p) => ({
@@ -114,6 +114,7 @@ export function toRows(tree: Tree, idx: TmuxIndex, opts: RowOptions) {
         depth: 2,
         ref: p.paneId,
         worktree: wt,
+        isCurrentPane: p.current,
         text: paneLabel(p.command, opts.color),
       })),
     ]),
