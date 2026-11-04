@@ -19,9 +19,9 @@ export function fitToWidth(s: string, width: number) {
   return out;
 }
 
-export function frame(lines: string[], size: { columns: number; rows: number }, padding: number) {
-  const margin = " ".repeat(padding);
-  const inner = Math.max(0, size.columns - padding * 2);
-  const body = lines.slice(0, Math.max(0, size.rows - padding * 2)).map((l) => margin + fitToWidth(l, inner));
-  return [...Array<string>(padding).fill(""), ...body].join("\r\n");
+export function frame(lines: string[], size: { columns: number; rows: number }, padding: { x: number; y: number }) {
+  const margin = " ".repeat(padding.x);
+  const inner = Math.max(0, size.columns - padding.x * 2);
+  const body = lines.slice(0, Math.max(0, size.rows - padding.y * 2)).map((l) => margin + fitToWidth(l, inner));
+  return [...Array<string>(padding.y).fill(""), ...body].join("\r\n");
 }

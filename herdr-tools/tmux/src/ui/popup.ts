@@ -14,7 +14,7 @@ const CLEAR = `${ESC}[H${ESC}[2J`;
 const SELECTED_BG = `${ESC}[48;2;56;60;14m`;
 const RESET = `${ESC}[0m`;
 const DIM = `${ESC}[2m`;
-const PADDING = 1;
+const PADDING = { x: 3, y: 1 };
 
 export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
   const out = process.stdout;
@@ -35,9 +35,9 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
   const render = () => {
     if (done) return;
     const size = { columns: out.columns || 80, rows: out.rows || 24 };
-    const inner = size.columns - PADDING * 2;
+    const inner = size.columns - PADDING.x * 2;
     const header = usageHeader ? [" ".repeat(Math.max(0, inner - Bun.stringWidth(stripAnsi(usageHeader)))) + usageHeader] : [];
-    const height = size.rows - PADDING * 2 - 2 - header.length;
+    const height = size.rows - PADDING.y * 2 - 2 - header.length;
     const top = Math.max(0, Math.min(sel - Math.floor(height / 2), rows.length - height));
     const lines = rows.slice(top, top + height).map((r, i) => {
       const text = "  ".repeat(r.depth) + r.text;
