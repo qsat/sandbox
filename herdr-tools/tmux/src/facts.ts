@@ -9,6 +9,8 @@ export interface TmuxPane {
   agentId: string | null;
   dead: boolean;
   session: string;
+  /** ペインのあるウィンドウの名前 */
+  window: string;
   command: string;
   /** tmux のクライアントが表示しているペイン（session_attached・window_active・pane_active がすべて真） */
   current: boolean;

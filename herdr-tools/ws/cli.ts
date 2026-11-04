@@ -17,7 +17,7 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
   ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
   ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す
   ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは止めない
-  ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる
+  ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる（他の場所の会話ペインは移して集める）
   ws next <blocked|working|idle> [--pane <pane_id>] [--client <name> | --from-app] [--list]
                                                    入力待ち／作業中／待機中のエージェントへ順に移動（--list は移動せず候補を順に出す。--from-app は移動後に Ghostty を前に出す）
   ws ui [--client <name>]                          tmux popup 用の対話一覧
@@ -138,7 +138,7 @@ async function main(argv: string[]) {
       if (!pane) throw new Error("--pane '#{pane_id}' を渡してください（tmux の外からは使えません）");
       const maxRaw = str(p, "--max") ?? process.env.WS_PANES_MAX;
       const r = await nav.openPanesForWorktreeOf(pane, { includeChildren: has(p, "-a", "--all"), max: maxRaw ? Number(maxRaw) : 8 });
-      process.stdout.write(`ws panes: ${r.opened} 開いた / ${r.alreadyOpen} 表示済み${r.overLimit ? ` / ${r.overLimit} 上限で省略` : ""}\n`);
+      process.stdout.write(`ws panes: ${r.opened} 開いた / ${r.gathered} 集めた / ${r.alreadyOpen} 表示済み${r.overLimit ? ` / ${r.overLimit} 上限で省略` : ""}\n`);
       return 0;
     }
     case "next": {

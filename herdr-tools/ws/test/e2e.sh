@@ -124,9 +124,13 @@ echo "panes（worktree のエージェントを並べる）"
 check "重複名は -2, -3" "$(state '[.terminals[].name] | join(",")')" "api-feat-auth,api-feat-auth-2,api-feat-auth-3"
 edit_state '.terminals[2].parent = "t1"'
 PANE="$(t list-panes -t '=api=feat-auth:agents' -F '#{pane_id}' | head -1)"
-check "既定は子を含めない" "$(ws panes --pane "$PANE")" "ws panes: 1 開いた / 1 表示済み"
-check "-a で子も" "$(ws panes -a --pane "$PANE")" "ws panes: 1 開いた / 2 表示済み"
-check "もう開くものは無い" "$(ws panes -a --pane "$PANE")" "ws panes: 0 開いた / 3 表示済み"
+ELSEWHERE="$(t new-window -d -P -F '#{pane_id}' -t '=api=feat-auth:' -n other "$HC_BIN attach t2")"
+t set-option -p -t "$ELSEWHERE" @ws_agent t2
+check "既定は子を含めない。別のウィンドウの会話ペインは集める" "$(ws panes --pane "$PANE")" "ws panes: 0 開いた / 1 集めた / 1 表示済み"
+check "集めたペインは agents ウィンドウへ移る（開き直さない）" "$(t display -p -t "$ELSEWHERE" '#{session_name}:#{window_name}') $(t list-panes -a -F '#{@ws_agent}' | grep -c '^t2$')" "api=feat-auth:agents 1"
+check "空になったウィンドウは閉じる" "$(t list-windows -t '=api=feat-auth' -F '#{window_name}' | grep -c '^other$' || true)" "0"
+check "-a で子も" "$(ws panes -a --pane "$PANE")" "ws panes: 1 開いた / 0 集めた / 2 表示済み"
+check "もう開くものは無い" "$(ws panes -a --pane "$PANE")" "ws panes: 0 開いた / 0 集めた / 3 表示済み"
 check "agents ウィンドウに3ペイン" "$(t list-panes -t '=api=feat-auth:agents' | wc -l | tr -d ' ')" "3"
 
 echo "new --attach"

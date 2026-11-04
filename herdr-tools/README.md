@@ -83,7 +83,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | そのエージェントと話す | 一覧で `Enter` → 会話ペインへ | クリック → Ghostty の会話ペインへ |
 | 一覧をキーで操作する | 一覧で `j` / `k`（↓ / ↑）で選び、`Enter` 移動、`n` ＋ claude、`R` 再開、`s` 停止・削除、`x` セッションを閉じる（停止と閉じるは y で確かめる） | ボードを一度クリックしてから `j` / `k`（↓ / ↑）で選び、`Enter` 移動、`n` ＋ claude、`R` 再開、`s` 停止・削除、`x` セッションを閉じる（停止と閉じるは確認のダイアログを出す）。選んだ行は濃い黄色、今いるペイン（会話ペインならそのエージェント）の行は薄い黄色で示す |
 | tmux のペインへ移動する | 一覧で worktree の下のペインの行（実行中のコマンド名。会話ペインと死んだペインは出ない）を `j` / `k` で選び `Enter`。または `ws go %12`。移動だけで、停止・閉じるは付かない | ペインの行をクリック（`Enter` でも移動） |
-| worktree のエージェントを全部並べる | `prefix A`（`ws panes`） | — |
+| worktree のエージェントを全部並べる | `prefix A`（`ws panes`）。会話ペインが無ければ開き、別のウィンドウ・セッションにあればそのペインを agents ウィンドウへ集める | — |
 | 再起動後に続きをやる | 一覧で `R`（再開できる行に「R で再開」と出る）か `ws resume <agent>`。移動では再開しない | 「再開」ボタン |
 | エージェントを止める | `ws stop <agent>`（止めて一覧から消す）。claude の中なら `/exit` | エージェントの停止ボタン（■ のアイコン。確認のダイアログで「停止する」か Enter で止める。「キャンセル」か Esc で取りやめる）。終了済みなら「削除」。再開できる行には停止ボタンを出さない（`s` では止められる） |
 | worktree の tmux セッションを閉じる（エージェントは止めない） | 一覧で `x` → `y`。または `ws close [<worktree>]` | worktree の「閉じる」ボタン（tmux セッションがある行に出る。確認のダイアログで「閉じる」か Enter） |
@@ -99,7 +99,7 @@ ws new [<worktree>] [--here | --attach] [--client <name> | --from-app] [-- <clau
 ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
 ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す（エージェントでない端末は触らない）
 ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは herdr-core で動き続ける
-ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる
+ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる（会話ペインが無ければ開き、他の場所にあれば移して集める）
 ws next <blocked|working|idle> [--pane <pane_id>] [--client <name> | --from-app] [--list]
                                                  入力待ち／作業中のエージェントの会話ペインへ移動。押すたびに次へ巡回する（--list は移動せず候補を順に出す。--from-app は移動後に Ghostty を前に出し、候補が無いときは標準エラーにも出す。--pane も TMUX_PANE も無いときは、移動に使うクライアントが表示しているペインを今いるペインとみなす）
 ws ui [--client <name>]                          tmux popup 用の対話一覧
@@ -256,8 +256,9 @@ Herdr app で開いただけのシェルは出さない。
 | --- | --- | --- |
 | `ws` が `hc connect` に渡す環境変数 | Claude Code のセッションの印（`CLAUDECODE`、`CLAUDE_CODE_CHILD_SESSION` など）を外す。claude の中で動いた `ws` が herdr-core を起動すると、その端末で起動した claude がトランスクリプトを保存しなくなるため | `utils/src/without-claude-code-session.ts` |
 | `ws panes` に子エージェントを含めるか | 含めない（`-a` で含める） | フラグ |
-| `ws panes` の並べ方 | `agents` ウィンドウに `tiled` | `Tmux.openAgentPane` |
-| `ws panes` の上限 | 8（注意が要る順に開き、超えた分は省略と表示） | `--max` / `WS_PANES_MAX` |
+| `ws panes` の並べ方 | `agents` ウィンドウに `tiled` | `Tmux.openAgentPane` / `Tmux.moveAgentPane` |
+| `ws panes` で会話ペインが他の場所にあるとき | 開き直さず、そのペインを `agents` ウィンドウへ移す（`join-pane`。`agents` ウィンドウが無ければそのペインを切り出して作る）。移した元のウィンドウが空になれば閉じる | `plans/panes.ts` の `planPanes` |
+| `ws panes` の上限 | 8（開くものと集めるものを合わせて、注意が要る順に選び、超えた分は省略と表示） | `--max` / `WS_PANES_MAX` |
 | `ws panes` で再開できるエージェント | 再開しないで開く（`ws go` と同じ） | — |
 | `ws prune` でエージェントを終了する条件 | 記録した worktree の場所が消えたもの。確認プロンプトで y のときだけ（`--yes` で省略） | ws-core の `agentsInMissingWorktrees` |
 | 再開時のコマンド | `claude --resume <id>`（元の引数は引き継がない） | `WS_CLAUDE_BIN` |
