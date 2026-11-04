@@ -245,7 +245,7 @@ export default class AgentBoard extends View {
           .on_click(() => setShared(COLLAPSED_KEY, toggleCollapsed(collapsedState(), row.key)))
           .child(label(row.collapsed ? "▸" : "▾", t.muted))
           .child(div().font_semibold().text_color(REPOSITORY_COLOR).child(row.label))
-          .when(row.waiting > 0, (el) => el.child(label(`待ち ${row.waiting}`, t.blocked)));
+          .when(row.waiting > 0, (el) => el.child(label(`!!${row.waiting}`, t.blocked)));
       case "worktree":
         return base
           .pl(16)
