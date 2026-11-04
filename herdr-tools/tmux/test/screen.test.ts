@@ -1,5 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { fitToWidth, frame } from "../src/ui/screen";
+import { alignRight, fitToWidth, frame, withBackground } from "../src/ui/screen";
+
+describe("alignRight", () => {
+  test("色の指定を幅に数えずに右へ寄せる", () => {
+    expect(alignRight("\x1b[1mab\x1b[0m", 5)).toBe("   \x1b[1mab\x1b[0m");
+  });
+});
+
+describe("withBackground", () => {
+  test("行の端まで背景を敷き、行の中で色を戻した後にも背景を敷き直す", () => {
+    const BG = "\x1b[48;2;1;2;3m";
+    expect(withBackground("\x1b[1ma\x1b[0mb", BG, 4)).toBe(`${BG}\x1b[1ma\x1b[0m${BG}b  \x1b[0m`);
+  });
+});
 
 describe("fitToWidth", () => {
   test("表示幅で切る（全角は 2 桁）", () => {

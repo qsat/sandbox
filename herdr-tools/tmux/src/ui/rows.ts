@@ -89,7 +89,14 @@ export function toRows(tree: Tree, idx: TmuxIndex, opts: RowOptions) {
     ...(board && i > 0 ? [{ kind: "spacer" as const, depth: 0, text: "" }] : []),
     { kind: "workspace" as const, depth: 0, text: paint(opts.color, board ? BOARD_REPOSITORY : BOLD, ws.name) },
     ...sorted(ws.worktrees, (a, b) => rankOfWorktree(a) - rankOfWorktree(b) || Number(b.isMain) - Number(a.isMain) || a.path.localeCompare(b.path)).flatMap((wt) => [
-      { kind: "worktree" as const, depth: 1, ref: wt.path, worktree: wt, text: (board ? boardWorktreeLabel : worktreeLabel)(wt, idx, opts.color) },
+      {
+        kind: "worktree" as const,
+        depth: 1,
+        ref: wt.path,
+        worktree: wt,
+        isCurrentSession: idx.sessionOf(wt.path)?.attached ?? false,
+        text: (board ? boardWorktreeLabel : worktreeLabel)(wt, idx, opts.color),
+      },
       ...sorted(wt.agents, byAttention).map((a) => ({
         kind: "agent" as const,
         depth: 2,

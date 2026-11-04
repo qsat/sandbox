@@ -19,6 +19,20 @@ export function fitToWidth(s: string, width: number) {
   return out;
 }
 
+function visibleWidth(s: string) {
+  return Bun.stringWidth(s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ""));
+}
+
+export function alignRight(s: string, width: number) {
+  return " ".repeat(Math.max(0, width - visibleWidth(s))) + s;
+}
+
+export function withBackground(s: string, bg: string, width: number) {
+  const fitted = fitToWidth(s, width);
+  const fill = " ".repeat(Math.max(0, width - visibleWidth(fitted)));
+  return bg + fitted.replaceAll(RESET, RESET + bg) + fill + RESET;
+}
+
 export function frame(lines: string[], size: { columns: number; rows: number }, padding: { x: number; y: number }) {
   const margin = " ".repeat(padding.x);
   const inner = Math.max(0, size.columns - padding.x * 2);

@@ -2,7 +2,7 @@ import type { TmuxNavigator } from "../navigator";
 import { agentDisplayName } from "@herdr-tools/utils/agent-display-name";
 import { basename } from "@herdr-tools/utils/basename";
 import { splitKeys } from "./keys";
-import { fitToWidth, frame } from "./screen";
+import { alignRight, frame, withBackground } from "./screen";
 import { firstSelectable, isSelectable, keepSelectionOn, nextSelectable, toRows, usageLine, type Row } from "./rows";
 
 const ESC = "\x1b";
@@ -12,6 +12,7 @@ const ALT_ON = `${ESC}[?1049h${ESC}[?25l${NO_WRAP}`;
 const ALT_OFF = `${WRAP}${ESC}[?25h${ESC}[?1049l`;
 const CLEAR = `${ESC}[H${ESC}[2J`;
 const SELECTED_BG = `${ESC}[48;2;56;60;14m`;
+const CURRENT_SESSION_BG = `${ESC}[48;2;32;34;10m`;
 const RESET = `${ESC}[0m`;
 const DIM = `${ESC}[2m`;
 const PADDING = { x: 3, y: 1 };
@@ -36,15 +37,14 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
     if (done) return;
     const size = { columns: out.columns || 80, rows: out.rows || 24 };
     const inner = size.columns - PADDING.x * 2;
-    const header = usageHeader ? [" ".repeat(Math.max(0, inner - Bun.stringWidth(stripAnsi(usageHeader)))) + usageHeader] : [];
+    const header = usageHeader ? [alignRight(usageHeader, inner)] : [];
     const height = size.rows - PADDING.y * 2 - 2 - header.length;
     const top = Math.max(0, Math.min(sel - Math.floor(height / 2), rows.length - height));
     const lines = rows.slice(top, top + height).map((r, i) => {
       const text = "  ".repeat(r.depth) + r.text;
-      if (top + i !== sel || !isSelectable(r)) return text;
-      const fitted = fitToWidth(text, inner);
-      const fill = " ".repeat(Math.max(0, inner - Bun.stringWidth(stripAnsi(fitted))));
-      return SELECTED_BG + fitted.replaceAll(RESET, RESET + SELECTED_BG) + fill + RESET;
+      if (top + i === sel && isSelectable(r)) return withBackground(text, SELECTED_BG, inner);
+      if (r.kind === "worktree" && r.isCurrentSession) return withBackground(text, CURRENT_SESSION_BG, inner);
+      return text;
     });
     if (rows.length === 0) lines.push(DIM + "（表示するものがありません。a で全 worktree を表示）" + RESET);
     while (lines.length < height) lines.push("");
@@ -213,8 +213,4 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
     stdin.on("data", onData);
     process.stdout.on("resize", render);
   });
-}
-
-function stripAnsi(s: string) {
-  return s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
 }

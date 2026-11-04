@@ -32,6 +32,14 @@ describe("toRows", () => {
     expect(text).toMatch(/t2 +t2 +idle +未attach/);
   });
 
+  test("tmux のクライアントが表示しているセッション（attached）の worktree を、今いるセッションとして示す", () => {
+    const worktrees = toRows(tree, idx, { attentionFirst: false, color: false }).filter((r) => r.kind === "worktree");
+    expect(worktrees.map((r) => [r.ref, r.isCurrentSession])).toEqual([
+      [A, true],
+      [B, false],
+    ]);
+  });
+
   test("選択は workspace 行を飛ばし、更新後も同じ対象を保つ", () => {
     const rows = toRows(tree, idx, { attentionFirst: true, color: false });
     expect(nextSelectable(rows, 3, 1)).toBe(5);
