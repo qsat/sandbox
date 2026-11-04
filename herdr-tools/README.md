@@ -54,7 +54,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
    - mod をバンドル（`dist/mods/agent-board/`）して `~/.config/herdr-app/mods/agent-board/` に、レイアウトを `~/.config/herdr-app/layouts/agents.json` に置く
    - `herdr-app` があれば `herdr-app check` を通す
 4. `ws/config/claude-settings.json` の SessionStart hook と statusLine を `~/.claude/settings.json` に足す
-5. `tmux/config/tmux.conf` のキー（`prefix a` 一覧を枠線なしの popup で開く、`prefix A` 全ペイン表示）を `~/.tmux.conf` に足す
+5. `tmux/config/tmux.conf` のキー（`prefix a` 一覧を枠線なしの popup で開く、`prefix A` 全ペイン表示、`prefix b` 入力待ち巡回、`prefix B` 作業中巡回）を `~/.tmux.conf` に足す
 6. 一覧だけの画面にしたければ `mod.json` を `{"place": "none"}` にし、`ctrl-shift-l` か `herdr-app do layout.switch '{"name":"agents"}'` で切り替える
 
 ## 使い方
@@ -65,6 +65,8 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | その worktree に入る | `C-e`（tm）で選ぶ（今までどおり） | 一覧で worktree をクリック → Ghostty が前に出る |
 | エージェントを起動する | `cc`（`ws new --here`。今のペインで会話）か `ws new --attach`（agents ウィンドウへ移る） | worktree の「＋ claude」ボタン |
 | 待っているエージェントを探す | `prefix a`（blocked が先頭） | 一覧を見る（常時表示） |
+| 入力待ちのエージェントへ移る | `prefix b`（`ws next blocked`。押すたびに次の入力待ちへ巡回。無ければステータス行に表示） | — |
+| 作業中のエージェントを巡回する | `prefix B`（`ws next working`） | — |
 | そのエージェントと話す | 一覧で `Enter` → 会話ペインへ | クリック → Ghostty の会話ペインへ |
 | 一覧をキーで操作する | 一覧で `j` / `k`（↓ / ↑）で選び、`Enter` 移動、`n` ＋ claude、`R` 再開、`s` 停止・削除、`x` セッションを閉じる（停止と閉じるは y で確かめる） | ボードを一度クリックしてから `j` / `k`（↓ / ↑）で選び、`Enter` 移動、`n` ＋ claude、`R` 再開、`s` 停止・削除、`x` セッションを閉じる（停止と閉じるは確認のダイアログを出す）。選んだ行は濃い黄色、今いる tmux セッションの worktree は薄い黄色で示す |
 | tmux のペインへ移動する | 一覧で worktree の下のペインの行（実行中のコマンド名。会話ペインと死んだペインは出ない）を `j` / `k` で選び `Enter`。または `ws go %12`。移動だけで、停止・閉じるは付かない | ペインの行をクリック（`Enter` でも移動） |
@@ -85,6 +87,8 @@ ws resume <agent>                                再開できるなら claude --
 ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す（エージェントでない端末は触らない）
 ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは herdr-core で動き続ける
 ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる
+ws next <blocked|working> [--pane <pane_id>] [--client <name>] [--list]
+                                                 入力待ち／作業中のエージェントの会話ペインへ移動。押すたびに次へ巡回する（--list は移動せず候補を順に出す）
 ws ui [--client <name>]                          tmux popup 用の対話一覧
 ws hook session-start                            Claude Code の SessionStart hook
 ws statusline [--quiet]                          Claude Code の statusLine。5h / 週の利用上限を記録して表示する

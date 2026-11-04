@@ -3,7 +3,7 @@
 import { resolve as resolvePath } from "node:path";
 import { expandHome } from "@herdr-tools/utils/expand-home";
 import { agentsInMissingWorktrees, looksLikePath } from "@herdr-tools/ws-core";
-import { renderText, runPopup, sessionsOfMissingWorktrees, toListJson, usageLine } from "@herdr-tools/tmux";
+import { isCycleStatus, renderText, runPopup, sessionsOfMissingWorktrees, toListJson, usageLine } from "@herdr-tools/tmux";
 import { composeFromEnv } from "./src/compose-from-env";
 
 const USAGE = `ws - エージェントを workspace > worktree > agent で一覧・移動する
@@ -18,6 +18,8 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
   ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す
   ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは止めない
   ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる
+  ws next <blocked|working> [--pane <pane_id>] [--client <name>] [--list]
+                                                   入力待ち／作業中のエージェントへ順に移動（--list は移動せず候補を順に出す）
   ws ui [--client <name>]                          tmux popup 用の対話一覧
   ws hook session-start                            Claude Code の SessionStart hook
   ws statusline [--quiet]                          Claude Code の statusLine。5h / 週の利用上限を記録して表示する
@@ -137,6 +139,13 @@ async function main(argv: string[]) {
       const maxRaw = str(p, "--max") ?? process.env.WS_PANES_MAX;
       const r = await nav.openPanesForWorktreeOf(pane, { includeChildren: has(p, "-a", "--all"), max: maxRaw ? Number(maxRaw) : 8 });
       process.stdout.write(`ws panes: ${r.opened} 開いた / ${r.alreadyOpen} 表示済み${r.overLimit ? ` / ${r.overLimit} 上限で省略` : ""}\n`);
+      return 0;
+    }
+    case "next": {
+      const status = p.positional[0];
+      if (!status || !isCycleStatus(status)) throw new Error("ws next <blocked|working> [--pane <pane_id>] [--client <name>] [--list]");
+      const r = await nav.cycleAgents(status, { pane: str(p, "--pane") ?? process.env.TMUX_PANE, client: str(p, "--client"), listOnly: has(p, "--list") });
+      if (has(p, "--list")) for (const c of r.candidates) process.stdout.write(`${c.agent.id}\t${c.agent.name}\t${c.workspace}\t${c.worktree}\n`);
       return 0;
     }
     case "ui": {

@@ -3,6 +3,7 @@ import { runInteractive } from "@herdr-tools/utils/run-interactive";
 import { looksLikePath, resolveRef, type Resolved, type WsCore } from "@herdr-tools/ws-core";
 import { focusGhostty, openGhosttyWindowRunning } from "./ghostty";
 import { AGENTS_WINDOW, chooseClient, planGo, workingDir, type PaneTarget, type Step } from "./plans/go";
+import { cycleCandidates, messageWhenNoCandidate, nextCandidate, type CycleStatus } from "./plans/cycle";
 import { planPanes } from "./plans/panes";
 import { indexTmux, isPaneId, sessionPaths } from "./tmux-index";
 import { TmuxServer } from "./tmux-server";
@@ -95,6 +96,19 @@ export class TmuxNavigator {
       await this.tmux.openAgentPane(pane.session, AGENTS_WINDOW, workingDir(wt, this.cwdWhenMissing), a.id, this.core.attachCommand(a.id));
     }
     return { opened: plan.open.length, overLimit: plan.overLimit.length, alreadyOpen: wt.agents.filter((a) => view.idx.isAttached(a.id)).length };
+  }
+
+  async cycleAgents(status: CycleStatus, opts: { pane?: string; client?: string; listOnly?: boolean } = {}) {
+    const view = await this.view();
+    const candidates = cycleCandidates(view.snap.tree, status);
+    if (opts.listOnly) return { candidates, moved: undefined };
+    const target = nextCandidate(candidates, opts.pane ? view.idx.livePaneById(opts.pane)?.agentId : undefined);
+    if (!target) {
+      await this.tmux.displayMessage(messageWhenNoCandidate(status), opts.client);
+      return { candidates, moved: undefined };
+    }
+    await this.goRef(target.agent.id, { client: opts.client });
+    return { candidates, moved: target };
   }
 
   async closeSessionOf(ref: string) {

@@ -74,6 +74,10 @@ export class TmuxServer {
     return { session, currentPath };
   }
 
+  async displayMessage(message: string, client?: string) {
+    await this.exec(client ? ["display-message", "-c", client, message] : ["display-message", message]);
+  }
+
   async newSession(name: string, cwd: string) {
     await this.exec(["new-session", "-d", "-s", name, "-c", cwd]);
   }
