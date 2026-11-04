@@ -14,16 +14,16 @@ const infos: PathInspection[] = [
 const tree = buildTree({ agents: [t("t1", A, "working"), t("t2", B, "idle"), t("t3", B, "blocked")], inspections: infos, alwaysShow: [], ghqRoot: "/g" });
 const idx = indexTmux(makeLocator(tree, infos), {
   sessions: [{ name: "a", path: A, attached: true }],
-  panes: [{ paneId: "%1", agentId: "t1", dead: false, session: "a", command: "claude", current: false }],
+  panes: [{ paneId: "%1", agentId: "t1", dead: false, session: "a", window: "main", command: "claude", current: false }],
 });
 
 describe("ペインの行", () => {
   const withPanes = indexTmux(makeLocator(tree, infos), {
     sessions: [{ name: "a", path: A, attached: true }],
     panes: [
-      { paneId: "%1", agentId: "t1", dead: false, session: "a", command: "claude", current: false },
-      { paneId: "%2", agentId: null, dead: false, session: "a", command: "nvim", current: false },
-      { paneId: "%3", agentId: null, dead: true, session: "a", command: "zsh", current: false },
+      { paneId: "%1", agentId: "t1", dead: false, session: "a", window: "main", command: "claude", current: false },
+      { paneId: "%2", agentId: null, dead: false, session: "a", window: "main", command: "nvim", current: false },
+      { paneId: "%3", agentId: null, dead: true, session: "a", window: "main", command: "zsh", current: false },
     ],
   });
   const rows = toRows(tree, withPanes, { attentionFirst: true, color: false });
@@ -56,9 +56,9 @@ describe("toRows", () => {
     const here = indexTmux(makeLocator(tree, infos), {
       sessions: [{ name: "a", path: A, attached: true }],
       panes: [
-        { paneId: "%1", agentId: "t1", dead: false, session: "a", command: "claude", current: false },
-        { paneId: "%2", agentId: null, dead: false, session: "a", command: "nvim", current: true },
-        { paneId: "%4", agentId: null, dead: false, session: "a", command: "zsh", current: false },
+        { paneId: "%1", agentId: "t1", dead: false, session: "a", window: "main", command: "claude", current: false },
+        { paneId: "%2", agentId: null, dead: false, session: "a", window: "main", command: "nvim", current: true },
+        { paneId: "%4", agentId: null, dead: false, session: "a", window: "main", command: "zsh", current: false },
       ],
     });
     const rows = toRows(tree, here, { attentionFirst: false, color: false });
@@ -73,7 +73,7 @@ describe("toRows", () => {
   test("会話ペインが今いるペインなら、そのエージェントの行が示される", () => {
     const here = indexTmux(makeLocator(tree, infos), {
       sessions: [{ name: "a", path: A, attached: true }],
-      panes: [{ paneId: "%1", agentId: "t1", dead: false, session: "a", command: "claude", current: true }],
+      panes: [{ paneId: "%1", agentId: "t1", dead: false, session: "a", window: "main", command: "claude", current: true }],
     });
     const rows = toRows(tree, here, { attentionFirst: false, color: false });
     expect(rows.filter((r) => r.kind === "agent").map((r) => [r.ref, r.isCurrentPane])).toEqual([

@@ -46,10 +46,10 @@ export class TmuxServer {
   }
 
   async listPanes() {
-    const lines = await this.linesOrNoneWhenServerIsDown(["list-panes", "-a", "-F", format("#{pane_id}", `#{${AGENT_PANE_OPTION}}`, "#{pane_dead}", "#{session_name}", "#{pane_current_command}", "#{session_attached}", "#{window_active}", "#{pane_active}")]);
+    const lines = await this.linesOrNoneWhenServerIsDown(["list-panes", "-a", "-F", format("#{pane_id}", `#{${AGENT_PANE_OPTION}}`, "#{pane_dead}", "#{session_name}", "#{window_name}", "#{pane_current_command}", "#{session_attached}", "#{window_active}", "#{pane_active}")]);
     return lines.map((l) => {
-      const [paneId = "", agentId = "", dead = "0", session = "", command = "", attached = "0", windowActive = "0", paneActive = "0"] = fields(l);
-      return { paneId, agentId: agentId || null, dead: dead === "1", session, command, current: Number(attached) > 0 && windowActive === "1" && paneActive === "1" };
+      const [paneId = "", agentId = "", dead = "0", session = "", window = "", command = "", attached = "0", windowActive = "0", paneActive = "0"] = fields(l);
+      return { paneId, agentId: agentId || null, dead: dead === "1", session, window, command, current: Number(attached) > 0 && windowActive === "1" && paneActive === "1" };
     });
   }
 
@@ -100,6 +100,15 @@ export class TmuxServer {
     await this.markPaneAsConversation(paneId, agentId);
     await this.selectPane(paneId);
     return paneId;
+  }
+
+  /** 既にある会話ペインを session の window へ移す。window が無ければそのペインを切り出して window を作る */
+  async moveAgentPane(paneId: string, session: string, window: string) {
+    const windowTarget = `${exact(session)}:${window}`;
+    if (await this.hasWindow(session, window)) await this.exec(["join-pane", "-d", "-s", paneId, "-t", windowTarget]);
+    else await this.exec(["break-pane", "-d", "-s", paneId, "-t", `${exact(session)}:`, "-n", window]);
+    await this.exec(["select-layout", "-t", windowTarget, "tiled"]);
+    await this.selectPane(paneId);
   }
 
   async markPaneAsConversation(paneId: string, agentId: string) {

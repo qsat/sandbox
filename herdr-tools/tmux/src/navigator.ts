@@ -91,11 +91,12 @@ export class TmuxNavigator {
     const wt = this.worktreeOfSession(view, pane.session) ?? view.snap.locate(pane.currentPath)?.worktree;
     if (!wt) throw new Error("このペインの worktree が分かりません");
 
-    const plan = planPanes(wt, view.idx, opts);
+    const plan = planPanes(wt, view.idx, { ...opts, session: pane.session });
+    for (const g of plan.gather) await this.tmux.moveAgentPane(g.paneId, pane.session, AGENTS_WINDOW);
     for (const a of plan.open) {
       await this.tmux.openAgentPane(pane.session, AGENTS_WINDOW, workingDir(wt, this.cwdWhenMissing), a.id, this.core.attachCommand(a.id));
     }
-    return { opened: plan.open.length, overLimit: plan.overLimit.length, alreadyOpen: wt.agents.filter((a) => view.idx.isAttached(a.id)).length };
+    return { opened: plan.open.length, gathered: plan.gather.length, overLimit: plan.overLimit.length, alreadyOpen: plan.inPlace.length };
   }
 
   async cycleAgents(status: CycleStatus, opts: { pane?: string; client?: string; fromApp?: boolean; listOnly?: boolean } = {}) {

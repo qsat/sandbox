@@ -34,11 +34,11 @@ const facts: TmuxFacts = {
     { name: "api=gone", path: GONE, attached: false },
   ],
   panes: [
-    { paneId: "%5", agentId: "t1", dead: false, session: "api", command: "claude", current: false },
-    { paneId: "%6", agentId: "t4", dead: true, session: "api", command: "claude", current: false },
-    { paneId: "%7", agentId: null, dead: false, session: "api", command: "nvim", current: true },
-    { paneId: "%8", agentId: null, dead: false, session: "web", command: "zsh", current: false },
-    { paneId: "%9", agentId: null, dead: true, session: "web", command: "zsh", current: false },
+    { paneId: "%5", agentId: "t1", dead: false, session: "api", window: "main", command: "claude", current: false },
+    { paneId: "%6", agentId: "t4", dead: true, session: "api", window: "main", command: "claude", current: false },
+    { paneId: "%7", agentId: null, dead: false, session: "api", window: "main", command: "nvim", current: true },
+    { paneId: "%8", agentId: null, dead: false, session: "web", window: "main", command: "zsh", current: false },
+    { paneId: "%9", agentId: null, dead: true, session: "web", window: "main", command: "zsh", current: false },
   ],
 };
 
@@ -165,17 +165,33 @@ describe("planGo（判断フローの全分岐）", () => {
 
 describe("planPanes / sessionsOfMissingWorktrees", () => {
   const feat = tree.workspaces[0]!.worktrees.find((w) => w.path === FEAT)!;
+  const main = tree.workspaces[0]!.worktrees[0]!;
+  const ids = (xs: { id: string }[]) => xs.map((x) => x.id);
   test("既定では子を含めない、-a で含める", () => {
-    expect(planPanes(feat, idx, { includeChildren: false, max: 8 }).open.map((x) => x.id)).toEqual(["t2"]);
-    expect(planPanes(feat, idx, { includeChildren: true, max: 8 }).open.map((x) => x.id)).toEqual(["t2", "t4"]);
+    expect(ids(planPanes(feat, idx, { session: "api=feat-auth", includeChildren: false, max: 8 }).open)).toEqual(["t2"]);
+    expect(ids(planPanes(feat, idx, { session: "api=feat-auth", includeChildren: true, max: 8 }).open)).toEqual(["t2", "t4"]);
   });
   test("上限を超えた分は省略", () => {
-    const p = planPanes(feat, idx, { includeChildren: true, max: 1 });
+    const p = planPanes(feat, idx, { session: "api=feat-auth", includeChildren: true, max: 1 });
     expect(p.overLimit.map((x) => x.id)).toEqual(["t4"]);
   });
-  test("開いているものは開かない", () => {
-    const main = tree.workspaces[0]!.worktrees[0]!;
-    expect(planPanes(main, idx, { includeChildren: true, max: 8 }).open).toEqual([]);
+  test("会話ペインが agents ウィンドウの外にあれば、開かずにそのペインを集める", () => {
+    const p = planPanes(main, idx, { session: "api", includeChildren: true, max: 8 });
+    expect(p.open).toEqual([]);
+    expect(p.gather.map((g) => [g.agent.id, g.paneId])).toEqual([["t1", "%5"]]);
+  });
+  test("agents ウィンドウにもうあれば何もしない", () => {
+    const inAgents = indexTmux(locate, { ...facts, panes: facts.panes.map((p) => (p.paneId === "%5" ? { ...p, window: "agents" } : p)) });
+    const p = planPanes(main, inAgents, { session: "api", includeChildren: true, max: 8 });
+    expect([p.open, p.gather, ids(p.inPlace)]).toEqual([[], [], ["t1"]]);
+  });
+  test("別のセッションの agents ウィンドウにあるものは集める", () => {
+    const elsewhere = indexTmux(locate, { ...facts, panes: facts.panes.map((p) => (p.paneId === "%5" ? { ...p, session: "web", window: "agents" } : p)) });
+    expect(planPanes(main, elsewhere, { session: "api", includeChildren: true, max: 8 }).gather.map((g) => g.paneId)).toEqual(["%5"]);
+  });
+  test("上限は集めるものと開くものを合わせて数える", () => {
+    const p = planPanes(main, idx, { session: "api", includeChildren: true, max: 0 });
+    expect([p.gather, ids(p.overLimit)]).toEqual([[], ["t1"]]);
   });
   test("場所が消えた worktree のセッション", () => expect(sessionsOfMissingWorktrees(tree, idx)).toEqual(["api=gone"]));
 });
