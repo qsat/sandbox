@@ -14,7 +14,8 @@ const ROW_HEIGHT = 22;
 const REPOSITORY_SPACING = ROW_HEIGHT * 0.5;
 const REPOSITORY_COLOR: Color = "#b8ff3cb3";
 const BRANCH_COLOR: Color = "#fff03c80";
-const SELECTED_BG: Color = "#e6ff0029";
+const SELECTED_BG: Color = "#e6ff0033";
+const CURRENT_SESSION_BG: Color = "#e6ff0014";
 const PIE_SIZE = 12;
 
 type Theme = Record<
@@ -205,7 +206,7 @@ export default class AgentBoard extends View {
 
   stopButton(row: AgentRow, t: Theme) {
     const spec: ButtonSpec = row.alive
-      ? { id: `stop:${row.key}`, icon: "square", text: "停止", tooltip: "claude を終了し、一覧から消す（s）", look: "alert" }
+      ? { id: `stop:${row.key}`, icon: "square", tooltip: "停止: claude を終了し、一覧から消す（s）", look: "alert" }
       : { id: `stop:${row.key}`, icon: "x", text: "削除", tooltip: "終了したエージェントを一覧から削除する（s）", look: "quiet" };
     return button(spec, t, () => this.askConfirm(this.stopRequest(row)));
   }
@@ -234,6 +235,7 @@ export default class AgentBoard extends View {
       .px(4)
       .rounded(6)
       .cursor_pointer()
+      .when(row.kind === "worktree" && row.isCurrentSession, (el) => el.bg(CURRENT_SESSION_BG))
       .when(selected, (el) => el.bg(SELECTED_BG))
       .hover((s) => s.bg(t.hover));
     switch (row.kind) {
@@ -270,7 +272,7 @@ export default class AgentBoard extends View {
               ),
             ),
           )
-          .child(this.stopButton(row, t));
+          .when(!row.canResume, (el) => el.child(this.stopButton(row, t)));
       }
     }
   }
@@ -364,7 +366,6 @@ export default class AgentBoard extends View {
     const t = theme() as unknown as Theme;
     if (this.confirmRequest) return this.renderConfirmDialog(this.confirmRequest, t);
     const rows = boardRows(this.list, liveTerminals(), collapsedState());
-    const showSelection = this.focus.is_focused();
     return div()
       .id("agent-board")
       .track_focus(this.focus)
@@ -382,7 +383,7 @@ export default class AgentBoard extends View {
       .overflow_y_scrollbar()
       .child(this.renderUsage(t))
       .when(rows.length === 0, (el) => el.child(label("エージェントもセッションもありません", t.muted)))
-      .children(rows.map((r, i) => this.renderRow(r, t, i === 0, showSelection && rowId(r) === this.selected)))
+      .children(rows.map((r, i) => this.renderRow(r, t, i === 0, rowId(r) === this.selected)))
       .when(this.error !== "", (el) => el.child(label(this.error, t.ansi1)));
   }
 }

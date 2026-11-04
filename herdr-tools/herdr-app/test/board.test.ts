@@ -69,6 +69,12 @@ describe("boardRows", () => {
     expect(boardRows(detached, [], [])[2]).toMatchObject({ label: "api=feat", tags: [] });
   });
 
+  test("tmux のクライアントが表示しているセッション（attached）の worktree を、今いるセッションとして示す", () => {
+    const rows = boardRows(tree, [], []);
+    expect(rows[1]).toMatchObject({ label: "main", isCurrentSession: true });
+    expect(rows[2]).toMatchObject({ label: "feat", isCurrentSession: false });
+  });
+
   test("名乗っていない（status が null）なら ws list の状態のまま", () => {
     expect(find(boardRows(tree, [{ address: "t2", status: null }], []), "t2")).toMatchObject({ rawStatus: "idle" });
   });

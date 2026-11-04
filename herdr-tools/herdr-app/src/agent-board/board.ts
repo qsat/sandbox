@@ -39,6 +39,7 @@ export function boardRows(listJson: ListedTree, live: LiveTerminal[], collapsed:
           isMain: wt.isMain,
           exists: wt.exists,
           hasSession: wt.tmux.session !== null,
+          isCurrentSession: wt.tmux.session?.attached ?? false,
         },
         ...wt.agents.map((a) => ({
           kind: "agent" as const,
