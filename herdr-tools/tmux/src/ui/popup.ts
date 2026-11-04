@@ -11,7 +11,7 @@ const WRAP = `${ESC}[?7h`;
 const ALT_ON = `${ESC}[?1049h${ESC}[?25l${NO_WRAP}`;
 const ALT_OFF = `${WRAP}${ESC}[?25h${ESC}[?1049l`;
 const CLEAR = `${ESC}[H${ESC}[2J`;
-const INVERT = `${ESC}[7m`;
+const SELECTED_BG = `${ESC}[48;2;56;60;14m`;
 const RESET = `${ESC}[0m`;
 const DIM = `${ESC}[2m`;
 const PADDING = 1;
@@ -42,8 +42,9 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
     const lines = rows.slice(top, top + height).map((r, i) => {
       const text = "  ".repeat(r.depth) + r.text;
       if (top + i !== sel || !isSelectable(r)) return text;
-      const plain = fitToWidth(stripAnsi(text), inner);
-      return INVERT + plain + " ".repeat(Math.max(0, inner - Bun.stringWidth(plain))) + RESET;
+      const fitted = fitToWidth(text, inner);
+      const fill = " ".repeat(Math.max(0, inner - Bun.stringWidth(stripAnsi(fitted))));
+      return SELECTED_BG + fitted.replaceAll(RESET, RESET + SELECTED_BG) + fill + RESET;
     });
     if (rows.length === 0) lines.push(DIM + "（表示するものがありません。a で全 worktree を表示）" + RESET);
     while (lines.length < height) lines.push("");

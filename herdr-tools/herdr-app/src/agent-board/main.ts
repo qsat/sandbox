@@ -14,6 +14,7 @@ const ROW_HEIGHT = 22;
 const REPOSITORY_SPACING = ROW_HEIGHT * 0.5;
 const REPOSITORY_COLOR: Color = "#b8ff3cb3";
 const BRANCH_COLOR: Color = "#fff03c80";
+const SELECTED_BG: Color = "#e6ff0029";
 const PIE_SIZE = 12;
 
 type Theme = Record<
@@ -233,7 +234,7 @@ export default class AgentBoard extends View {
       .px(4)
       .rounded(6)
       .cursor_pointer()
-      .when(selected, (el) => el.bg(t.hover))
+      .when(selected, (el) => el.bg(SELECTED_BG))
       .hover((s) => s.bg(t.hover));
     switch (row.kind) {
       case "workspace":
