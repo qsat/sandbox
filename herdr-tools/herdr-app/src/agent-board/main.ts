@@ -1,9 +1,9 @@
 import { View, div, svg, type AsyncContext, type Color, type Context, type Element, type FocusHandle } from "gpui-kit";
-import { closeOverlay, exec, openOverlay, props, setShared, shared, terminals, theme } from "herdr";
+import { closeOverlay, exec, nextCommand, openOverlay, props, setShared, shared, terminals, theme } from "herdr";
 import type { Tag } from "@herdr-tools/utils/tag";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
 import { usageSegments } from "@herdr-tools/utils/usage-segments";
-import { boardRows, EMPTY_LIST, keyActionFor, moveSelection, parseList, rowId, toggleCollapsed, WS, wsCommandFor, type BoardAction, type BoardRow, type LiveTerminal } from "./board";
+import { boardRows, EMPTY_LIST, keyActionFor, moveSelection, parseList, rowId, toggleCollapsed, WS, wsCommandFor, type BoardAction, type BoardRow, type LiveTerminal, wsArgsForModCommand } from "./board";
 
 const MOD_NAME = "agent-board";
 const LIST_REFRESH_MS = 4000;
@@ -144,6 +144,23 @@ export default class AgentBoard extends View {
     }
     cx.timer.every(LIST_REFRESH_MS, (cx) => this.refresh(cx));
     this.refresh(cx);
+    this.listenForKeyCommands(cx);
+  }
+
+  listenForKeyCommands(cx: Context) {
+    cx.spawn(async (cx) => {
+      for (;;) {
+        const args = wsArgsForModCommand(await nextCommand());
+        if (!args) continue;
+        try {
+          const r = await exec(WS, args);
+          this.error = r.code !== 0 || r.stderr.trim() ? (r.stderr.trim() || `ws ${args.join(" ")}: exit ${r.code}`) : "";
+        } catch (e) {
+          this.error = String((e as Error)?.message ?? e);
+        }
+        this.refresh(cx);
+      }
+    }, { owner: this });
   }
 
   refresh(cx: Context) {

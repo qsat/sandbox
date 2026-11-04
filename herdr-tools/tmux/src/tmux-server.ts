@@ -67,6 +67,11 @@ export class TmuxServer {
     return (r.code === 0 && r.stdout.trim()) || undefined;
   }
 
+  async paneShownBy(client: string) {
+    const r = await run(this.bin, this.argv(["display-message", "-p", "-c", client, "#{pane_id}"]));
+    return (r.code === 0 && r.stdout.trim()) || undefined;
+  }
+
   async paneInfo(paneId: string) {
     const r = await run(this.bin, this.argv(["display-message", "-p", "-t", paneId, format("#{session_name}", "#{pane_current_path}")]));
     if (r.code !== 0) return undefined;

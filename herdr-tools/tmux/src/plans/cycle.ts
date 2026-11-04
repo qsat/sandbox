@@ -27,3 +27,11 @@ export function nextCandidate(candidates: CycleCandidate[], currentAgentId: stri
 export function messageWhenNoCandidate(status: CycleStatus) {
   return status === "blocked" ? "入力待ちのエージェントはありません" : "作業中のエージェントはありません";
 }
+
+/**
+ * 巡回で「今いるペイン」を決める。
+ * 優先順: 明示（--pane）> 環境変数（TMUX_PANE）> 移動に使うクライアントが表示しているペイン > 表示中のペインの最初の 1 つ
+ */
+export function decideCurrentPane(opts: { explicit?: string; envPane?: string; clientPane?: string; displayedPanes: string[] }) {
+  return opts.explicit || opts.envPane || opts.clientPane || opts.displayedPanes[0] || undefined;
+}

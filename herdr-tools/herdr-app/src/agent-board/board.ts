@@ -91,6 +91,17 @@ export function wsCommandFor(row: BoardRow, action: BoardAction): [string, strin
   }
 }
 
+export function wsArgsForModCommand(command: string): string[] | null {
+  switch (command) {
+    case "next-blocked":
+      return ["next", "blocked", "--from-app"];
+    case "next-working":
+      return ["next", "working", "--from-app"];
+    default:
+      return null;
+  }
+}
+
 export function toggleCollapsed(collapsed: string[], key: string) {
   const s = new Set(collapsed);
   if (s.has(key)) s.delete(key);

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { boardRows, keyActionFor, moveSelection, rowId, wsCommandFor, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
+import { boardRows, keyActionFor, moveSelection, rowId, wsCommandFor, wsArgsForModCommand, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
 
 const agent = (p: { id: string; name: string; status: "working" | "idle"; resumable: boolean; attached: boolean; current?: boolean; contextUsedPercentage?: number }) => ({
   contextUsedPercentage: p.contextUsedPercentage,
@@ -237,4 +237,12 @@ describe("context 使用率", () => {
     expect(row("t1").context).toEqual({ used: 75, tone: "strong", text: "ctx 75%" });
     expect(row("t2").context).toBeUndefined();
   });
+});
+
+describe("wsArgsForModCommand", () => {
+  test("next-blocked / next-working を ws next の引数にする", () => {
+    expect(wsArgsForModCommand("next-blocked")).toEqual(["next", "blocked", "--from-app"]);
+    expect(wsArgsForModCommand("next-working")).toEqual(["next", "working", "--from-app"]);
+  });
+  test("知らないコマンド名は何もしない", () => expect(wsArgsForModCommand("other")).toBeNull());
 });

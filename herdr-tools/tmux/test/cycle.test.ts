@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildTree, type AgentRecord, type PathInspection } from "@herdr-tools/ws-core";
-import { cycleCandidates, messageWhenNoCandidate, nextCandidate } from "../src/plans/cycle";
+import { cycleCandidates, decideCurrentPane, messageWhenNoCandidate, nextCandidate } from "../src/plans/cycle";
 
 const G = "/Users/me/ghq/github.com/o";
 const API = `${G}/api`;
@@ -49,4 +49,13 @@ describe("次の候補", () => {
     expect(messageWhenNoCandidate("blocked")).toBe("入力待ちのエージェントはありません");
     expect(messageWhenNoCandidate("working")).toBe("作業中のエージェントはありません");
   });
+});
+
+describe("今いるペインの決め方", () => {
+  const displayedPanes = ["%1", "%2"];
+  test("--pane が最優先", () => expect(decideCurrentPane({ explicit: "%9", envPane: "%8", clientPane: "%2", displayedPanes })).toBe("%9"));
+  test("--pane が無ければ TMUX_PANE", () => expect(decideCurrentPane({ envPane: "%8", clientPane: "%2", displayedPanes })).toBe("%8"));
+  test("どちらも無ければ移動に使うクライアントが表示しているペイン", () => expect(decideCurrentPane({ clientPane: "%2", displayedPanes })).toBe("%2"));
+  test("クライアントのペインも分からなければ表示中の最初のペイン", () => expect(decideCurrentPane({ displayedPanes })).toBe("%1"));
+  test("何も無ければ undefined", () => expect(decideCurrentPane({ displayedPanes: [] })).toBeUndefined());
 });
