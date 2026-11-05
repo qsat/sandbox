@@ -1,1 +1,44 @@
-{"id": "root", "type": "block", "content": {"mod": "agent-board"}}
+{
+  "id": "root",
+  "type": "column",
+  "divider": {
+    "width": 1,
+    "color": "border"
+  },
+  "children": [
+    {
+      "id": "board",
+      "type": "block",
+      "size": {
+        "weight": 1
+      },
+      "content": {
+        "mod": "agent-board"
+      }
+    },
+    {
+      "id": "lower",
+      "type": "stack",
+      "size": {
+        "weight": 1
+      },
+      "active": "commit-history",
+      "children": [
+        {
+          "id": "commit-history",
+          "type": "block",
+          "content": {
+            "mod": "commit-history"
+          }
+        },
+        {
+          "id": "pull-requests",
+          "type": "block",
+          "content": {
+            "mod": "pull-requests"
+          }
+        }
+      ]
+    }
+  ]
+}

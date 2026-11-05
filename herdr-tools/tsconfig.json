@@ -10,5 +10,5 @@
     "types": ["bun"]
   },
   "include": ["utils", "ws-core", "tmux", "herdr-app", "ws", "test"],
-  "exclude": ["herdr-app/src/agent-board/main.ts", "herdr-app/src/commit-history/main.ts", "herdr-app/src/pull-requests/main.ts", "herdr-app/src/shared/colors.ts", "herdr-app/src/shared/row-view.ts", "herdr-app/src/shared/tmux-focus.ts", "herdr-app/types"]
+  "exclude": ["herdr-app/src/agent-board/main.ts", "herdr-app/src/commit-history/main.ts", "herdr-app/src/pull-requests/main.ts", "herdr-app/src/shared/colors.ts", "herdr-app/src/shared/row-view.ts", "herdr-app/src/shared/stack-tabs.ts","herdr-app/src/shared/tmux-focus.ts", "herdr-app/types"]
 }

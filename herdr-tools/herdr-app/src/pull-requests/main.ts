@@ -6,6 +6,7 @@ import { ROW_HEIGHT, hunkLink, label, rowBase, type Theme } from "../shared/row-
 import { moveSelection } from "../shared/selection";
 import { resolveTarget, type Target } from "../shared/target";
 import { TITLE_BAR_HEIGHT } from "../shared/title-bar";
+import { stackTabs } from "../shared/stack-tabs";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import { wsHunkPrArgs, wsHunkPrCommitArgs } from "../shared/ws-hunk";
 import { parseList, WS } from "../shared/ws-list";
@@ -284,7 +285,7 @@ export default class PullRequests extends View {
       .border_b(1)
       .border_color(t.border)
       .child(div().flex().items_center().text_color(t.muted).child(svg("mods/pull-requests/pull-request.svg").size(14)))
-      .child(div().font_semibold().child("Pull requests"))
+      .children(stackTabs("pull-requests", t))
       .child(div().px(5).py(1).rounded(4).border_1().border_color(t.border).text_size(10).text_color(t.muted).child(`${this.prs?.length ?? 0} PRs`));
   }
 

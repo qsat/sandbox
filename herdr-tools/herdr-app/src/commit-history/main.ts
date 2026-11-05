@@ -6,6 +6,7 @@ import { ROW_HEIGHT, hunkLink, label, rowBase, type Theme } from "../shared/row-
 import { moveSelection } from "../shared/selection";
 import { resolveTarget, type Target } from "../shared/target";
 import { TITLE_BAR_HEIGHT } from "../shared/title-bar";
+import { stackTabs } from "../shared/stack-tabs";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import { wsHunkArgs } from "../shared/ws-hunk";
 import { parseList, WS } from "../shared/ws-list";
@@ -337,7 +338,7 @@ export default class CommitHistory extends View {
       .px(14)
       .border_b(1)
       .border_color(t.border)
-      .child(div().font_semibold().child("Commit history"))
+      .children(stackTabs("commit-history", t))
       .child(div().px(5).py(1).rounded(4).border_1().border_color(t.border).text_size(10).text_color(t.muted).child(`${this.commits.length} commits`))
       .child(div().flex_1())
       .child(this.rangeButton("all", { icon: "history", tooltip: "すべてのコミット（HEAD からの履歴）" }, t))

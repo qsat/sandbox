@@ -56,7 +56,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 2. Herdr app（herdr-core を含む）を入れ、シェルで `hc ls` が動くことを確認する
 3. `./install.sh`（`--dry-run` で内容だけ確認できる）
    - `ws` をビルドして `~/.local/bin/ws` に置く（`bun build --compile` の単一バイナリ）
-   - mod 3 つ（agent-board・commit-history・pull-requests）をバンドル（`dist/mods/<mod>/`）して `~/.config/herdr-app/mods/<mod>/` に、レイアウトを `~/.config/herdr-app/layouts/agents.json` に置く（commit-history と pull-requests を画面に出すには、レイアウトに自分で足す）
+   - mod 3 つ（agent-board・commit-history・pull-requests）をバンドル（`dist/mods/<mod>/`）して `~/.config/herdr-app/mods/<mod>/` に、レイアウトを `~/.config/herdr-app/layouts/agents.json` に置く（上半分に agent-board、下半分の stack（id `lower`）に commit-history と pull-requests を重ねる。2 つは各 mod の題名の帯のタブ「Commits」「Pull requests」で切り替える。Herdr app の stack の帯は番号しか出さないので使わない。既にある `agents.json` は上書きしないので、前の形のままなら `herdr-app/layouts/agents.json` を手で写す）
    - `herdr-app` があれば `herdr-app check` を通す
 4. `ws/config/claude-settings.json` の SessionStart hook と statusLine を `~/.claude/settings.json` に足す
 5. `tmux/config/tmux.conf` のキー（`prefix a` 一覧を枠線なしの popup で開く、`prefix A` 全ペイン表示、`prefix b` で次のエージェントへ巡回、`prefix B` で後ろへ巡回、`M-B` / `M-W` で prefix 無しの巡回）を `~/.tmux.conf` に足す
@@ -167,14 +167,14 @@ tmux で今いるペインの worktree のコミット履歴を出す。Herdr ap
 - キー（mod を一度クリックしてフォーカスを渡してから）: `j` / `k`（↓ / ↑）で行を選び、`Enter` でコミット・未コミットの行を開閉する。ファイルの行は `Enter` かクリックで、`ws hunk` を呼んで hunk で差分を開く。コミットの行の短いハッシュをクリックすると、行は開閉せず、そのコミット全体を hunk で開く
 - 読み直し: 今いるペインが変わったとき（agent-board と同じ tmux-focus の見張り）、`.git` の `HEAD` や `refs` が変わったとき（`git rev-parse --absolute-git-dir` と `--git-common-dir` を `watchFolder` で見張る）、5 秒ごと。結果が前と同じなら再描画しない。作業ツリーは見張らないので、未コミットの変更は 5 秒ごとかペインの変化で読み直す
 - git は `.git` に何も書かない引数（`--no-optional-locks` など）で読む
-- レイアウトに置いて使う（`mod.json` は `{"place": "none"}`）。`~/.config/herdr-app/layouts/agents.json` には自分で足す
+- レイアウトに置いて使う（`mod.json` は `{"place": "none"}`）。`herdr-app/layouts/agents.json` では下半分の stack に入っていて、題名の帯のタブ「Commits」で選ぶ
 - プルリクエストは別の mod `pull-requests`（下の節）にある
 
 ### Herdr app の mod `pull-requests`
 
 tmux で今いるペインの worktree のリポジトリについて、開いている GitHub のプルリクエストを一覧し、プルリクエストとそのコミットの差分を hunk で開く。
 表示するリポジトリは commit-history と同じく、`ws list --json` の今いるペインの worktree に追従する（5 秒ごとと、tmux のペインの変化で決め直す）。
-`gh` が使える環境が要る。レイアウトに置いて使う（`mod.json` は `{"place": "none"}`）。`~/.config/herdr-app/layouts/agents.json` には自分で足す。
+`gh` が使える環境が要る。レイアウトに置いて使う（`mod.json` は `{"place": "none"}`）。`herdr-app/layouts/agents.json` では下半分の stack に入っていて、題名の帯のタブ「Pull requests」で選ぶ。
 
 | 行 | 出すもの | 押す場所と開くもの |
 | --- | --- | --- |
