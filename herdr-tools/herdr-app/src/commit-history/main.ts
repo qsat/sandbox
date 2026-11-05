@@ -1,23 +1,20 @@
 import { View, div, svg, type AsyncContext, type Color, type Context, type Element, type FocusHandle } from "gpui-kit";
 import { exec, theme, watchFolder } from "herdr";
-import { BRANCH_COLOR, REPOSITORY_COLOR, SELECTED_BG } from "../shared/colors";
+import { BRANCH_COLOR, REPOSITORY_COLOR } from "../shared/colors";
+import { relativeTime } from "../shared/relative-time";
+import { ROW_HEIGHT, hunkLink, label, rowBase, type Theme } from "../shared/row-view";
+import { moveSelection } from "../shared/selection";
+import { resolveTarget, type Target } from "../shared/target";
 import { TITLE_BAR_HEIGHT } from "../shared/title-bar";
 import { watchTmuxFocus } from "../shared/tmux-focus";
+import { wsHunkArgs } from "../shared/ws-hunk";
 import { parseList, WS } from "../shared/ws-list";
-import { BASE_REF_CANDIDATES, READ, branchLabel, commitFiles, logArgs, prBaseRef, shortRef, type HistoryRange, localFiles, parseLog, relativeTime, showFilesArgs, sumNumstat, wsHunkArgs, type Commit, type FileChange } from "./git";
-import { LOCAL_ID, moveSelection, visibleRows, type Row } from "./rows";
-import { resolveTarget, type Target } from "./target";
+import { BASE_REF_CANDIDATES, READ, branchLabel, commitFiles, logArgs, prBaseRef, shortRef, type HistoryRange, localFiles, parseLog, showFilesArgs, sumNumstat, type Commit, type FileChange } from "./git";
+import { LOCAL_ID, visibleRows, type Row } from "./rows";
 
 /** 予備の読み直しの間隔（ws list と git log・git status）。結果が前と同じなら再描画しない */
 const REFRESH_MS = 5000;
-const ROW_HEIGHT = 22;
 const NO_TARGET_MESSAGE = "tmux で worktree の中のペインを選ぶと、その履歴が出ます";
-
-type Theme = Record<"foreground" | "muted" | "dim" | "accent" | "raised" | "hover" | "background" | "border" | "blocked" | "ansi1" | "ansi2", Color>;
-
-function label(text: string, color: Color) {
-  return div().text_color(color).child(text);
-}
 
 function statusColor(t: Theme, status: string) {
   return status === "A" || status === "?" ? t.ansi2 : status === "D" || status === "U" ? t.ansi1 : status === "R" ? t.accent : t.blocked;
@@ -272,23 +269,6 @@ export default class CommitHistory extends View {
     return true;
   }
 
-  rowBase(id: string, selected: boolean, t: Theme, indent: number) {
-    return div()
-      .id(id)
-      .flex()
-      .items_center()
-      .gap(8)
-      .min_h(ROW_HEIGHT)
-      .pl(indent)
-      .pr(4)
-      .rounded(6)
-      .cursor_pointer()
-      .overflow_hidden()
-      .whitespace_nowrap()
-      .when(selected, (el) => el.bg(SELECTED_BG))
-      .hover((s) => s.bg(t.hover));
-  }
-
   refLabels(refs: string[], t: Theme) {
     return refs.map((ref) => {
       const tag = ref.startsWith("tag: ");
@@ -301,30 +281,17 @@ export default class CommitHistory extends View {
     const selected = row.id === this.selected;
     switch (row.kind) {
       case "local":
-        return this.rowBase(row.id, selected, t, 4)
+        return rowBase(row.id, selected, t, 4)
           .on_click((_e, cx) => this.toggle(row, cx))
           .child(label(row.open ? "▾" : "▸", t.muted))
           .child(div().font_semibold().text_color(t.blocked).child("未コミットの変更"))
           .child(label(`${row.count} 個のファイル`, t.muted));
       case "commit": {
         const c = row.commit;
-        return this.rowBase(row.id, selected, t, 4)
+        return rowBase(row.id, selected, t, 4)
           .on_click((_e, cx) => this.toggle(row, cx))
           .child(label(row.open ? "▾" : "▸", t.muted))
-          .child(
-            div()
-              .id(`${row.id}:hash`)
-              .flex_none()
-              .text_color(t.accent)
-              .cursor_pointer()
-              .tooltip("このコミット全体を hunk で開く")
-              .hover((s) => s.underline().text_color(t.foreground))
-              .on_click((_e, cx) => {
-                cx.stop_propagation();
-                this.openCommitInHunk(row, cx);
-              })
-              .child(c.short),
-          )
+          .child(hunkLink(`${row.id}:hash`, c.short, "このコミット全体を hunk で開く", t, (cx) => this.openCommitInHunk(row, cx)))
           .child(div().flex_1().min_w(0).truncate().child(c.subject))
           .children(this.refLabels(c.refs, t))
           .child(div().flex_none().text_size(11).text_color(t.muted).child(c.author))
@@ -333,7 +300,7 @@ export default class CommitHistory extends View {
       case "file": {
         const f = row.file;
         const shown = f.oldPath ? `${f.oldPath} → ${f.path}` : f.path;
-        return this.rowBase(row.id, selected, t, 24)
+        return rowBase(row.id, selected, t, 24)
           .on_click((_e, cx) => this.openInHunk(row, cx))
           .tooltip("hunk で差分を開く（Enter）")
           .child(div().flex_none().w(12).text_color(statusColor(t, f.status)).child(f.status))

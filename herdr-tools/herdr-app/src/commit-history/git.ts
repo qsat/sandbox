@@ -90,16 +90,6 @@ export function parseLog(stdout: string): Commit[] {
     });
 }
 
-export function relativeTime(nowSec: number, thenSec: number): string {
-  const d = Math.max(0, nowSec - thenSec);
-  if (d < 60) return "たった今";
-  if (d < 3600) return `${Math.floor(d / 60)} 分前`;
-  if (d < 86400) return `${Math.floor(d / 3600)} 時間前`;
-  if (d < 86400 * 30) return `${Math.floor(d / 86400)} 日前`;
-  if (d < 86400 * 365) return `${Math.floor(d / (86400 * 30))} か月前`;
-  return `${Math.floor(d / (86400 * 365))} 年前`;
-}
-
 export interface NumstatEntry {
   path: string;
   oldPath?: string;
@@ -219,12 +209,4 @@ export function localFiles(status: string, stats: Map<string, NumstatEntry>): Fi
 /** コミットで変わったファイルの一覧を読む `git show` の引数（numstat と name-status は同時に指定できないので 2 回に分ける） */
 export function showFilesArgs(hash: string, kind: "numstat" | "name-status") {
   return ["show", hash, "--format=", `--${kind}`, "-z", "-M", "-m", "--first-parent"];
-}
-
-/**
- * hunk で開くときに `ws hunk` へ渡す引数。コミットなら `--commit <hash>`、未コミットの変更なら付けない。
- * ファイルの行から開くときは `--file <path>` でそのファイルへ移り、コミットのハッシュから開くときはファイルを指定しない
- */
-export function wsHunkArgs(root: string, commit: string | null, file: Pick<FileChange, "path"> | null) {
-  return ["hunk", root, ...(commit ? ["--commit", commit] : []), ...(file ? ["--file", file.path] : []), "--from-app"];
 }

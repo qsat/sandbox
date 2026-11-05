@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { LOG_ARGS, branchLabel, commitFiles, localFiles, logArgs, prBaseRef, parseDecorations, parseLog, parseNameStatus, parseNumstat, parseStatus, relativeTime, shortRef, sumNumstat, wsHunkArgs } from "../src/commit-history/git";
+import { LOG_ARGS, branchLabel, commitFiles, localFiles, logArgs, prBaseRef, parseDecorations, parseLog, parseNameStatus, parseNumstat, parseStatus, shortRef, sumNumstat } from "../src/commit-history/git";
+import { relativeTime } from "../src/shared/relative-time";
+import { moveSelection } from "../src/shared/selection";
+import { wsHunkArgs } from "../src/shared/ws-hunk";
 
 describe("一覧に出すコミットの範囲", () => {
   test("すべては HEAD からの履歴", () => expect(logArgs("all")).toEqual(LOG_ARGS));
@@ -24,8 +27,8 @@ describe("一覧に出すコミットの範囲", () => {
     expect(prBaseRef("", () => true)).toBeNull();
   });
 });
-import { LOCAL_ID, moveSelection, visibleRows } from "../src/commit-history/rows";
-import { resolveTarget, type Target } from "../src/commit-history/target";
+import { LOCAL_ID, visibleRows } from "../src/commit-history/rows";
+import { resolveTarget, type Target } from "../src/shared/target";
 
 const wt = (path: string, branch: string | null, panesCurrent: boolean, agentCurrent: boolean) => ({
   path,

@@ -25,10 +25,3 @@ export function visibleRows(commits: Commit[], local: FileChange[], expanded: st
   }
   return rows;
 }
-
-export function moveSelection(rows: Row[], current: string | null, delta: 1 | -1): string | null {
-  if (rows.length === 0) return null;
-  const i = current ? rows.findIndex((r) => r.id === current) : -1;
-  if (i < 0) return (delta === 1 ? rows[0] : rows.at(-1))?.id ?? null;
-  return rows[Math.min(rows.length - 1, Math.max(0, i + delta))]?.id ?? null;
-}

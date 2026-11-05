@@ -79,7 +79,7 @@ describe("依存の向き（ws → ws-core / tmux、tmux → ws-core、herdr-app
     expect(bad).toEqual([]);
   });
 
-  for (const mod of ["agent-board", "commit-history"]) {
+  for (const mod of ["agent-board", "commit-history", "pull-requests"]) {
     test(`mod ${mod} のバンドルは Herdr app の API だけを import し、Node / Bun の API を含まない`, async () => {
       const out = await Bun.build({
         entrypoints: [join(ROOT, "herdr-app", "src", mod, "main.ts")],

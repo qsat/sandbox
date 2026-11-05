@@ -13,13 +13,13 @@ run() { echo "+ $*"; [ "$DRY" = 1 ] || "$@"; }
 BIN_DIR="${WS_BIN_DIR:-$HOME/.local/bin}"
 APP_DIR="${HERDR_APP_DIR:-$HOME/.config/herdr-app}"
 
-echo "== ws と mod をビルドする（dist/ws、dist/mods/agent-board/、dist/mods/commit-history/）"
+echo "== ws と mod をビルドする（dist/ws、dist/mods/agent-board/、dist/mods/commit-history/、dist/mods/pull-requests/）"
 run bash -c "cd '$HERE' && bun install --frozen-lockfile >/dev/null && bun run build"
 echo "== ws を $BIN_DIR/ws に置く"
 run mkdir -p "$BIN_DIR"
 run cp "$HERE/dist/ws" "$BIN_DIR/ws"
 
-MODS="agent-board commit-history"
+MODS="agent-board commit-history pull-requests"
 run mkdir -p "$APP_DIR/layouts"
 for mod in $MODS; do
   echo "== mod（バンドル済みの main.js と mod.json）を $APP_DIR/mods/$mod に置く"
