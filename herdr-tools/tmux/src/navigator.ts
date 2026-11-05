@@ -5,6 +5,11 @@ import { focusGhostty, openGhosttyWindowRunning } from "./ghostty";
 import { AGENTS_WINDOW, chooseClient, planGo, workingDir, type PaneTarget, type Step } from "./plans/go";
 import { cycleCandidates, decideCurrentPane, MESSAGE_WHEN_NO_CANDIDATE, nextCandidate, prevCandidate } from "./plans/cycle";
 import { planPanes } from "./plans/panes";
+import { toListJson } from "./list-json";
+import { currentRowId, goRefOf, itemId, sidebarItems, stepFrom, steppableItems } from "./sidebar-order";
+import { readCollapsed, readStepRecord, writeStepRecord } from "./step-state";
+
+export const MESSAGE_WHEN_NO_ROW = "移る行がありません";
 import { indexTmux, isPaneId, sessionPaths } from "./tmux-index";
 import { TmuxServer } from "./tmux-server";
 
@@ -120,6 +125,50 @@ export class TmuxNavigator {
     }
     await this.goRef(target.agent.id, { client: opts.client, fromApp: opts.fromApp });
     return { candidates, moved: target, message: undefined };
+  }
+
+  /**
+   * サイドバー（mod）に並ぶ行の順で、今いる行の次（prev なら前）の行が指すところへ移る。
+   * 並びは sidebarItems（mod と共通）。mod で畳んだ workspace の行は飛ばす
+   */
+  async stepRows(opts: {
+    /** 畳んだ workspace を読む共有状態のファイル（無ければ何も畳んでいないとみなす） */
+    sharedStatePath: string;
+    /** 「今いる行」の記録ファイル */
+    recordPath: string;
+    prev?: boolean;
+    pane?: string;
+    client?: string;
+    fromApp?: boolean;
+    listOnly?: boolean;
+  }) {
+    const view = await this.view();
+    const rows = steppableItems(sidebarItems(toListJson(view.snap.tree, view.idx, view.snap.usage), [], await readCollapsed(opts.sharedStatePath)));
+    const clients = await this.tmux.listClients();
+    const client = chooseClient({ explicit: opts.client, fromApp: !!opts.fromApp, callerClient: undefined, clients });
+    const clientName = client.kind === "switch" ? client.name : undefined;
+    const currentPane = decideCurrentPane({
+      explicit: opts.pane,
+      envPane: this.env.TMUX_PANE,
+      clientPane: clientName ? await this.tmux.paneShownBy(clientName) : undefined,
+      displayedPanes: view.idx.facts.panes.filter((p) => p.current).map((p) => p.paneId),
+    });
+    const recordPath = opts.recordPath;
+    const current = currentRowId({
+      pane: currentPane,
+      agentId: currentPane ? view.idx.livePaneById(currentPane)?.agentId : undefined,
+      record: await readStepRecord(recordPath),
+    });
+    if (opts.listOnly) return { rows, current, moved: undefined, message: undefined };
+    const target = stepFrom(rows, current, !!opts.prev);
+    if (!target) {
+      await this.tmux.displayMessage(MESSAGE_WHEN_NO_ROW, opts.fromApp ? clientName : opts.client).catch(() => {});
+      return { rows, current, moved: undefined, message: MESSAGE_WHEN_NO_ROW };
+    }
+    await this.goRef(goRefOf(target), { client: opts.client, fromApp: opts.fromApp });
+    const shown = clientName ? await this.tmux.paneShownBy(clientName) : undefined;
+    if (shown) await writeStepRecord(recordPath, { row: itemId(target), pane: shown }).catch(() => {});
+    return { rows, current, moved: target, message: undefined };
   }
 
   async closeSessionOf(ref: string) {

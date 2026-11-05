@@ -11,3 +11,8 @@
 alt - b         : PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH" ws next --from-app
 # 後ろへ巡回する（1 つ前のエージェントへ移る）
 shift + alt - b : PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH" ws next --prev --from-app
+
+# サイドバー（Herdr app の mod）に並んでいる行の順で、1 つ下の行（worktree・エージェント・ペイン）へ移る
+shift + alt - j : PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH" ws step --from-app
+# 1 つ上の行へ移る
+shift + alt - k : PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH" ws step --prev --from-app

@@ -5,59 +5,56 @@ import { statusIcon } from "@herdr-tools/utils/status-icon";
 import { statusLabel } from "@herdr-tools/utils/status-label";
 import { worktreeDisplayName } from "@herdr-tools/utils/worktree-display-name";
 import { worktreeTags } from "@herdr-tools/utils/worktree-tags";
-import type { ListedAgent, ListedTree } from "@herdr-tools/tmux/list-json";
-import { byAttention, type AgentStatus } from "@herdr-tools/ws-core/domain/agent";
-import type { HcTerminal } from "@herdr-tools/ws-core/herdr-core/hc-terminal";
+import type { ListedTree } from "@herdr-tools/tmux/list-json";
+import { sidebarItems, type LiveTerminal, type SidebarItem } from "@herdr-tools/tmux/sidebar-order";
 
 export const WS = "ws";
 
-export type LiveTerminal = Pick<HcTerminal, "address" | "status">;
-
 export type BoardAction = "go" | "new" | "resume" | "stop" | "close";
 
-function withLiveStatus(a: ListedAgent, live: Map<string, LiveTerminal>) {
-  const st = live.get(a.id)?.status;
-  return st ? { ...a, status: st.state as AgentStatus, blockedReason: st.kind ?? undefined } : a;
+export type { LiveTerminal };
+
+function toRow(item: SidebarItem) {
+  switch (item.kind) {
+    case "workspace":
+      return { kind: "workspace" as const, key: item.key, label: item.ws.name, waiting: item.waiting, collapsed: item.collapsed };
+    case "worktree": {
+      const wt = item.wt;
+      return {
+        kind: "worktree" as const,
+        key: item.key,
+        label: worktreeDisplayName(wt),
+        tags: worktreeTags({ ...wt, branch: null }, wt.tmux.session),
+        isMain: wt.isMain,
+        exists: wt.exists,
+        hasSession: wt.tmux.session !== null,
+      };
+    }
+    case "agent": {
+      const a = item.agent;
+      return {
+        kind: "agent" as const,
+        key: item.key,
+        label: agentDisplayName(a),
+        icon: statusIcon(a.status),
+        status: statusLabel(a),
+        rawStatus: a.status,
+        tags: agentTags(a, a.tmux.attached),
+        context: contextUsage(a),
+        canResume: a.resumable,
+        alive: a.alive,
+        worktree: item.wt.path,
+        isCurrentPane: a.tmux.current,
+      };
+    }
+    case "pane":
+      return { kind: "pane" as const, key: item.key, label: item.pane.command, worktree: item.wt.path, isCurrentPane: item.pane.current };
+  }
 }
 
+/** 並びは tmux の sidebarItems（ws step と共通）が決め、ここでは表示用の行に変えるだけ */
 export function boardRows(listJson: ListedTree, live: LiveTerminal[], collapsed: string[]) {
-  const liveBy = new Map(live.map((t) => [t.address, t]));
-  const folded = new Set(collapsed);
-  return listJson.workspaces.flatMap((ws) => {
-    const worktrees = ws.worktrees.map((wt) => ({ ...wt, agents: wt.agents.map((a) => withLiveStatus(a, liveBy)).sort(byAttention) }));
-    const waiting = worktrees.flatMap((wt) => wt.agents).filter((a) => a.status === "blocked").length;
-    const header = { kind: "workspace" as const, key: ws.path, label: ws.name, waiting, collapsed: folded.has(ws.path) };
-    if (folded.has(ws.path)) return [header];
-    return [
-      header,
-      ...worktrees.flatMap((wt) => [
-        {
-          kind: "worktree" as const,
-          key: wt.path,
-          label: worktreeDisplayName(wt),
-          tags: worktreeTags({ ...wt, branch: null }, wt.tmux.session),
-          isMain: wt.isMain,
-          exists: wt.exists,
-          hasSession: wt.tmux.session !== null,
-        },
-        ...wt.agents.map((a) => ({
-          kind: "agent" as const,
-          key: a.id,
-          label: agentDisplayName(a),
-          icon: statusIcon(a.status),
-          status: statusLabel(a),
-          rawStatus: a.status,
-          tags: agentTags(a, a.tmux.attached),
-          context: contextUsage(a),
-          canResume: a.resumable,
-          alive: a.alive,
-          worktree: wt.path,
-          isCurrentPane: a.tmux.current,
-        })),
-        ...wt.tmux.panes.map((p) => ({ kind: "pane" as const, key: p.paneId, label: p.command, worktree: wt.path, isCurrentPane: p.current })),
-      ]),
-    ];
-  });
+  return sidebarItems(listJson, live, collapsed).map(toRow);
 }
 
 export type BoardRow = ReturnType<typeof boardRows>[number];

@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 
-import { resolve as resolvePath } from "node:path";
+import { homedir } from "node:os";
+import { join, resolve as resolvePath } from "node:path";
 import { expandHome } from "@herdr-tools/utils/expand-home";
 import { agentsInMissingWorktrees, looksLikePath } from "@herdr-tools/ws-core";
-import { renderText, runPopup, sessionsOfMissingWorktrees, toListJson, usageLine } from "@herdr-tools/tmux";
+import { itemId, itemLabel, renderText, runPopup, sessionsOfMissingWorktrees, toListJson, usageLine } from "@herdr-tools/tmux";
 import { composeFromEnv } from "./src/compose-from-env";
 
 const USAGE = `ws - エージェントを workspace > worktree > agent で一覧・移動する
@@ -20,6 +21,8 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
   ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる（他の場所の会話ペインは移して集める）
   ws next [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]
                                                    blocked → done → idle の順の列を巡回（--prev で後ろへ。--list は移動せず列を順に出す。--from-app は移動後に Ghostty を前に出す）
+  ws step [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]
+                                                   サイドバーの並び順で 1 つ下（--prev で上）の行へ移動（--list は移動せず並びを出す。今いる行は先頭に * を付ける）
   ws ui [--client <name>]                          tmux popup 用の対話一覧
   ws hook session-start                            Claude Code の SessionStart hook
   ws statusline [--quiet]                          Claude Code の statusLine。5h / 週の利用上限を記録して表示する
@@ -150,6 +153,19 @@ async function main(argv: string[]) {
           const since = c.agent.statusMs ? new Date(c.agent.statusMs).toISOString() : "-";
           process.stdout.write(`${c.agent.id}\t${c.agent.name}\t${c.agent.status}\t${since}\t${c.workspace}\t${c.worktree}\n`);
         }
+      }
+      return 0;
+    }
+    case "step": {
+      if (p.positional.length) throw new Error("ws step [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]");
+      const home = process.env.HOME || homedir();
+      const r = await nav.stepRows({
+        sharedStatePath: join(process.env.HERDR_APP_HOME || join(home, ".config", "herdr-app"), "shared.json"),
+        recordPath: join(process.env.XDG_CACHE_HOME || join(home, ".cache"), "herdr-tools", "step-last.json"),
+        prev: has(p, "--prev"), pane: str(p, "--pane"), client: str(p, "--client"), fromApp: goOpts.fromApp, listOnly: has(p, "--list") });
+      if (goOpts.fromApp && r.message) process.stderr.write(r.message + "\n");
+      if (has(p, "--list")) {
+        for (const row of r.rows) process.stdout.write(`${itemId(row) === r.current ? "*" : " "}\t${row.kind}\t${row.key}\t${itemLabel(row)}\n`);
       }
       return 0;
     }

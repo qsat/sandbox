@@ -56,10 +56,10 @@ const UTILS = "@herdr-tools/utils/*";
 describe("依存の向き（ws → ws-core / tmux、tmux → ws-core、herdr-app → I/O の無いモジュール、全員 → utils）", () => {
   test("utils はどこにも依存しない", () => expect(check("utils", [])).toEqual([]));
   test("ws-core は utils だけ", () => expect(check("ws-core", [UTILS])).toEqual([]));
-  test("tmux は ws-core と utils だけ", () => expect(check("tmux", ["@herdr-tools/ws-core", "@herdr-tools/ws-core/domain/tree", "@herdr-tools/ws-core/domain/usage", UTILS])).toEqual([]));
+  test("tmux は ws-core と utils だけ", () => expect(check("tmux", ["@herdr-tools/ws-core", "@herdr-tools/ws-core/domain/agent", "@herdr-tools/ws-core/domain/tree", "@herdr-tools/ws-core/domain/usage", UTILS])).toEqual([]));
   test("herdr-app は I/O の無いモジュール（ws-core のモデル・Terminal の型、ws list --json の型）と utils、Herdr app の API だけ", () =>
     expect(
-      check("herdr-app", ["@herdr-tools/ws-core/domain/agent", "@herdr-tools/ws-core/herdr-core/hc-terminal", "@herdr-tools/tmux/list-json", UTILS, "herdr", "gpui-kit"]),
+      check("herdr-app", ["@herdr-tools/ws-core/domain/agent", "@herdr-tools/ws-core/herdr-core/hc-terminal", "@herdr-tools/tmux/list-json", "@herdr-tools/tmux/sidebar-order", UTILS, "herdr", "gpui-kit"]),
     ).toEqual([]));
 
   test("ws-core のコードにクライアント（tmux / Herdr app）が出てこない", () => {
