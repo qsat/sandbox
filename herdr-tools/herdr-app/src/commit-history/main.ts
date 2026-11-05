@@ -6,7 +6,7 @@ import { ROW_HEIGHT, hunkLink, label, rowBase, type Theme } from "../shared/row-
 import { moveSelection } from "../shared/selection";
 import { resolveTarget, type Target } from "../shared/target";
 import { TITLE_BAR_HEIGHT } from "../shared/title-bar";
-import { stackTabs } from "../shared/stack-tabs";
+import { countBadge, stackTabs } from "../shared/stack-tabs";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import { wsHunkArgs } from "../shared/ws-hunk";
 import { parseList, WS } from "../shared/ws-list";
@@ -339,8 +339,8 @@ export default class CommitHistory extends View {
       .border_b(1)
       .border_color(t.border)
       .children(stackTabs("commit-history", t))
-      .child(div().px(5).py(1).rounded(4).border_1().border_color(t.border).text_size(10).text_color(t.muted).child(`${this.commits.length} commits`))
       .child(div().flex_1())
+      .child(countBadge(this.commits.length, t))
       .child(this.rangeButton("all", { icon: "history", tooltip: "すべてのコミット（HEAD からの履歴）" }, t))
       .child(this.rangeButton("unpushed", { icon: "push", tooltip: "push 前のコミット（上流のブランチにまだ無いもの）" }, t))
       .child(this.rangeButton("base", { text: this.baseRef ? branchLabel(this.baseRef) : "base" }, t));
