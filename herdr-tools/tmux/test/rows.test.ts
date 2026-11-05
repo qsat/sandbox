@@ -109,7 +109,7 @@ describe("toRows（popup はボードと同じ見せ方）", () => {
   });
   test("worktree はブランチ名とタグ、エージェントは名前・アイコン・状態の順", () => {
     expect(rows[6]!.text).toBe("main tmux*");
-    expect(rows[2]!.text).toBe("agent-3 ▲ blocked 未attach");
+    expect(rows[2]!.text).toBe("agent-3 ▲ 未attach"); // blocked は文字を出さない（理由が無ければアイコンだけ）
     expect(rows[7]!.text).toBe("agent-1 ● working");
     expect(rows[3]!.text).toBe("agent-2 ○ idle 未attach");
   });

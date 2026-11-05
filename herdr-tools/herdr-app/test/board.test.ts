@@ -45,7 +45,7 @@ describe("boardRows", () => {
   test("terminals() の即時の状態を重ね、注意が要る順に並べる", () => {
     const rows = boardRows(tree, [{ address: "t1", status: { state: "blocked", kind: "permission" } }], []);
     expect(rows.map((r) => r.kind)).toEqual(["workspace", "worktree", "worktree", "agent", "agent"]);
-    expect(rows[3]).toMatchObject({ key: "t1", status: "blocked(permission)", icon: "▲" });
+    expect(rows[3]).toMatchObject({ key: "t1", status: "permission", icon: "▲" });
     expect(rows[4]).toMatchObject({ key: "t2", canResume: true });
   });
 

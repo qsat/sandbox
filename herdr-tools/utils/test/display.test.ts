@@ -11,7 +11,9 @@ describe("表示の部品", () => {
   test("statusIcon / statusLabel", () => {
     expect(statusIcon("blocked")).toBe("▲");
     expect(statusIcon("unknown")).toBe("?");
-    expect(statusLabel({ status: "blocked", blockedReason: "permission" })).toBe("blocked(permission)");
+    // blocked は文字を出さず、アイコンと理由だけにする。理由が無ければアイコンだけ
+    expect(statusLabel({ status: "blocked", blockedReason: "permission" })).toBe("permission");
+    expect(statusLabel({ status: "blocked" })).toBe("");
     expect(statusLabel({ status: "idle", blockedReason: "x" })).toBe("idle");
   });
   test("agentTags: attach の有無が分からなければ未attach を出さない", () => {

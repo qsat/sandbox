@@ -288,7 +288,7 @@ export default class AgentBoard extends View {
         return base
           .pl(28)
           .on_click((_e, cx) => this.runRow(row, "go", cx))
-          .child(this.info([div().child(row.label), label(row.icon, color), label(row.status, color), ...this.contextPie(row, t), this.tags(row.tags, t)]))
+          .child(this.info([div().child(row.label), label(row.icon, color), ...(row.status ? [label(row.status, color)] : []), ...this.contextPie(row, t), this.tags(row.tags, t)]))
           .when(row.canResume, (el) =>
             el.child(
               button({ id: `resume:${row.key}`, icon: "play", text: "再開", tooltip: "claude --resume で会話を再開する（R）", look: "primary" }, t, (cx) =>
