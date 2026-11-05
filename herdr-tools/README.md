@@ -81,7 +81,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | エージェントを起動する | `cc`（`ws new --here`。今のペインで会話）か `ws new --attach`（agents ウィンドウへ移る） | worktree の「＋ claude」ボタン |
 | 待っているエージェントを探す | `prefix a`（blocked が先頭） | 一覧を見る（常時表示） |
 | 注意が要るエージェントを次へ巡回する | `prefix b`、または Ghostty の `alt+b`（`ws next`）。列は blocked → done → idle の順で、同じ status の中は status になった時刻が新しい順（working は入れない）。無ければステータス行に表示 | `alt+b`（`ws next --from-app`） |
-| サイドバーの並び順でペインを移る | skhd の `shift+alt+j`（1 つ下）と `shift+alt+k`（1 つ上）（`ws step --from-app`、`ws step --prev --from-app`）。worktree・エージェント・ペインの行が対象で、mod で畳んだ workspace の中は飛ばす。worktree の行へ移ったあとの「今いる行」は `~/.cache/herdr-tools/step-last.json`（`{"row":"worktree:/パス","pane":"%12"}`）に記録し、次に呼ばれたとき今いるペインが記録の `pane` と同じなら記録の行から続ける | 同じ（skhd のキー） |
+| サイドバーの並び順でペインを移る | skhd の `shift+alt+j`（1 つ下）と `shift+alt+k`（1 つ上）（`ws step --from-app`、`ws step --prev --from-app`）。エージェントとペインの行が対象で、worktree の行（tmux セッション）と、mod で畳んだ workspace の中は飛ばす | 同じ（skhd のキー） |
 | 同じ列を後ろへ巡回する | `prefix B`、または Ghostty の `shift+alt+b`（`ws next --prev`） | `shift+alt+b`（`ws next --prev --from-app`） |
 | そのエージェントと話す | 一覧で `Enter` → 会話ペインへ | クリック → Ghostty の会話ペインへ |
 | 一覧をキーで操作する | 一覧で `j` / `k`（↓ / ↑）で選び、`Enter` 移動、`n` ＋ claude、`R` 再開、`s` 停止・削除、`x` セッションを閉じる（停止と閉じるは y で確かめる） | ボードを一度クリックしてから `j` / `k`（↓ / ↑）で選び、`Enter` 移動、`n` ＋ claude、`R` 再開、`s` 停止・削除、`x` セッションを閉じる（停止と閉じるは確認のダイアログを出す）。選んだ行は濃い黄色、今いるペイン（会話ペインならそのエージェント）の行は薄い黄色で示す |
@@ -106,7 +106,7 @@ ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェ
 ws next [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]
                                                  blocked → done → idle の順の列（同じ status の中は status になった時刻が新しい順。working と動いていないものは除く）を巡回し、エージェントの会話ペインへ移動。押すたびに次へ、--prev で後ろへ（--list は移動せず、列を「ID・名前・status・status になった時刻・workspace・worktree」で順に出す。--from-app は移動後に Ghostty を前に出し、候補が無いときは標準エラーにも出す。--pane も TMUX_PANE も無いときは、移動に使うクライアントが表示しているペインを今いるペインとみなす）
 ws step [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]
-                                                 サイドバー（mod）に並ぶ行の順で、1 つ下（--prev で 1 つ上）の行へ移動。移る先は worktree・エージェント・ペインの行（workspace の見出しと、mod で畳んだ workspace の中の行は数えない）。端では反対の端へ回り、今いる行が無ければ下は先頭・上は最後。--list は移動せず、並びを「今いる行の印（*）・種類・ref・名前」で 1 行ずつ出す。--from-app は移動後に Ghostty を前に出す
+                                                 サイドバー（mod）に並ぶ行の順で、1 つ下（--prev で 1 つ上）の行へ移動。移る先はエージェントとペインの行（workspace の見出し、worktree の行、mod で畳んだ workspace の中の行は数えない）。端では反対の端へ回り、今いる行が無ければ下は先頭・上は最後。--list は移動せず、並びを「今いる行の印（*）・種類・ref・名前」で 1 行ずつ出す。--from-app は移動後に Ghostty を前に出す
 ws ui [--client <name>]                          tmux popup 用の対話一覧
 ws hook session-start                            Claude Code の SessionStart hook
 ws statusline [--quiet]                          Claude Code の statusLine。5h / 週の利用上限を記録して表示する

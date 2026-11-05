@@ -68,10 +68,10 @@ describe("サイドバーの並び", () => {
     const live = [{ address: "t1", status: { state: "blocked", kind: "permission" } }, { address: "t2", status: { state: "idle" } }];
     expect(ids(sidebarItems(list, live, [])).filter((i) => i.startsWith("agent:t"))).toEqual(["agent:t1", "agent:t2"]);
   });
-  test("移る先に数える行は workspace の見出しを除いたもので、移る先の ref は worktree のパス・エージェントの id・ペインの id", () => {
+  test("移る先に数える行はエージェントとペインだけ（workspace の見出しと worktree の行は飛ばす）で、移る先の ref はエージェントの id・ペインの id", () => {
     const rows = steppableItems(sidebarItems(list, [], []));
-    expect(rows.some((r) => (r.kind as string) === "workspace")).toBe(false);
-    expect(rows.map(goRefOf)).toEqual(["/g/o/api", "%1", "/g/o/api=feat", "t2", "t1", "%2", "/g/o/web", "w1"]);
+    expect(rows.every((r) => r.kind === "agent" || r.kind === "pane")).toBe(true);
+    expect(rows.map(goRefOf)).toEqual(["%1", "t2", "t1", "%2", "w1"]);
   });
 });
 
@@ -80,15 +80,15 @@ describe("次・前の行を選ぶ", () => {
   const next = (cur: string | undefined, prev = false) => (stepFrom(rows, cur, prev) ? itemId(stepFrom(rows, cur, prev)!) : undefined);
   test("今いる行の 1 つ下・1 つ上へ移る", () => {
     expect(next("agent:t2")).toBe("agent:t1");
-    expect(next("agent:t2", true)).toBe("worktree:/g/o/api=feat");
+    expect(next("agent:t2", true)).toBe("pane:%1");
   });
   test("端では反対の端へ回る", () => {
-    expect(next("agent:w1")).toBe("worktree:/g/o/api");
-    expect(next("worktree:/g/o/api", true)).toBe("agent:w1");
+    expect(next("agent:w1")).toBe("pane:%1");
+    expect(next("pane:%1", true)).toBe("agent:w1");
   });
   test("今いる行が列に無ければ、下は先頭・上は最後", () => {
-    expect(next("agent:zzz")).toBe("worktree:/g/o/api");
-    expect(next(undefined)).toBe("worktree:/g/o/api");
+    expect(next("agent:zzz")).toBe("pane:%1");
+    expect(next(undefined)).toBe("pane:%1");
     expect(next(undefined, true)).toBe("agent:w1");
   });
   test("行が 1 つも無ければ移る先なし", () => expect(stepFrom([], "x", false)).toBeUndefined());

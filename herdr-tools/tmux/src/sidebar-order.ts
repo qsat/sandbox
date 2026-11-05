@@ -58,7 +58,7 @@ export function itemId(item: { kind: string; key: string }) {
 
 /** 移る先に数える行（workspace の見出しは数えない） */
 export function steppableItems(items: SidebarItem[]) {
-  return items.filter((i) => i.kind !== "workspace");
+  return items.filter((i) => i.kind === "agent" || i.kind === "pane");
 }
 
 /** ws go に渡す ref。worktree はパス、エージェントは id、ペインは %12 */
