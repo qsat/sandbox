@@ -2,14 +2,18 @@ import { homedir } from "node:os";
 import { runInteractive } from "@herdr-tools/utils/run-interactive";
 import { looksLikePath, resolveRef, type Resolved, type WsCore } from "@herdr-tools/ws-core";
 import { focusGhostty, openGhosttyWindowRunning } from "./ghostty";
-import { AGENTS_WINDOW, chooseClient, planGo, workingDir, type PaneTarget, type Step } from "./plans/go";
+import { AGENTS_WINDOW, chooseClient, ensureSession, planGo, workingDir, type PaneTarget, type Step } from "./plans/go";
 import { continuingRecord, cycleCandidates, decideCurrentPane, inRecordedOrder, MESSAGE_WHEN_NO_CANDIDATE, nextCandidate, prevCandidate } from "./plans/cycle";
 import { planPanes } from "./plans/panes";
+import { HUNK_WINDOW, planHunk } from "./plans/hunk";
+import { HunkCli } from "./hunk-cli";
 import { toListJson } from "./list-json";
 import { currentRowId, goRefOf, itemId, sidebarItems, stepFrom, steppableItems } from "./sidebar-order";
 import { readCollapsed, readCycleRecord, readStepRecord, writeCycleRecord, writeStepRecord } from "./step-state";
 
 export const MESSAGE_WHEN_NO_ROW = "移る行がありません";
+/** hunk を起動した直後、セッションが daemon に現れるのを待つ試行の回数（300ms 間隔） */
+const HUNK_START_ATTEMPTS = 30;
 import { indexTmux, isPaneId, sessionPaths } from "./tmux-index";
 import { TmuxServer } from "./tmux-server";
 
@@ -26,7 +30,38 @@ export class TmuxNavigator {
     readonly core: WsCore,
     readonly tmux = new TmuxServer(),
     private readonly env: Record<string, string | undefined> = process.env,
+    private readonly hunk = new HunkCli(),
   ) {}
+
+  /**
+   * worktree の差分を hunk で開く（commit があれば `hunk show <commit>`、無ければ未コミットの変更）。
+   * hunk のセッションがあれば中身を入れ替え、無ければ tmux セッションの hunk ウィンドウで起動し、file があればそこへ移る
+   */
+  async openInHunk(path: string, opts: { commit?: string; file?: string; client?: string; fromApp?: boolean }) {
+    const view = await this.view({ alsoShow: [path] });
+    const target = resolveRef(view.snap, path);
+    if (!target) throw new Error(`見つかりません: ${path}`);
+    const cwd = workingDir(target.worktree, this.cwdWhenMissing);
+    const client = chooseClient({
+      explicit: opts.client,
+      fromApp: !!opts.fromApp,
+      callerClient: opts.fromApp ? undefined : await this.tmux.callerClient(this.env),
+      clients: await this.tmux.listClients(),
+    });
+    const session = ensureSession(target.worktree, view.idx, cwd);
+    const steps = planHunk({
+      cwd,
+      hunkBin: this.hunk.bin,
+      commit: opts.commit,
+      file: opts.file,
+      session,
+      windowExists: await this.tmux.hasWindow(session.name, HUNK_WINDOW),
+      hunkSessionExists: await this.hunk.hasSession(cwd),
+      ctx: { client, fromApp: !!opts.fromApp, cwdWhenMissing: this.cwdWhenMissing },
+    });
+    for (const step of steps) await this.run(step);
+    return steps;
+  }
 
   async view(opts: { allEntries?: boolean; alsoShow?: string[] } = {}) {
     const facts = await this.tmux.facts();
@@ -86,6 +121,14 @@ export class TmuxNavigator {
         return openGhosttyWindowRunning(this.tmux.attachArgv(step.target));
       case "focusGhostty":
         return focusGhostty();
+      case "openHunkWindow":
+        return void (await this.tmux.openWindowRunning(step.session, HUNK_WINDOW, step.cwd, step.argv));
+      case "respawnHunkWindow":
+        return this.tmux.respawnWindowRunning(step.session, HUNK_WINDOW, step.cwd, step.argv);
+      case "hunkReload":
+        return this.hunk.reload(step.cwd, step.args);
+      case "hunkNavigate":
+        return this.hunk.navigate(step.cwd, step.file, step.wait ? HUNK_START_ATTEMPTS : 1);
     }
   }
 

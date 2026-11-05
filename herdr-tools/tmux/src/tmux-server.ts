@@ -87,8 +87,18 @@ export class TmuxServer {
     await this.exec(["new-session", "-d", "-s", name, "-c", cwd]);
   }
 
-  private async hasWindow(session: string, window: string) {
+  async hasWindow(session: string, window: string) {
     return (await this.linesOrNoneWhenServerIsDown(["list-windows", "-t", exact(session), "-F", "#{window_name}"])).includes(window);
+  }
+
+  /** session に window を作り、その中で argv を起動する（cwd が作業ディレクトリ）。出力は作ったペインの id */
+  async openWindowRunning(session: string, window: string, cwd: string, argv: string[]) {
+    return (await this.exec(["new-window", "-d", "-t", `${exact(session)}:`, "-n", window, "-c", cwd, "-P", "-F", "#{pane_id}", ...argv])).trim();
+  }
+
+  /** 既にある window のペインを、argv を起動し直して作り直す（中のプログラムが生きていれば止める） */
+  async respawnWindowRunning(session: string, window: string, cwd: string, argv: string[]) {
+    await this.exec(["respawn-pane", "-k", "-t", `${exact(session)}:${window}`, "-c", cwd, ...argv]);
   }
 
   async openAgentPane(session: string, window: string, cwd: string, agentId: string, command: string) {

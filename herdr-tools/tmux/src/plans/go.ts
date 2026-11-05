@@ -11,7 +11,11 @@ export type Step =
   | { op: "switchClient"; client: string; target: string }
   | { op: "attachHere"; target: string }
   | { op: "newGhosttyWindow"; target: string }
-  | { op: "focusGhostty" };
+  | { op: "focusGhostty" }
+  | { op: "openHunkWindow"; session: string; cwd: string; argv: string[] }
+  | { op: "respawnHunkWindow"; session: string; cwd: string; argv: string[] }
+  | { op: "hunkReload"; cwd: string; hunkBin: string; args: string[] }
+  | { op: "hunkNavigate"; cwd: string; file: string; wait: boolean };
 
 export function mostRecentClient(clients: TmuxClient[]) {
   return [...clients].sort((a, b) => b.activity - a.activity)[0];
@@ -36,7 +40,7 @@ export function workingDir(wt: WorktreeNode, whenMissing: string) {
   return wt.exists ? wt.path : whenMissing;
 }
 
-interface GoContext {
+export interface GoContext {
   client: ReturnType<typeof chooseClient>;
   fromApp: boolean;
   cwdWhenMissing: string;
@@ -55,7 +59,7 @@ export function planGo(target: Resolved | PaneTarget, idx: TmuxIndex, ctx: GoCon
   return [...session.steps, ...conversation.steps, ...bringClientTo(conversation.target, ctx)];
 }
 
-function ensureSession(wt: WorktreeNode, idx: TmuxIndex, cwd: string): { name: string; steps: Step[] } {
+export function ensureSession(wt: WorktreeNode, idx: TmuxIndex, cwd: string): { name: string; steps: Step[] } {
   const existing = idx.sessionOf(wt.path)?.name;
   if (existing) return { name: existing, steps: [] };
   const name = tmSessionName(wt.path);
@@ -69,7 +73,7 @@ function enterConversation(agent: AgentNode, session: string, cwd: string, idx: 
   return { target: `${session}:${AGENTS_WINDOW}`, steps: [{ op: "openAgentPane", session, window: AGENTS_WINDOW, cwd, agentId: agent.id }] };
 }
 
-function bringClientTo(target: string, ctx: GoContext): Step[] {
+export function bringClientTo(target: string, ctx: GoContext): Step[] {
   switch (ctx.client.kind) {
     case "switch":
       return [{ op: "switchClient", client: ctx.client.name, target }, ...(ctx.fromApp ? [{ op: "focusGhostty" } as const] : [])];

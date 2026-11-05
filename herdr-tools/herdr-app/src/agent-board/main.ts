@@ -1,5 +1,7 @@
 import { View, div, svg, type AsyncContext, type Color, type Context, type Element, type FocusHandle } from "gpui-kit";
-import { closeOverlay, exec, home, nextCommand, openOverlay, props, setShared, shared, terminals, theme, watchFolder, writeTextFile } from "herdr";
+import { closeOverlay, exec, nextCommand, openOverlay, props, setShared, shared, terminals, theme } from "herdr";
+import { BRANCH_COLOR, REPOSITORY_COLOR, SELECTED_BG } from "../shared/colors";
+import { watchTmuxFocus } from "../shared/tmux-focus";
 import type { Tag } from "@herdr-tools/utils/tag";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
 import { usageSegments } from "@herdr-tools/utils/usage-segments";
@@ -7,16 +9,11 @@ import { boardRows, EMPTY_LIST, keyActionFor, moveSelection, parseList, rowId, t
 
 const MOD_NAME = "agent-board";
 const LIST_REFRESH_MS = 2000;
-/** tmux.conf の hook が触れるフォルダー（home からの相対）。変化を見張って、すぐ一覧を読み直す */
-const TMUX_FOCUS_DIR = ".cache/herdr-tools/tmux-focus";
 const CONFIRM_DIALOG_WIDTH = 360;
 const CONFIRM_DIALOG_HEIGHT = 160;
 const COLLAPSED_KEY = "agent-board.collapsed";
 const ROW_HEIGHT = 22;
 const REPOSITORY_SPACING = ROW_HEIGHT * 0.5;
-const REPOSITORY_COLOR: Color = "#b8ff3cb3";
-const BRANCH_COLOR: Color = "#fff03c80";
-const SELECTED_BG: Color = "#e6ff0033";
 const CURRENT_PANE_BG: Color = "#e6ff0014";
 const PIE_SIZE = 12;
 
@@ -147,27 +144,8 @@ export default class AgentBoard extends View {
     cx.timer.every(LIST_REFRESH_MS, (cx) => this.refresh(cx));
     this.refresh(cx);
     this.listenForKeyCommands(cx);
-    this.watchTmuxFocus(cx);
-  }
-
-  /**
-   * tmux の hook（tmux.conf）が今いるペイン・ウィンドウ・セッションの変化でフォルダーのファイルに触れたら、2 秒を待たずに読み直す。
-   * 見張りが失敗しても（フォルダーが作れない・見張れない）mod は壊さず、2 秒ごとの読み直しだけで動く
-   */
-  watchTmuxFocus(cx: Context) {
-    cx.spawn(async (cx) => {
-      const dir = `${home()}/${TMUX_FOCUS_DIR}`;
-      try {
-        // フォルダーが無いと見張りが失敗するかもしれないので、中にファイルを書いて作っておく（既にあれば書けないだけ）
-        await writeTextFile(`${dir}/.keep`, "", null).catch(() => {});
-        for (;;) {
-          await watchFolder(dir);
-          this.refresh(cx);
-        }
-      } catch {
-        // 予備の 2 秒ごとの読み直しがあるので、何もしない
-      }
-    }, { owner: this });
+    // tmux の hook が今いるペインの変化を知らせたら、2 秒を待たずに読み直す（見張れなくても 2 秒ごとの読み直しで動く）
+    watchTmuxFocus(cx, this, (cx) => this.refresh(cx));
   }
 
   listenForKeyCommands(cx: Context) {

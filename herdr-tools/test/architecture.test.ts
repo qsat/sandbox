@@ -79,16 +79,18 @@ describe("依存の向き（ws → ws-core / tmux、tmux → ws-core、herdr-app
     expect(bad).toEqual([]);
   });
 
-  test("mod のバンドルは Herdr app の API だけを import し、Node / Bun の API を含まない", async () => {
-    const out = await Bun.build({
-      entrypoints: [join(ROOT, "herdr-app", "src", "agent-board", "main.ts")],
-      format: "esm",
-      target: "browser",
-      external: ["herdr", "gpui-kit"],
+  for (const mod of ["agent-board", "commit-history"]) {
+    test(`mod ${mod} のバンドルは Herdr app の API だけを import し、Node / Bun の API を含まない`, async () => {
+      const out = await Bun.build({
+        entrypoints: [join(ROOT, "herdr-app", "src", mod, "main.ts")],
+        format: "esm",
+        target: "browser",
+        external: ["herdr", "gpui-kit"],
+      });
+      expect(out.success).toBe(true);
+      const code = await out.outputs[0]!.text();
+      expect([...new Set(imports(code))].sort()).toEqual(["gpui-kit", "herdr"]);
+      expect(code).not.toMatch(/\bBun\.|process\.|require\(|node:/);
     });
-    expect(out.success).toBe(true);
-    const code = await out.outputs[0]!.text();
-    expect([...new Set(imports(code))].sort()).toEqual(["gpui-kit", "herdr"]);
-    expect(code).not.toMatch(/\bBun\.|process\.|require\(|node:/);
-  });
+  }
 });

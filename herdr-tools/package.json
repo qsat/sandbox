@@ -16,7 +16,9 @@
     "e2e": "bash ws/test/e2e.sh",
     "build": "bun run build:ws && bun run build:mod",
     "build:ws": "bun build --compile --minify ws/cli.ts --outfile dist/ws",
-    "build:mod": "bun build herdr-app/src/agent-board/main.ts --outfile dist/mods/agent-board/main.js --format esm --target browser --external herdr --external gpui-kit && cp herdr-app/mod/agent-board/* dist/mods/agent-board/ && bun herdr-app/build/pie-svgs.ts dist/mods/agent-board/pie"
+    "build:mod": "bun run build:mod:agent-board && bun run build:mod:commit-history",
+    "build:mod:agent-board": "bun build herdr-app/src/agent-board/main.ts --outfile dist/mods/agent-board/main.js --format esm --target browser --external herdr --external gpui-kit && cp herdr-app/mod/agent-board/* dist/mods/agent-board/ && bun herdr-app/build/pie-svgs.ts dist/mods/agent-board/pie",
+    "build:mod:commit-history": "bun build herdr-app/src/commit-history/main.ts --outfile dist/mods/commit-history/main.js --format esm --target browser --external herdr --external gpui-kit && cp herdr-app/mod/commit-history/* dist/mods/commit-history/"
   },
   "devDependencies": {
     "@types/bun": "^1.4.4",

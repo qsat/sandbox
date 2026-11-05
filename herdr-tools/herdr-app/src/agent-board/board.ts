@@ -8,7 +8,9 @@ import { worktreeTags } from "@herdr-tools/utils/worktree-tags";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
 import { sidebarItems, type LiveTerminal, type SidebarItem } from "@herdr-tools/tmux/sidebar-order";
 
-export const WS = "ws";
+import { WS } from "../shared/ws-list";
+
+export { WS, EMPTY_LIST, parseList } from "../shared/ws-list";
 
 export type BoardAction = "go" | "new" | "resume" | "stop" | "close";
 
@@ -104,17 +106,6 @@ export function toggleCollapsed(collapsed: string[], key: string) {
   if (s.has(key)) s.delete(key);
   else s.add(key);
   return [...s];
-}
-
-export const EMPTY_LIST: ListedTree = { workspaces: [], usage: {} };
-
-export function parseList(stdout: string): ListedTree {
-  try {
-    const v = JSON.parse(stdout);
-    return v && Array.isArray(v.workspaces) ? { ...v, usage: v.usage ?? {} } : EMPTY_LIST;
-  } catch {
-    return EMPTY_LIST;
-  }
 }
 
 const KEY_ACTIONS: Record<string, BoardAction> = { enter: "go", n: "new", "shift-r": "resume", s: "stop", x: "close" };
