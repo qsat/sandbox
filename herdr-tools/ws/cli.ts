@@ -19,8 +19,8 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
   ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す
   ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは止めない
   ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる（他の場所の会話ペインは移して集める）
-  ws next [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]
-                                                   blocked → done → idle の順の列を巡回（--prev で後ろへ。--list は移動せず列を順に出す。--from-app は移動後に Ghostty を前に出す）
+  ws next [--prev] [--client <name> | --from-app] [--list]
+                                                   blocked → done → idle の順の列を巡回（3 秒以内に続けて押すと前回の続き、間が空くと先頭から。--prev で後ろへ。--list は移動せず列を順に出す。--from-app は移動後に Ghostty を前に出す）
   ws step [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]
                                                    サイドバーの並び順で 1 つ下（--prev で上）の行へ移動（--list は移動せず並びを出す。今いる行は先頭に * を付ける）
   ws ui [--client <name>]                          tmux popup 用の対話一覧
@@ -145,8 +145,10 @@ async function main(argv: string[]) {
       return 0;
     }
     case "next": {
-      if (p.positional.length) throw new Error("ws next [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]");
-      const r = await nav.cycleAgents({ prev: has(p, "--prev"), pane: str(p, "--pane"), client: str(p, "--client"), fromApp: goOpts.fromApp, listOnly: has(p, "--list") });
+      if (p.positional.length) throw new Error("ws next [--prev] [--client <name> | --from-app] [--list]");
+      const r = await nav.cycleAgents({
+        recordPath: join(process.env.XDG_CACHE_HOME || join(process.env.HOME || homedir(), ".cache"), "herdr-tools", "next-last.json"),
+        prev: has(p, "--prev"), client: str(p, "--client"), fromApp: goOpts.fromApp, listOnly: has(p, "--list") });
       if (goOpts.fromApp && r.message) process.stderr.write(r.message + "\n");
       if (has(p, "--list")) {
         for (const c of r.candidates) {

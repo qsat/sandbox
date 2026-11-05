@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildTree, type AgentRecord, type PathInspection } from "@herdr-tools/ws-core";
-import { cycleCandidates, decideCurrentPane, MESSAGE_WHEN_NO_CANDIDATE, nextCandidate, prevCandidate } from "../src/plans/cycle";
+import { continuingRecord, CYCLE_BURST_MS, cycleCandidates, decideCurrentPane, inRecordedOrder, MESSAGE_WHEN_NO_CANDIDATE, nextCandidate, prevCandidate } from "../src/plans/cycle";
 
 const G = "/Users/me/ghq/github.com/o";
 const API = `${G}/api`;
@@ -84,4 +84,28 @@ describe("今いるペインの決め方", () => {
   test("どちらも無ければ移動に使うクライアントが表示しているペイン", () => expect(decideCurrentPane({ clientPane: "%2", displayedPanes })).toBe("%2"));
   test("クライアントのペインも分からなければ表示中の最初のペイン", () => expect(decideCurrentPane({ displayedPanes })).toBe("%1"));
   test("何も無ければ undefined", () => expect(decideCurrentPane({ displayedPanes: [] })).toBeUndefined());
+});
+
+describe("続けて押したときと、間が空いたとき", () => {
+  const record = { atMs: 10_000, order: ["d2", "b3", "i1"], lastId: "b3" };
+  test("前回から 3 秒未満なら前回の続き", () => {
+    expect(continuingRecord(record, 10_000 + CYCLE_BURST_MS - 1)).toBe(record);
+  });
+  test("3 秒以上空いたら回り直す（記録を使わない）", () => {
+    expect(continuingRecord(record, 10_000 + CYCLE_BURST_MS)).toBeNull();
+    expect(continuingRecord(null, 10_000)).toBeNull();
+  });
+  test("時計が戻っていたら回り直す", () => expect(continuingRecord(record, 9_000)).toBeNull());
+  test("続けて押している間は前回の列の順を保ち、列から外れたものは飛ばす", () => {
+    expect(inRecordedOrder(c, ["d2", "gone", "b3", "i1"]).map((x) => x.agent.id)).toEqual(["d2", "b3", "i1"]);
+  });
+  test("前回の列と前回移った先から次・前へ進む", () => {
+    const list = inRecordedOrder(c, record.order);
+    expect(nextCandidate(list, record.lastId)?.agent.id).toBe("i1");
+    expect(prevCandidate(list, record.lastId)?.agent.id).toBe("d2");
+  });
+  test("回り直すときは、前へは列の先頭・後ろへは列の最後", () => {
+    expect(nextCandidate(c, undefined)?.agent.id).toBe("b3");
+    expect(prevCandidate(c, undefined)?.agent.id).toBe("i1");
+  });
 });

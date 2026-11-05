@@ -80,7 +80,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | その worktree に入る | `C-e`（tm）で選ぶ（今までどおり） | 一覧で worktree をクリック → Ghostty が前に出る |
 | エージェントを起動する | `cc`（`ws new --here`。今のペインで会話）か `ws new --attach`（agents ウィンドウへ移る） | worktree の「＋ claude」ボタン |
 | 待っているエージェントを探す | `prefix a`（blocked が先頭） | 一覧を見る（常時表示） |
-| 注意が要るエージェントを次へ巡回する | `prefix b`、または Ghostty の `ctrl+alt+shift+j`（`ws next`）。列は blocked → done → idle の順で、同じ status の中は status になった時刻が新しい順（working は入れない）。無ければステータス行に表示 | `ctrl+alt+shift+j`（`ws next --from-app`） |
+| 注意が要るエージェントを次へ巡回する | `prefix b`、または Ghostty の `ctrl+alt+shift+j`（`ws next`）。列は blocked → done → idle の順で、同じ status の中は status になった時刻が新しい順（working は入れない）。3 秒以内に続けて押すと前回の続き、間が空くと先頭から。無ければステータス行に表示 | `ctrl+alt+shift+j`（`ws next --from-app`） |
 | サイドバーの並び順でペインを移る | skhd の `shift+alt+j`（1 つ下）と `shift+alt+k`（1 つ上）（`ws step --from-app`、`ws step --prev --from-app`）。エージェントとペインの行が対象で、worktree の行（tmux セッション）と、mod で畳んだ workspace の中は飛ばす | 同じ（skhd のキー） |
 | 同じ列を後ろへ巡回する | `prefix B`、または Ghostty の `ctrl+alt+shift+k`（`ws next --prev`） | `ctrl+alt+shift+k`（`ws next --prev --from-app`） |
 | そのエージェントと話す | 一覧で `Enter` → 会話ペインへ | クリック → Ghostty の会話ペインへ |
@@ -103,8 +103,8 @@ ws resume <agent>                                再開できるなら claude --
 ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す（エージェントでない端末は触らない）
 ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは herdr-core で動き続ける
 ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる（会話ペインが無ければ開き、他の場所にあれば移して集める）
-ws next [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]
-                                                 blocked → done → idle の順の列（同じ status の中は status になった時刻が新しい順。working と動いていないものは除く）を巡回し、エージェントの会話ペインへ移動。押すたびに次へ、--prev で後ろへ（--list は移動せず、列を「ID・名前・status・status になった時刻・workspace・worktree」で順に出す。--from-app は移動後に Ghostty を前に出し、候補が無いときは標準エラーにも出す。--pane も TMUX_PANE も無いときは、移動に使うクライアントが表示しているペインを今いるペインとみなす）
+ws next [--prev] [--client <name> | --from-app] [--list]
+                                                 blocked → done → idle の順の列（同じ status の中は status になった時刻が新しい順。working と動いていないものは除く）を巡回し、エージェントの会話ペインへ移動。3 秒以内に続けて押すと、前回の列の順のまま前回移った先の次へ進む（--prev で後ろへ）。3 秒以上空くと今いる場所は数えず、列の先頭（--prev なら最後）へ移る。前回の列と移った先は `~/.cache/herdr-tools/next-last.json` に記録する（--list は移動せず、列を「ID・名前・status・status になった時刻・workspace・worktree」で順に出す。--from-app は移動後に Ghostty を前に出し、候補が無いときは標準エラーにも出す）
 ws step [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]
                                                  サイドバー（mod）に並ぶ行の順で、1 つ下（--prev で 1 つ上）の行へ移動。移る先はエージェントとペインの行（workspace の見出し、worktree の行、mod で畳んだ workspace の中の行は数えない）。端では反対の端へ回り、今いる行が無ければ下は先頭・上は最後。--list は移動せず、並びを「今いる行の印（*）・種類・ref・名前」で 1 行ずつ出す。--from-app は移動後に Ghostty を前に出す
 ws ui [--client <name>]                          tmux popup 用の対話一覧

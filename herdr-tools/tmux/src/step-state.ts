@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import type { CycleRecord } from "./plans/cycle";
 import type { StepRecord } from "./sidebar-order";
 
 /** mod が畳んだ workspace のパスを入れる共有状態のキー（mod の main.ts の COLLAPSED_KEY と同じ） */
@@ -25,6 +26,21 @@ export async function readStepRecord(path: string): Promise<StepRecord | null> {
 }
 
 export async function writeStepRecord(path: string, record: StepRecord) {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, JSON.stringify(record) + "\n");
+}
+
+export async function readCycleRecord(path: string): Promise<CycleRecord | null> {
+  try {
+    const v = JSON.parse(await readFile(path, "utf8"));
+    const valid = typeof v?.atMs === "number" && typeof v?.lastId === "string" && Array.isArray(v?.order) && v.order.every((x: unknown) => typeof x === "string");
+    return valid ? { atMs: v.atMs, order: v.order, lastId: v.lastId } : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function writeCycleRecord(path: string, record: CycleRecord) {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(record) + "\n");
 }

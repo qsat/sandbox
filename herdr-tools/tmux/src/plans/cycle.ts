@@ -27,6 +27,29 @@ export function cycleCandidates(tree: Tree): CycleCandidate[] {
     );
 }
 
+/** 続けて押したとみなす間隔。これ以上空いたら、前回の続きではなく列の端から回り直す */
+export const CYCLE_BURST_MS = 3000;
+
+/** 前回の巡回の記録。order は前回の列の順、lastId は前回移った先 */
+export interface CycleRecord {
+  atMs: number;
+  order: string[];
+  lastId: string;
+}
+
+/** 前回から CYCLE_BURST_MS 未満なら前回の記録を返し、間が空いていれば null（回り直す） */
+export function continuingRecord(record: CycleRecord | null, nowMs: number, burstMs = CYCLE_BURST_MS) {
+  if (!record) return null;
+  const elapsed = nowMs - record.atMs;
+  return elapsed >= 0 && elapsed < burstMs ? record : null;
+}
+
+/** 続けて押している間は、状態が変わっても前回の列の順を保つ。列から外れたエージェントは飛ばす */
+export function inRecordedOrder(candidates: CycleCandidate[], order: string[]) {
+  const rank = new Map(order.map((id, i) => [id, i]));
+  return candidates.filter((c) => rank.has(c.agent.id)).sort((a, b) => rank.get(a.agent.id)! - rank.get(b.agent.id)!);
+}
+
 /** 今のエージェントの次。最後なら先頭へ戻り、列に無ければ先頭 */
 export function nextCandidate(candidates: CycleCandidate[], currentAgentId: string | null | undefined) {
   const at = candidates.findIndex((c) => c.agent.id === currentAgentId);

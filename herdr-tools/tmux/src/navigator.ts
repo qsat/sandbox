@@ -3,11 +3,11 @@ import { runInteractive } from "@herdr-tools/utils/run-interactive";
 import { looksLikePath, resolveRef, type Resolved, type WsCore } from "@herdr-tools/ws-core";
 import { focusGhostty, openGhosttyWindowRunning } from "./ghostty";
 import { AGENTS_WINDOW, chooseClient, planGo, workingDir, type PaneTarget, type Step } from "./plans/go";
-import { cycleCandidates, decideCurrentPane, MESSAGE_WHEN_NO_CANDIDATE, nextCandidate, prevCandidate } from "./plans/cycle";
+import { continuingRecord, cycleCandidates, decideCurrentPane, inRecordedOrder, MESSAGE_WHEN_NO_CANDIDATE, nextCandidate, prevCandidate } from "./plans/cycle";
 import { planPanes } from "./plans/panes";
 import { toListJson } from "./list-json";
 import { currentRowId, goRefOf, itemId, sidebarItems, stepFrom, steppableItems } from "./sidebar-order";
-import { readCollapsed, readStepRecord, writeStepRecord } from "./step-state";
+import { readCollapsed, readCycleRecord, readStepRecord, writeCycleRecord, writeStepRecord } from "./step-state";
 
 export const MESSAGE_WHEN_NO_ROW = "移る行がありません";
 import { indexTmux, isPaneId, sessionPaths } from "./tmux-index";
@@ -104,26 +104,26 @@ export class TmuxNavigator {
     return { opened: plan.open.length, gathered: plan.gather.length, overLimit: plan.overLimit.length, alreadyOpen: plan.inPlace.length };
   }
 
-  async cycleAgents(opts: { prev?: boolean; pane?: string; client?: string; fromApp?: boolean; listOnly?: boolean } = {}) {
+  /**
+   * 注意が要る順の列を巡回する。続けて押している間（前回から CYCLE_BURST_MS 未満）は前回の列の順と前回移った先から続け、
+   * 間が空いたら今いる場所は数えずに回り直す（前へは先頭、後ろへは最後）
+   */
+  async cycleAgents(opts: { recordPath: string; prev?: boolean; client?: string; fromApp?: boolean; listOnly?: boolean; nowMs?: number }) {
     const view = await this.view();
     const candidates = cycleCandidates(view.snap.tree);
     if (opts.listOnly) return { candidates, moved: undefined, message: undefined };
-    const clients = await this.tmux.listClients();
-    const client = chooseClient({ explicit: opts.client, fromApp: !!opts.fromApp, callerClient: undefined, clients });
-    const clientName = client.kind === "switch" ? client.name : undefined;
-    const currentPane = decideCurrentPane({
-      explicit: opts.pane,
-      envPane: this.env.TMUX_PANE,
-      clientPane: clientName ? await this.tmux.paneShownBy(clientName) : undefined,
-      displayedPanes: view.idx.facts.panes.filter((p) => p.current).map((p) => p.paneId),
-    });
-    const target = (opts.prev ? prevCandidate : nextCandidate)(candidates, currentPane ? view.idx.livePaneById(currentPane)?.agentId : undefined);
+    const record = continuingRecord(await readCycleRecord(opts.recordPath), opts.nowMs ?? Date.now());
+    const list = record ? inRecordedOrder(candidates, record.order) : candidates;
+    const target = (opts.prev ? prevCandidate : nextCandidate)(list, record?.lastId);
     if (!target) {
+      const clients = await this.tmux.listClients();
+      const client = chooseClient({ explicit: opts.client, fromApp: !!opts.fromApp, callerClient: undefined, clients });
       const message = MESSAGE_WHEN_NO_CANDIDATE;
-      await this.tmux.displayMessage(message, opts.fromApp ? clientName : opts.client).catch(() => {});
+      await this.tmux.displayMessage(message, opts.fromApp && client.kind === "switch" ? client.name : opts.client).catch(() => {});
       return { candidates, moved: undefined, message };
     }
     await this.goRef(target.agent.id, { client: opts.client, fromApp: opts.fromApp });
+    await writeCycleRecord(opts.recordPath, { atMs: Date.now(), order: list.map((c) => c.agent.id), lastId: target.agent.id }).catch(() => {});
     return { candidates, moved: target, message: undefined };
   }
 
