@@ -34,10 +34,10 @@ export class TmuxNavigator {
   ) {}
 
   /**
-   * worktree の差分を hunk で開く（commit があれば `hunk show <commit>`、pr / ghCommit なら `hunk gh pr` / `hunk gh commit`、無ければ未コミットの変更）。
+   * worktree の差分を hunk で開く（commit があれば `hunk show <commit>`、pr / ghCommit なら `hunk gh pr` / `hunk gh commit`、range なら `hunk diff <range>`（ブランチ間の差分）、無ければ未コミットの変更）。
    * hunk のセッションがあれば中身を入れ替え、無ければ tmux セッションの hunk ウィンドウで起動し、file があればそこへ移る
    */
-  async openInHunk(path: string, opts: { commit?: string; pr?: string; ghCommit?: string; file?: string; client?: string; fromApp?: boolean }) {
+  async openInHunk(path: string, opts: { commit?: string; pr?: string; ghCommit?: string; range?: string; file?: string; client?: string; fromApp?: boolean }) {
     const view = await this.view({ alsoShow: [path] });
     const target = resolveRef(view.snap, path);
     if (!target) throw new Error(`見つかりません: ${path}`);
@@ -55,6 +55,7 @@ export class TmuxNavigator {
       commit: opts.commit,
       pr: opts.pr,
       ghCommit: opts.ghCommit,
+      range: opts.range,
       file: opts.file,
       session,
       windowExists: await this.tmux.hasWindow(session.name, HUNK_WINDOW),

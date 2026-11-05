@@ -23,8 +23,8 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
                                                    blocked → done → idle の順の列を巡回（3 秒以内に続けて押すと前回の続き、間が空くと先頭から。--prev で後ろへ。--list は移動せず列を順に出す。--from-app は移動後に Ghostty を前に出す）
   ws step [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]
                                                    サイドバーの並び順で 1 つ下（--prev で上）の行へ移動（--list は移動せず並びを出す。今いる行は先頭に * を付ける）
-  ws hunk [<worktree>] [--commit <hash> | --pr <number> | --gh-commit <sha>] [--file <path>] [--client <name> | --from-app]
-                                                   差分を hunk で開く。--commit なら hunk show <hash>、--pr なら GitHub のプルリクエスト全体（hunk gh pr）、--gh-commit なら GitHub のコミット（hunk gh commit）、無ければ未コミットの変更（hunk diff）。--file のファイルへ移る。
+  ws hunk [<worktree>] [--commit <hash> | --pr <number> | --gh-commit <sha> | --range <ref>...<ref>] [--file <path>] [--client <name> | --from-app]
+                                                   差分を hunk で開く。--commit なら hunk show <hash>、--pr なら GitHub のプルリクエスト全体（hunk gh pr）、--gh-commit なら GitHub のコミット（hunk gh commit）、--range ならブランチ間の差分（hunk diff <range>）、無ければ未コミットの変更（hunk diff）。--file のファイルへ移る。
                                                    hunk のセッションがあれば中身を入れ替え、無ければ tmux セッションの hunk ウィンドウで起動する（HUNK_BIN で実行ファイルを指定）
   ws ui [--client <name>]                       tmux popup 用の対話一覧
   ws hook session-start                            Claude Code の SessionStart hook
@@ -32,7 +32,7 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
   ws prune [--dry-run] [--yes]                     場所が消えた worktree のセッション・エージェントを片付ける
 `;
 
-const VALUE_FLAGS = new Set(["--client", "--pane", "--max", "--commit", "--file", "--pr", "--gh-commit"]);
+const VALUE_FLAGS = new Set(["--client", "--pane", "--max", "--commit", "--file", "--pr", "--gh-commit", "--range"]);
 
 function parseArgs(argv: string[]) {
   const positional: string[] = [];
@@ -176,7 +176,7 @@ async function main(argv: string[]) {
     }
     case "hunk": {
       const path = absolutePathFromCwd(p.positional[0] ?? ".");
-      const source = parseHunkSource({ commit: str(p, "--commit"), pr: str(p, "--pr"), ghCommit: str(p, "--gh-commit") });
+      const source = parseHunkSource({ commit: str(p, "--commit"), pr: str(p, "--pr"), ghCommit: str(p, "--gh-commit"), range: str(p, "--range") });
       await nav.openInHunk(path, { ...source, file: str(p, "--file"), client: str(p, "--client"), fromApp: goOpts.fromApp });
       return 0;
     }

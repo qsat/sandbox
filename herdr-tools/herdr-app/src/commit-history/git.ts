@@ -25,6 +25,17 @@ export function logArgs(range: HistoryRange, baseRef: string | null = null) {
   return LOG_ARGS;
 }
 
+/**
+ * 範囲に合わせた、ブランチ間の差分の範囲（hunk diff に渡す）。分かれた点から HEAD までの差分なので `...` を使う
+ * （相手のブランチに後から入ったコミットは差分に混ざらない。GitHub のプルリクエストの差分と同じ）。
+ * all はブランチ間の比較ではないので null、base はベースブランチが分からなければ null
+ */
+export function diffRange(range: HistoryRange, baseRef: string | null = null) {
+  if (range === "unpushed") return "@{upstream}...HEAD";
+  if (range === "base") return baseRef ? `${baseRef}...HEAD` : null;
+  return null;
+}
+
 /** ベースブランチの候補。上から順に、git rev-parse --verify で在るものを使う */
 export const BASE_REF_CANDIDATES = ["refs/remotes/origin/HEAD", "refs/heads/main", "refs/heads/master"];
 

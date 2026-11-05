@@ -110,7 +110,7 @@ ws next [--prev] [--client <name> | --from-app] [--list]
                                                  blocked → done → idle の順の列（同じ status の中は status になった時刻が新しい順。working と動いていないものは除く）を巡回し、エージェントの会話ペインへ移動。3 秒以内に続けて押すと、前回の列の順のまま前回移った先の次へ進む（--prev で後ろへ）。3 秒以上空くと今いる場所は数えず、列の先頭（--prev なら最後）へ移る。前回の列と移った先は `~/.cache/herdr-tools/next-last.json` に記録する（--list は移動せず、列を「ID・名前・status・status になった時刻・workspace・worktree」で順に出す。--from-app は移動後に Ghostty を前に出し、候補が無いときは標準エラーにも出す）
 ws step [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]
                                                  サイドバー（mod）に並ぶ行の順で、1 つ下（--prev で 1 つ上）の行へ移動。移る先はエージェントとペインの行（workspace の見出し、worktree の行、mod で畳んだ workspace の中の行は数えない）。端では反対の端へ回り、今いる行が無ければ下は先頭・上は最後。--list は移動せず、並びを「今いる行の印（*）・種類・ref・名前」で 1 行ずつ出す。--from-app は移動後に Ghostty を前に出す
-ws hunk [<worktree>] [--commit <hash> | --pr <number> | --gh-commit <sha>] [--file <path>] [--client <name> | --from-app]
+ws hunk [<worktree>] [--commit <hash> | --pr <number> | --gh-commit <sha> | --range <ref>...<ref>] [--file <path>] [--client <name> | --from-app]
                                                  差分を hunk で開く（下の「ws hunk」を参照）
 ws ui [--client <name>]                          tmux popup 用の対話一覧
 ws hook session-start                            Claude Code の SessionStart hook
@@ -122,6 +122,8 @@ ws prune [--dry-run] [--yes]                     場所が消えた worktree の
 
 `ws hunk <worktree> --commit <hash> --file <path>` は、`hunk show <hash>` でコミット全体を開いてから `<path>` の最初の hunk へ移る。
 `--commit` を省くと未コミットの変更（`hunk diff`）を開く。`--file` を省くとファイルへは移らない。
+`--range <ref>...<ref>`（例: `origin/main...HEAD`、`@{upstream}...HEAD`）はブランチ間の差分（`hunk diff <range>`）を開く。`--commit` と同じく reload で入れ替えられる。
+値は `<ref>..<ref>` か `<ref>...<ref>` の形で、`-` で始まらないものに限る（`--commit`・`--pr`・`--gh-commit` と同時には指定できない）。
 hunk の実行ファイルは `HUNK_BIN`（既定は `hunk`）で指定する。
 
 GitHub のものを開く指定（`--commit` と同時には指定できない）:
@@ -152,7 +154,7 @@ tmux で今いるペインの worktree のコミット履歴を出す。Herdr ap
 | 行 | 出すもの |
 | --- | --- |
 | ヘッダー | 「Commit history」と、出しているコミットの数。右端に、コミットの範囲を切り替えるボタン（下の表） |
-| 先頭の行 | worktree（workspace 名とブランチ） |
+| 先頭の行 | worktree（workspace 名とブランチ）。範囲が push 前・ベースからでコミットがあるときは、右端に差分のアイコンのボタンを出す（下の「ブランチ間の差分」） |
 | 「未コミットの変更」（変更があるときだけ） | 開くと、`git status` のファイルを A / M / D / R / U / ?（追跡されていない）、パス、+ と − の行数（`git diff HEAD --numstat`）で並べる |
 | コミット（新しい順に 50 件） | 短いハッシュ、件名、ブランチとタグの印、作者、相対的な日時。開くと、そのコミットで変わったファイルを A / M / D / R、パス、+ と − の行数で並べる（`git show --name-status` と `--numstat`） |
 
@@ -163,6 +165,15 @@ tmux で今いるペインの worktree のコミット履歴を出す。Herdr ap
 | すべて（時計に戻りの矢印のアイコン） | HEAD からの履歴（`git log`） | — |
 | push 前（上向きの矢印のアイコン） | 上流のブランチにまだ push していないもの（`git log @{upstream}..HEAD`） | 上流のブランチが無ければ、その旨を出す |
 | ベースブランチの名前（`main` など） | ベースブランチから分かれた後のもの（`git log <ベース>..HEAD`）。ベースは、今のブランチのプルリクエストがあればその base ブランチ（`gh pr view --json baseRefName`。リモートの `origin/<base>` を先に、無ければ手元のブランチ）。プルリクエストが無ければ `origin/HEAD` が指すブランチ、無ければ手元の `main`、`master` の順。このボタンを押すたびに調べ直す | ベースブランチが見つからなければ、その旨を出す |
+
+ブランチ間の差分: 先頭の行の右端の差分のアイコンを押すと、比べる相手のブランチと HEAD の差分を `ws hunk --range` で hunk に開く。
+分かれた点から HEAD までの差分（`...`）なので、相手のブランチに後から入ったコミットは混ざらない（GitHub のプルリクエストの差分と同じ）。未コミットの変更は含めない。
+
+| 範囲 | 開く差分 |
+| --- | --- |
+| push 前 | `hunk diff @{upstream}...HEAD`（上流のブランチが無ければボタンを出さない） |
+| ベースから | `hunk diff <ベース>...HEAD`（ベースブランチが分からなければボタンを出さない） |
+| すべて | ボタンを出さない |
 
 - キー（mod を一度クリックしてフォーカスを渡してから）: `j` / `k`（↓ / ↑）で行を選び、`Enter` でコミット・未コミットの行を開閉する。ファイルの行は `Enter` かクリックで、`ws hunk` を呼んで hunk で差分を開く。コミットの行の短いハッシュをクリックすると、行は開閉せず、そのコミット全体を hunk で開く
 - 読み直し: 今いるペインが変わったとき（agent-board と同じ tmux-focus の見張り）、`.git` の `HEAD` や `refs` が変わったとき（`git rev-parse --absolute-git-dir` と `--git-common-dir` を `watchFolder` で見張る）、5 秒ごと。結果が前と同じなら再描画しない。作業ツリーは見張らないので、未コミットの変更は 5 秒ごとかペインの変化で読み直す

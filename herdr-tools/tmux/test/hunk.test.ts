@@ -9,6 +9,15 @@ describe("ws hunk の引数", () => {
     expect(parseHunkSource({}).pr).toBeUndefined();
     expect(() => parseHunkSource({ pr: "1", commit: "abc" })).toThrow("同時");
     expect(() => parseHunkSource({ pr: "1", ghCommit: "abc1234" })).toThrow("同時");
+    expect(() => parseHunkSource({ range: "main...HEAD", commit: "abc" })).toThrow("同時");
+  });
+  test("--range は <ref>...<ref> の形だけ受け付ける", () => {
+    expect(parseHunkSource({ range: "origin/main...HEAD" }).range).toBe("origin/main...HEAD");
+    expect(parseHunkSource({ range: "@{upstream}...HEAD" }).range).toBe("@{upstream}...HEAD");
+    expect(parseHunkSource({ range: "main..feat/x" }).range).toBe("main..feat/x");
+    expect(() => parseHunkSource({ range: "main" })).toThrow("--range");
+    expect(() => parseHunkSource({ range: "--output=x...HEAD" })).toThrow("--range");
+    expect(() => parseHunkSource({ range: "main...HEAD; rm" })).toThrow("--range");
   });
   test("--pr は数字、--gh-commit は 16 進数の sha だけ受け付ける", () => {
     expect(() => parseHunkSource({ pr: "5x" })).toThrow("--pr");
@@ -41,6 +50,11 @@ describe("planHunk", () => {
 
   test("セッションがあって hunk ウィンドウが無ければ、入れ替えと navigate だけ（移らない）", () => {
     expect(ops({ hunkSessionExists: true, windowExists: false })).toEqual(["hunkReload", "hunkNavigate"]);
+  });
+
+  test("ブランチ間の差分は hunk diff <range>（reload で入れ替えられる）", () => {
+    const steps = planHunk({ ...base, commit: undefined, range: "origin/main...HEAD", hunkSessionExists: true, windowExists: true });
+    expect(steps[0]).toMatchObject({ op: "hunkReload", args: ["diff", "origin/main...HEAD"] });
   });
 
   test("未コミットの変更は hunk diff", () => {

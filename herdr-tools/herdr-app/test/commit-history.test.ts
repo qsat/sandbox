@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { LOG_ARGS, branchLabel, commitFiles, localFiles, logArgs, prBaseRef, parseDecorations, parseLog, parseNameStatus, parseNumstat, parseStatus, shortRef, sumNumstat } from "../src/commit-history/git";
+import { LOG_ARGS, branchLabel, commitFiles, diffRange, localFiles, logArgs, prBaseRef, parseDecorations, parseLog, parseNameStatus, parseNumstat, parseStatus, shortRef, sumNumstat } from "../src/commit-history/git";
 import { relativeTime } from "../src/shared/relative-time";
 import { moveSelection } from "../src/shared/selection";
-import { wsHunkArgs } from "../src/shared/ws-hunk";
+import { wsHunkArgs, wsHunkRangeArgs } from "../src/shared/ws-hunk";
 
 describe("一覧に出すコミットの範囲", () => {
   test("すべては HEAD からの履歴", () => expect(logArgs("all")).toEqual(LOG_ARGS));
@@ -11,6 +11,13 @@ describe("一覧に出すコミットの範囲", () => {
   test("ベースからはベースブランチから HEAD まで。ベースブランチが分からなければ git を呼ばない", () => {
     expect(logArgs("base", "origin/main")).toEqual([...LOG_ARGS, "origin/main..HEAD"]);
     expect(logArgs("base", null)).toBeNull();
+  });
+  test("ブランチ間の差分は、push 前なら上流のブランチ、ベースからならベースブランチと HEAD を ... で比べる", () => {
+    expect(diffRange("unpushed")).toBe("@{upstream}...HEAD");
+    expect(diffRange("base", "origin/main")).toBe("origin/main...HEAD");
+    expect(diffRange("base", null)).toBeNull();
+    expect(diffRange("all", "origin/main")).toBeNull();
+    expect(wsHunkRangeArgs("/w", "origin/main...HEAD")).toEqual(["hunk", "/w", "--range", "origin/main...HEAD", "--from-app"]);
   });
   test("ref の名前から refs/remotes/ と refs/heads/ を外す", () => {
     expect(shortRef("refs/remotes/origin/main\n")).toBe("origin/main");

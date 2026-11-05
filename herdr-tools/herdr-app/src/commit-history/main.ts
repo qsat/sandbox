@@ -8,9 +8,9 @@ import { resolveTarget, type Target } from "../shared/target";
 import { TITLE_BAR_HEIGHT } from "../shared/title-bar";
 import { stackTabs } from "../shared/stack-tabs";
 import { watchTmuxFocus } from "../shared/tmux-focus";
-import { wsHunkArgs } from "../shared/ws-hunk";
+import { wsHunkArgs, wsHunkRangeArgs } from "../shared/ws-hunk";
 import { parseList, WS } from "../shared/ws-list";
-import { BASE_REF_CANDIDATES, READ, branchLabel, commitFiles, logArgs, prBaseRef, shortRef, type HistoryRange, localFiles, parseLog, showFilesArgs, sumNumstat, type Commit, type FileChange } from "./git";
+import { BASE_REF_CANDIDATES, READ, branchLabel, commitFiles, diffRange, logArgs, prBaseRef, shortRef, type HistoryRange, localFiles, parseLog, showFilesArgs, sumNumstat, type Commit, type FileChange } from "./git";
 import { LOCAL_ID, visibleRows, type Row } from "./rows";
 
 /** 予備の読み直しの間隔（ws list と git log・git status）。結果が前と同じなら再描画しない */
@@ -238,11 +238,31 @@ export default class CommitHistory extends View {
     const root = this.target?.path;
     if (!root) return;
     this.selected = rowId;
+    this.execHunk(wsHunkArgs(root, commit, file), cx);
+  }
+
+  /**
+   * 今の範囲のブランチ間の差分（push 前なら上流のブランチ、ベースからならベースブランチと HEAD の差分）を hunk で開く。
+   * 比べる相手が無いとき（すべて・上流のブランチが無い・ベースブランチが分からない）・コミットが無いときは null
+   */
+  branchDiffRange() {
+    if (this.commits.length === 0 || (this.range === "unpushed" && this.noUpstream)) return null;
+    return diffRange(this.range, this.baseRef);
+  }
+
+  openBranchDiff(cx: Context) {
+    const root = this.target?.path;
+    const range = this.branchDiffRange();
+    if (!root || !range) return;
+    this.execHunk(wsHunkRangeArgs(root, range), cx);
+  }
+
+  execHunk(args: string[], cx: Context) {
     cx.notify();
     cx.spawn(
       async (cx) => {
         try {
-          const r = await exec(WS, wsHunkArgs(root, commit, file));
+          const r = await exec(WS, args);
           this.error = r.code !== 0 ? (r.stderr.trim() || `ws hunk: exit ${r.code}`) : "";
         } catch (e) {
           this.error = String((e as Error)?.message ?? e);
@@ -325,7 +345,31 @@ export default class CommitHistory extends View {
       .whitespace_nowrap()
       .child(div().font_semibold().text_color(REPOSITORY_COLOR).child(target.workspace))
       .child(div().text_color(BRANCH_COLOR).child(target.label))
-      .when(target.branch !== null && target.branch !== target.label, (el) => el.child(label(target.branch!, t.muted)));
+      .when(target.branch !== null && target.branch !== target.label, (el) => el.child(label(target.branch!, t.muted)))
+      .child(div().flex_1())
+      .when(this.branchDiffRange() !== null, (el) => el.child(this.branchDiffButton(t)));
+  }
+
+  /** ヘッダーの右端の、ブランチ間の差分を hunk で開くボタン（push 前・ベースからのときだけ） */
+  branchDiffButton(t: Theme) {
+    const against = this.range === "base" && this.baseRef ? branchLabel(this.baseRef) : "上流のブランチ";
+    return div()
+      .id("commit-history:branch-diff")
+      .flex()
+      .flex_none()
+      .items_center()
+      .h(18)
+      .px(4)
+      .rounded(4)
+      .text_color(t.muted)
+      .cursor_pointer()
+      .hover((s) => s.bg(t.hover).text_color(t.foreground))
+      .tooltip(`${against} との差分を hunk で開く`)
+      .on_click((_e, cx) => {
+        cx.stop_propagation();
+        this.openBranchDiff(cx);
+      })
+      .child(svg("mods/commit-history/diff.svg").size(12));
   }
 
   renderTitleBar(t: Theme) {
