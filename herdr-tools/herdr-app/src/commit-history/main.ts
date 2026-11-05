@@ -228,14 +228,23 @@ export default class CommitHistory extends View {
 
   /** ファイルの差分を hunk で開く（`ws hunk`。コミットの下なら hunk show、未コミットなら hunk diff） */
   openInHunk(row: Extract<Row, { kind: "file" }>, cx: Context) {
+    this.runHunk(row.id, row.owner === LOCAL_ID ? null : row.owner, row.file, cx);
+  }
+
+  /** コミットのハッシュを押したら、そのコミット全体を hunk で開く（行は開閉しない） */
+  openCommitInHunk(row: Extract<Row, { kind: "commit" }>, cx: Context) {
+    this.runHunk(row.id, row.commit.hash, null, cx);
+  }
+
+  runHunk(rowId: string, commit: string | null, file: FileChange | null, cx: Context) {
     const root = this.target?.path;
     if (!root) return;
-    this.selected = row.id;
+    this.selected = rowId;
     cx.notify();
     cx.spawn(
       async (cx) => {
         try {
-          const r = await exec(WS, wsHunkArgs(root, row.owner === LOCAL_ID ? null : row.owner, row.file));
+          const r = await exec(WS, wsHunkArgs(root, commit, file));
           this.error = r.code !== 0 ? (r.stderr.trim() || `ws hunk: exit ${r.code}`) : "";
         } catch (e) {
           this.error = String((e as Error)?.message ?? e);
@@ -302,7 +311,20 @@ export default class CommitHistory extends View {
         return this.rowBase(row.id, selected, t, 4)
           .on_click((_e, cx) => this.toggle(row, cx))
           .child(label(row.open ? "▾" : "▸", t.muted))
-          .child(div().flex_none().text_color(t.accent).child(c.short))
+          .child(
+            div()
+              .id(`${row.id}:hash`)
+              .flex_none()
+              .text_color(t.accent)
+              .cursor_pointer()
+              .tooltip("このコミット全体を hunk で開く")
+              .hover((s) => s.underline().text_color(t.foreground))
+              .on_click((_e, cx) => {
+                cx.stop_propagation();
+                this.openCommitInHunk(row, cx);
+              })
+              .child(c.short),
+          )
           .child(div().flex_1().min_w(0).truncate().child(c.subject))
           .children(this.refLabels(c.refs, t))
           .child(div().flex_none().text_size(11).text_color(t.muted).child(c.author))

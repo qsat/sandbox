@@ -153,7 +153,7 @@ tmux で今いるペインの worktree のコミット履歴を出す。Herdr ap
 | push 前（上向きの矢印のアイコン） | 上流のブランチにまだ push していないもの（`git log @{upstream}..HEAD`） | 上流のブランチが無ければ、その旨を出す |
 | ベースブランチの名前（`main` など） | ベースブランチから分かれた後のもの（`git log <ベース>..HEAD`）。ベースは、今のブランチのプルリクエストがあればその base ブランチ（`gh pr view --json baseRefName`。リモートの `origin/<base>` を先に、無ければ手元のブランチ）。プルリクエストが無ければ `origin/HEAD` が指すブランチ、無ければ手元の `main`、`master` の順。このボタンを押すたびに調べ直す | ベースブランチが見つからなければ、その旨を出す |
 
-- キー（mod を一度クリックしてフォーカスを渡してから）: `j` / `k`（↓ / ↑）で行を選び、`Enter` でコミット・未コミットの行を開閉する。ファイルの行は `Enter` かクリックで、`ws hunk` を呼んで hunk で差分を開く
+- キー（mod を一度クリックしてフォーカスを渡してから）: `j` / `k`（↓ / ↑）で行を選び、`Enter` でコミット・未コミットの行を開閉する。ファイルの行は `Enter` かクリックで、`ws hunk` を呼んで hunk で差分を開く。コミットの行の短いハッシュをクリックすると、行は開閉せず、そのコミット全体を hunk で開く
 - 読み直し: 今いるペインが変わったとき（agent-board と同じ tmux-focus の見張り）、`.git` の `HEAD` や `refs` が変わったとき（`git rev-parse --absolute-git-dir` と `--git-common-dir` を `watchFolder` で見張る）、5 秒ごと。結果が前と同じなら再描画しない。作業ツリーは見張らないので、未コミットの変更は 5 秒ごとかペインの変化で読み直す
 - git は `.git` に何も書かない引数（`--no-optional-locks` など）で読む
 - レイアウトに置いて使う（`mod.json` は `{"place": "none"}`）。`~/.config/herdr-app/layouts/agents.json` には自分で足す

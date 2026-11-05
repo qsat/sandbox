@@ -221,7 +221,10 @@ export function showFilesArgs(hash: string, kind: "numstat" | "name-status") {
   return ["show", hash, "--format=", `--${kind}`, "-z", "-M", "-m", "--first-parent"];
 }
 
-/** ファイルの行を選んだときに `ws hunk` へ渡す引数。コミットの下なら `--commit <hash>`、未コミットの変更なら付けない */
-export function wsHunkArgs(root: string, commit: string | null, file: Pick<FileChange, "path">) {
-  return ["hunk", root, ...(commit ? ["--commit", commit] : []), "--file", file.path, "--from-app"];
+/**
+ * hunk で開くときに `ws hunk` へ渡す引数。コミットなら `--commit <hash>`、未コミットの変更なら付けない。
+ * ファイルの行から開くときは `--file <path>` でそのファイルへ移り、コミットのハッシュから開くときはファイルを指定しない
+ */
+export function wsHunkArgs(root: string, commit: string | null, file: Pick<FileChange, "path"> | null) {
+  return ["hunk", root, ...(commit ? ["--commit", commit] : []), ...(file ? ["--file", file.path] : []), "--from-app"];
 }

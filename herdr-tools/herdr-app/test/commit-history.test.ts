@@ -168,4 +168,7 @@ describe("ws hunk へ渡す引数", () => {
     expect(wsHunkArgs("/r", "abc", { path: "a.ts" })).toEqual(["hunk", "/r", "--commit", "abc", "--file", "a.ts", "--from-app"]);
     expect(wsHunkArgs("/r", null, { path: "a.ts" })).toEqual(["hunk", "/r", "--file", "a.ts", "--from-app"]);
   });
+  test("コミットのハッシュから開くときはファイルを指定せず、コミット全体を開く", () => {
+    expect(wsHunkArgs("/r", "abc", null)).toEqual(["hunk", "/r", "--commit", "abc", "--from-app"]);
+  });
 });
