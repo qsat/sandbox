@@ -1,4 +1,4 @@
-import { View, div, type AsyncContext, type Color, type Context, type Element, type FocusHandle } from "gpui-kit";
+import { View, div, svg, type AsyncContext, type Color, type Context, type Element, type FocusHandle } from "gpui-kit";
 import { exec, theme, watchFolder } from "herdr";
 import { BRANCH_COLOR, REPOSITORY_COLOR, SELECTED_BG } from "../shared/colors";
 import { watchTmuxFocus } from "../shared/tmux-focus";
@@ -337,17 +337,19 @@ export default class CommitHistory extends View {
       .child(div().font_semibold().child("Commit history"))
       .child(div().px(5).py(1).rounded(4).border_1().border_color(t.border).text_size(10).text_color(t.muted).child(`${this.commits.length} commits`))
       .child(div().flex_1())
-      .child(this.rangeButton("all", "すべて", t))
-      .child(this.rangeButton("unpushed", "push 前", t))
-      .child(this.rangeButton("base", this.baseRef ? `${this.baseRef} から` : "ベースから", t));
+      .child(this.rangeButton("all", { text: "すべて" }, t))
+      .child(this.rangeButton("unpushed", { icon: "push", tooltip: "push 前のコミット（上流のブランチにまだ無いもの）" }, t))
+      .child(this.rangeButton("base", { text: this.baseRef ? `${this.baseRef} から` : "ベースから" }, t));
   }
 
-  rangeButton(range: HistoryRange, text: string, t: Theme) {
+  rangeButton(range: HistoryRange, face: { text: string } | { icon: string; tooltip: string }, t: Theme) {
     const active = this.range === range;
     return div()
       .id(`commit-history:range:${range}`)
-      .px(8)
-      .py(1)
+      .flex()
+      .items_center()
+      .h(18)
+      .px("icon" in face ? 4 : 8)
       .rounded(4)
       .border_1()
       .border_color(active ? t.border : "#00000000")
@@ -359,7 +361,8 @@ export default class CommitHistory extends View {
         cx.stop_propagation();
         this.switchRange(range, cx);
       })
-      .child(text);
+      .when("icon" in face, (el) => el.tooltip((face as { tooltip: string }).tooltip).child(svg(`mods/commit-history/${(face as { icon: string }).icon}.svg`).size(12)))
+      .when("text" in face, (el) => el.child((face as { text: string }).text));
   }
 
   /** 範囲を切り替えたら、開いていたコミットを閉じてすぐ読み直す */
