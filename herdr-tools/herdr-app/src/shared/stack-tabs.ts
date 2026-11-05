@@ -16,11 +16,6 @@ export const LOWER_TABS: { id: LowerTab; title: string }[] = [
   { id: "pull-requests", title: "Pull requests" },
 ];
 
-/** 題名の帯の右側に出す件数の枠（数字だけ） */
-export function countBadge(count: number, t: Theme) {
-  return div().px(5).py(1).rounded(4).border_1().border_color(t.border).text_size(10).text_color(t.muted).child(String(count));
-}
-
 /** 題名の帯に出すタブ。選んでいるタブは太字、ほかのタブは押すと stack をそのタブに切り替える */
 export function stackTabs(active: LowerTab, t: Theme): Element[] {
   return LOWER_TABS.map((tab) =>
