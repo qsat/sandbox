@@ -36,7 +36,7 @@ herdr-tools/
 │   ├── src/pull-requests/        プルリクエストの mod。gh.ts（gh の出力の読み取りと失敗の文）/ rows.ts（行の並び）/ main.ts（Herdr app の API）
 │   ├── src/shared/               mod で共通の処理: ws-list.ts（ws list --json の読み取り）/ target.ts（今いるペインの worktree）/ ws-hunk.ts（ws hunk の引数）/ relative-time.ts / selection.ts（j・k の選択）/ row-view.ts（行の見た目）/ tmux-focus.ts（tmux のペインの変化の見張り）/ colors.ts / title-bar.ts
 │   ├── sync-types.sh, tsconfig.json   Herdr app が生成した型（types/、gitignore）で mod の main.ts を検査する
-│   ├── mod/agent-board/mod.json, mod/commit-history/mod.json, mod/pull-requests/（mod.json と pull-request.svg）, layouts/agents.json
+│   ├── mod/agent-board/mod.json, mod/commit-history/mod.json, mod/pull-requests/mod.json, layouts/agents.json
 └── ws/                           CLI。cli.ts と compose-from-env.ts で全部をつなぐ
 ```
 

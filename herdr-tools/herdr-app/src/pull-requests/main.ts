@@ -1,4 +1,4 @@
-import { View, div, svg, type AsyncContext, type Context, type Element, type FocusHandle } from "gpui-kit";
+import { View, div, type AsyncContext, type Context, type Element, type FocusHandle } from "gpui-kit";
 import { exec, theme } from "herdr";
 import { BRANCH_COLOR, REPOSITORY_COLOR } from "../shared/colors";
 import { relativeTime } from "../shared/relative-time";
@@ -284,7 +284,6 @@ export default class PullRequests extends View {
       .px(14)
       .border_b(1)
       .border_color(t.border)
-      .child(div().flex().items_center().text_color(t.muted).child(svg("mods/pull-requests/pull-request.svg").size(14)))
       .children(stackTabs("pull-requests", t))
       .child(div().px(5).py(1).rounded(4).border_1().border_color(t.border).text_size(10).text_color(t.muted).child(`${this.prs?.length ?? 0} PRs`));
   }
