@@ -1,6 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { commitFiles, localFiles, parseDecorations, parseLog, parseNameStatus, parseNumstat, parseStatus, relativeTime, sumNumstat, wsHunkArgs } from "../src/commit-history/git";
+import { LOG_ARGS, commitFiles, localFiles, logArgs, parseDecorations, parseLog, parseNameStatus, parseNumstat, parseStatus, relativeTime, shortRef, sumNumstat, wsHunkArgs } from "../src/commit-history/git";
+
+describe("一覧に出すコミットの範囲", () => {
+  test("すべては HEAD からの履歴", () => expect(logArgs("all")).toEqual(LOG_ARGS));
+  test("push 前は上流のブランチから HEAD まで", () => expect(logArgs("unpushed")).toEqual([...LOG_ARGS, "@{upstream}..HEAD"]));
+  test("ベースからはベースブランチから HEAD まで。ベースブランチが分からなければ git を呼ばない", () => {
+    expect(logArgs("base", "origin/main")).toEqual([...LOG_ARGS, "origin/main..HEAD"]);
+    expect(logArgs("base", null)).toBeNull();
+  });
+  test("ref の名前から refs/remotes/ と refs/heads/ を外す", () => {
+    expect(shortRef("refs/remotes/origin/main\n")).toBe("origin/main");
+    expect(shortRef("refs/heads/master")).toBe("master");
+  });
+});
 import { LOCAL_ID, moveSelection, visibleRows } from "../src/commit-history/rows";
 import { resolveTarget, type Target } from "../src/commit-history/target";
 

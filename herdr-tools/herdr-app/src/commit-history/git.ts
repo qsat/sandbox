@@ -9,6 +9,30 @@ export const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", 
 export const LOG_LIMIT = 50;
 export const LOG_ARGS = ["log", "-n", String(LOG_LIMIT), "--no-color", "--format=%x1e%H%x1f%h%x1f%an%x1f%at%x1f%D%x1f%s"];
 
+/**
+ * 一覧に出すコミットの範囲。
+ * all は HEAD からの履歴、unpushed は上流のブランチにまだ push していないもの、base はベースブランチから分かれた後のもの
+ */
+export type HistoryRange = "all" | "unpushed" | "base";
+
+/**
+ * 範囲に合わせた git log の引数。unpushed は上流のブランチが無いと git が失敗する（終了コード 128）。
+ * base はベースブランチ（baseRef）が分からなければ null（git を呼ばない）
+ */
+export function logArgs(range: HistoryRange, baseRef: string | null = null) {
+  if (range === "unpushed") return [...LOG_ARGS, "@{upstream}..HEAD"];
+  if (range === "base") return baseRef ? [...LOG_ARGS, `${baseRef}..HEAD`] : null;
+  return LOG_ARGS;
+}
+
+/** ベースブランチの候補。上から順に、git rev-parse --verify で在るものを使う */
+export const BASE_REF_CANDIDATES = ["refs/remotes/origin/HEAD", "refs/heads/main", "refs/heads/master"];
+
+/** `git symbolic-ref refs/remotes/origin/HEAD` の出力（refs/remotes/origin/main）から、表示と git に渡す名前（origin/main）を作る */
+export function shortRef(ref: string) {
+  return ref.trim().replace(/^refs\/(remotes|heads)\//, "");
+}
+
 export interface Commit {
   hash: string;
   short: string;

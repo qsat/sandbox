@@ -3,7 +3,7 @@ import { exec, theme, watchFolder } from "herdr";
 import { BRANCH_COLOR, REPOSITORY_COLOR, SELECTED_BG } from "../shared/colors";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import { parseList, WS } from "../shared/ws-list";
-import { LOG_ARGS, READ, commitFiles, localFiles, parseLog, relativeTime, showFilesArgs, sumNumstat, wsHunkArgs, type Commit, type FileChange } from "./git";
+import { BASE_REF_CANDIDATES, READ, commitFiles, logArgs, shortRef, type HistoryRange, localFiles, parseLog, relativeTime, showFilesArgs, sumNumstat, wsHunkArgs, type Commit, type FileChange } from "./git";
 import { LOCAL_ID, moveSelection, visibleRows, type Row } from "./rows";
 import { resolveTarget, type Target } from "./target";
 
@@ -27,6 +27,10 @@ export default class CommitHistory extends View {
   target!: Target | null;
   gitDirs!: string[];
   commits!: Commit[];
+  range!: HistoryRange;
+  noUpstream!: boolean;
+  /** ベースブランチ（origin/main など）。分からなければ null */
+  baseRef!: string | null;
   local!: FileChange[];
   filesOf!: Map<string, FileChange[]>;
   expanded!: string | null;
@@ -42,6 +46,9 @@ export default class CommitHistory extends View {
     this.target = null;
     this.gitDirs = [];
     this.commits = [];
+    this.range = "all";
+    this.noUpstream = false;
+    this.baseRef = null;
     this.local = [];
     this.filesOf = new Map();
     this.expanded = null;
@@ -84,7 +91,7 @@ export default class CommitHistory extends View {
         } finally {
           this.fetching = false;
         }
-        const snapshot = JSON.stringify([this.target, this.error, this.commits, this.local, this.expanded, [...this.filesOf]]);
+        const snapshot = JSON.stringify([this.target, this.error, this.range, this.noUpstream, this.baseRef, this.commits, this.local, this.expanded, [...this.filesOf]]);
         if (snapshot !== this.snapshot) {
           this.snapshot = snapshot;
           cx.notify();
@@ -102,6 +109,7 @@ export default class CommitHistory extends View {
   followTarget(next: Target | null) {
     if (next?.path !== this.target?.path) {
       this.gitDirs = [];
+      this.baseRef = null;
       this.commits = [];
       this.local = [];
       this.filesOf = new Map();
@@ -123,8 +131,11 @@ export default class CommitHistory extends View {
       this.gitDirs = [...new Set([gitDir, common.startsWith("/") ? common : `${root}/${common}`])].filter(Boolean);
       this.watchGit(root, this.gitDirs, cx);
     }
+    const range = this.range;
+    if (this.baseRef === null) this.baseRef = await this.findBaseRef(root);
+    const args = logArgs(range, this.baseRef);
     const [log, head, status] = await Promise.all([
-      this.git(root, LOG_ARGS),
+      args ? this.git(root, args) : Promise.resolve({ code: 1, stdout: "", stderr: "" }),
       this.git(root, ["rev-parse", "--verify", "HEAD"]),
       this.git(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]),
     ]);
@@ -132,10 +143,22 @@ export default class CommitHistory extends View {
     const numstats = hasHead
       ? [await this.git(root, ["diff", "HEAD", "--numstat", "-z", "--no-renames"])]
       : [await this.git(root, ["diff", "--cached", "--numstat", "-z", "--no-renames"]), await this.git(root, ["diff", "--numstat", "-z", "--no-renames"])];
-    if (this.target?.path !== root) return;
+    if (this.target?.path !== root || this.range !== range) return;
     this.commits = hasHead && log.code === 0 ? parseLog(log.stdout) : [];
+    this.noUpstream = range === "unpushed" && hasHead && log.code !== 0;
     this.local = status.code === 0 ? localFiles(status.stdout, sumNumstat(...numstats.map((n) => n.stdout))) : [];
     if (this.expanded === LOCAL_ID && this.local.length === 0) this.expanded = null;
+  }
+
+  /** ベースブランチ。origin/HEAD が指すブランチ（origin/main など）、無ければ手元の main、master の順に探す */
+  async findBaseRef(root: string) {
+    const remoteHead = await this.git(root, ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]);
+    if (remoteHead.code === 0 && remoteHead.stdout.trim()) return shortRef(remoteHead.stdout);
+    for (const ref of BASE_REF_CANDIDATES.slice(1)) {
+      const found = await this.git(root, ["rev-parse", "--verify", "--quiet", ref]);
+      if (found.code === 0) return shortRef(ref);
+    }
+    return null;
   }
 
   /**
@@ -312,7 +335,48 @@ export default class CommitHistory extends View {
       .border_b(1)
       .border_color(t.border)
       .child(div().font_semibold().child("Commit history"))
-      .child(div().px(5).py(1).rounded(4).border_1().border_color(t.border).text_size(10).text_color(t.muted).child(`${this.commits.length} commits`));
+      .child(div().px(5).py(1).rounded(4).border_1().border_color(t.border).text_size(10).text_color(t.muted).child(`${this.commits.length} commits`))
+      .child(div().flex_1())
+      .child(this.rangeButton("all", "すべて", t))
+      .child(this.rangeButton("unpushed", "push 前", t))
+      .child(this.rangeButton("base", this.baseRef ? `${this.baseRef} から` : "ベースから", t));
+  }
+
+  rangeButton(range: HistoryRange, text: string, t: Theme) {
+    const active = this.range === range;
+    return div()
+      .id(`commit-history:range:${range}`)
+      .px(8)
+      .py(1)
+      .rounded(4)
+      .border_1()
+      .border_color(active ? t.border : "#00000000")
+      .text_size(11)
+      .cursor_pointer()
+      .when(active, (el) => el.bg(t.raised).text_color(t.foreground))
+      .when(!active, (el) => el.text_color(t.muted).hover((s) => s.bg(t.hover)))
+      .on_click((_e, cx) => {
+        cx.stop_propagation();
+        this.switchRange(range, cx);
+      })
+      .child(text);
+  }
+
+  /** 範囲を切り替えたら、開いていたコミットを閉じてすぐ読み直す */
+  switchRange(range: HistoryRange, cx: Context) {
+    if (this.range === range) return;
+    this.range = range;
+    this.commits = [];
+    this.noUpstream = false;
+    if (this.expanded !== LOCAL_ID) this.expanded = null;
+    cx.notify();
+    this.refresh(cx);
+  }
+
+  emptyMessage() {
+    if (this.range === "all") return "コミットがありません";
+    if (this.range === "base") return this.baseRef ? `${this.baseRef} から分かれた後のコミットはありません` : "ベースブランチ（origin/HEAD・main・master）が見つかりません";
+    return this.noUpstream ? "上流のブランチが無いので、push 前のコミットを出せません" : "push していないコミットはありません";
   }
 
   render() {
@@ -335,7 +399,7 @@ export default class CommitHistory extends View {
               .flex_1()
               .min_h(0)
               .overflow_y_scrollbar()
-              .when(rows.length === 0 && this.error === "", (el) => el.child(label("コミットがありません", t.muted)))
+              .when(this.commits.length === 0 && this.error === "", (el) => el.child(label(this.emptyMessage(), t.muted)))
               .children(rows.map((r) => this.renderRow(r, t, now))),
           )
           .when(this.error !== "", (el) => el.child(label(this.error, t.ansi1))),
