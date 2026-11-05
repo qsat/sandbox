@@ -144,6 +144,10 @@ GitHub のものを開く指定（`--commit` と同時には指定できない�
 
 hunk を開いた tmux のペインへ、`ws go` と同じ移動の部品（クライアントの選び方、Ghostty を前に出す処理）で移る。
 
+hunk の中で `e` を押すと、選んでいる行をエディターで開く。hunk は `$EDITOR` だけを見る（`$VISUAL` や hunk の設定ファイルは見ない。`vim` / `nvim` / `vi` なら `+<行>` を付け、hunk を止めて同じペインで開く）。
+`ws hunk` は hunk を tmux のウィンドウで起動するので、hunk の環境は tmux サーバーのグローバルな環境になる。`tmux/config/tmux.conf` の `set-environment -g EDITOR nvim` を `~/.tmux.conf` に写す。
+写したあとは `tmux source-file ~/.tmux.conf` で読み直し、開いている hunk は一度終わらせる（`hunk session reload` は hunk を起動し直さないので、前の環境のまま）。
+
 ### Herdr app の mod `commit-history`（Diffview の `:DiffviewFileHistory` にあたる）
 
 tmux で今いるペインの worktree のコミット履歴を出す。Herdr app に最初から入っている `changes` mod は Herdr app のフォーカスで
