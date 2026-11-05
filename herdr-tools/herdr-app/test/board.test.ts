@@ -240,10 +240,10 @@ describe("context 使用率", () => {
 });
 
 describe("wsArgsForModCommand", () => {
-  test("next-blocked / next-working / next-idle を ws next の引数にする", () => {
-    expect(wsArgsForModCommand("next-blocked")).toEqual(["next", "blocked", "--from-app"]);
-    expect(wsArgsForModCommand("next-working")).toEqual(["next", "working", "--from-app"]);
-    expect(wsArgsForModCommand("next-idle")).toEqual(["next", "idle", "--from-app"]);
+  test("next / prev を ws next の引数にする", () => {
+    expect(wsArgsForModCommand("next")).toEqual(["next", "--from-app"]);
+    expect(wsArgsForModCommand("prev")).toEqual(["next", "--prev", "--from-app"]);
   });
+  test("廃止した next-blocked などは何もしない", () => expect(wsArgsForModCommand("next-blocked")).toBeNull());
   test("知らないコマンド名は何もしない", () => expect(wsArgsForModCommand("other")).toBeNull());
 });

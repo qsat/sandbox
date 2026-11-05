@@ -6,7 +6,7 @@ import { usageSegments } from "@herdr-tools/utils/usage-segments";
 import { boardRows, EMPTY_LIST, keyActionFor, moveSelection, parseList, rowId, toggleCollapsed, WS, wsCommandFor, type BoardAction, type BoardRow, type LiveTerminal, wsArgsForModCommand } from "./board";
 
 const MOD_NAME = "agent-board";
-const LIST_REFRESH_MS = 4000;
+const LIST_REFRESH_MS = 2000;
 const CONFIRM_DIALOG_WIDTH = 360;
 const CONFIRM_DIALOG_HEIGHT = 160;
 const COLLAPSED_KEY = "agent-board.collapsed";

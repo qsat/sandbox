@@ -2,13 +2,12 @@
 # 必要なら ~/.config/skhd/skhdrc（または ~/.skhdrc）に写し、skhd --reload で読み直す。
 #
 # - ws next --from-app は、最後に使われた tmux クライアントが表示しているペインを「今いるペイン」とみなして次のエージェントへ移り、Ghostty を前に出す
-# - skhd が先にキーを取るので、README の手順 6（Herdr app の keys.json）と手順 7（Ghostty の keybind）、tmux.conf の bind -n M-B / M-W / M-I は要らなくなる
+# - 巡回する列は blocked（入力待ち）→ done（応答を終えた）→ idle の順で、同じ status の中は status になった時刻が新しいものから。working は入れない
+# - skhd が先にキーを取るので、README の手順 6（Herdr app の keys.json）と手順 7（Ghostty の keybind）、tmux.conf の bind -n M-B / M-W は要らなくなる
 # - skhd は launchd から起動し PATH が短いので、ws と、ws が呼ぶ tmux / hc / ghq / git が見つかる PATH を書く（下の値は Homebrew と ~/.local/bin の例）
 # - option+b はどのアプリでも奪われる（∫ の入力や、シェルの単語戻り Meta-b が使えなくなる）
 
-# 入力待ち（blocked）
-alt - b              : PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH" ws next blocked --from-app
-# 作業中（working）
-ctrl + alt - b       : PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH" ws next working --from-app
-# 待機中（idle と、応答を終えた done）
-ctrl + alt + cmd - b : PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH" ws next idle --from-app
+# 前へ巡回する（次のエージェントへ移る）
+alt - b         : PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH" ws next --from-app
+# 後ろへ巡回する（1 つ前のエージェントへ移る）
+shift + alt - b : PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH" ws next --prev --from-app

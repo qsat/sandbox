@@ -6,6 +6,7 @@ export interface AgentRecord {
   cwd: string;
   status: AgentStatus;
   blockedReason?: string;
+  statusMs?: number;
   message?: string;
   alive: boolean;
   parent: string | null;

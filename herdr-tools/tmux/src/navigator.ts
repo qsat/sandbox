@@ -3,7 +3,7 @@ import { runInteractive } from "@herdr-tools/utils/run-interactive";
 import { looksLikePath, resolveRef, type Resolved, type WsCore } from "@herdr-tools/ws-core";
 import { focusGhostty, openGhosttyWindowRunning } from "./ghostty";
 import { AGENTS_WINDOW, chooseClient, planGo, workingDir, type PaneTarget, type Step } from "./plans/go";
-import { cycleCandidates, decideCurrentPane, messageWhenNoCandidate, nextCandidate, type CycleStatus } from "./plans/cycle";
+import { cycleCandidates, decideCurrentPane, MESSAGE_WHEN_NO_CANDIDATE, nextCandidate, prevCandidate } from "./plans/cycle";
 import { planPanes } from "./plans/panes";
 import { indexTmux, isPaneId, sessionPaths } from "./tmux-index";
 import { TmuxServer } from "./tmux-server";
@@ -99,9 +99,9 @@ export class TmuxNavigator {
     return { opened: plan.open.length, gathered: plan.gather.length, overLimit: plan.overLimit.length, alreadyOpen: plan.inPlace.length };
   }
 
-  async cycleAgents(status: CycleStatus, opts: { pane?: string; client?: string; fromApp?: boolean; listOnly?: boolean } = {}) {
+  async cycleAgents(opts: { prev?: boolean; pane?: string; client?: string; fromApp?: boolean; listOnly?: boolean } = {}) {
     const view = await this.view();
-    const candidates = cycleCandidates(view.snap.tree, status);
+    const candidates = cycleCandidates(view.snap.tree);
     if (opts.listOnly) return { candidates, moved: undefined, message: undefined };
     const clients = await this.tmux.listClients();
     const client = chooseClient({ explicit: opts.client, fromApp: !!opts.fromApp, callerClient: undefined, clients });
@@ -112,9 +112,9 @@ export class TmuxNavigator {
       clientPane: clientName ? await this.tmux.paneShownBy(clientName) : undefined,
       displayedPanes: view.idx.facts.panes.filter((p) => p.current).map((p) => p.paneId),
     });
-    const target = nextCandidate(candidates, currentPane ? view.idx.livePaneById(currentPane)?.agentId : undefined);
+    const target = (opts.prev ? prevCandidate : nextCandidate)(candidates, currentPane ? view.idx.livePaneById(currentPane)?.agentId : undefined);
     if (!target) {
-      const message = messageWhenNoCandidate(status);
+      const message = MESSAGE_WHEN_NO_CANDIDATE;
       await this.tmux.displayMessage(message, opts.fromApp ? clientName : opts.client).catch(() => {});
       return { candidates, moved: undefined, message };
     }

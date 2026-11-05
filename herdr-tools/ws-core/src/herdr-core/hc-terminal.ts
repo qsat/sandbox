@@ -7,5 +7,6 @@ export interface HcTerminal {
   state: "live" | "finished";
   status: { state: string; kind?: string | null; msg?: string } | null;
   reported?: boolean;
+  status_ms?: number | null;
   foreground: { name: string } | null;
 }

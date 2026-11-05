@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildTree, type AgentRecord, type PathInspection } from "@herdr-tools/ws-core";
-import { cycleCandidates, decideCurrentPane, isCycleStatus, messageWhenNoCandidate, nextCandidate } from "../src/plans/cycle";
+import { cycleCandidates, decideCurrentPane, MESSAGE_WHEN_NO_CANDIDATE, nextCandidate, prevCandidate } from "../src/plans/cycle";
 
 const G = "/Users/me/ghq/github.com/o";
 const API = `${G}/api`;
@@ -11,52 +11,70 @@ const infos: PathInspection[] = [API, FEAT, WEB].map((path) => ({ path, exists: 
 
 const tree = buildTree({
   agents: [
-    a({ id: "w2", cwd: WEB, status: "blocked" }),
-    a({ id: "b3", cwd: FEAT, status: "blocked" }),
-    a({ id: "b1", cwd: API, status: "blocked" }),
-    a({ id: "b2", cwd: API, status: "blocked" }),
+    a({ id: "w2", cwd: WEB, status: "blocked", statusMs: 100 }),
+    a({ id: "b3", cwd: FEAT, status: "blocked", statusMs: 300 }),
+    a({ id: "b1", cwd: API, status: "blocked", statusMs: 200, blockedReason: "permission" }),
+    a({ id: "b2", cwd: API, status: "blocked", statusMs: 200 }),
     a({ id: "dead", cwd: API, status: "blocked", alive: false }),
     a({ id: "work", cwd: API, status: "working" }),
-    a({ id: "idle", cwd: API, status: "idle" }),
-    a({ id: "done", cwd: WEB, status: "done" }),
+    a({ id: "i1", cwd: API, status: "idle", statusMs: 900 }),
+    a({ id: "i2", cwd: API, status: "idle", statusMs: 950 }),
+    a({ id: "d1", cwd: WEB, status: "done", statusMs: 10 }),
+    a({ id: "d2", cwd: WEB, status: "done", statusMs: 20 }),
+    a({ id: "err", cwd: WEB, status: "error" }),
   ],
   inspections: infos,
   ghqRoot: "/Users/me/ghq",
   alwaysShow: [],
 });
-const ids = (s: "blocked" | "working" | "idle") => cycleCandidates(tree, s).map((c) => c.agent.id);
+const c = cycleCandidates(tree);
+const ids = c.map((x) => x.agent.id);
 
-describe("巡回の候補", () => {
-  test("status と alive で絞り、workspace → worktree → id の安定した順に並べる", () => {
-    expect(ids("blocked")).toEqual(["b1", "b2", "b3", "w2"]);
-    expect(ids("working")).toEqual(["work"]);
+describe("巡回の列", () => {
+  test("blocked → done → idle の順に並べ、working・error と alive でないものは除く", () => {
+    expect(ids).toEqual(["b3", "b1", "b2", "w2", "d2", "d1", "i2", "i1"]);
   });
-  test("idle の巡回は、応答を終えて次の指示を待つ done も含める", () => {
-    expect(ids("idle")).toEqual(["idle", "done"]);
+  test("同じ status の中は status になった時刻が新しい順で、同じ時刻は ID の順", () => {
+    expect(ids.slice(0, 4)).toEqual(["b3", "b1", "b2", "w2"]);
+    expect(ids.slice(4, 6)).toEqual(["d2", "d1"]);
   });
-  test("巡回できる status は blocked / working / idle", () => {
-    expect(["blocked", "working", "idle", "done", "toString"].map(isCycleStatus)).toEqual([true, true, true, false, false]);
+  test("時刻が取れないものは最後で、ID の順（t9 が t10 より先）", () => {
+    const t = buildTree({
+      agents: [a({ id: "t10", status: "idle" }), a({ id: "t9", status: "idle" }), a({ id: "t1", status: "idle", statusMs: 5 })],
+      inspections: infos,
+      ghqRoot: "/Users/me/ghq",
+      alwaysShow: [],
+    });
+    expect(cycleCandidates(t).map((x) => x.agent.id)).toEqual(["t1", "t9", "t10"]);
   });
 });
 
-describe("次の候補", () => {
-  const c = cycleCandidates(tree, "blocked");
-  test("今のエージェントの次へ進む", () => expect(nextCandidate(c, "b1")?.agent.id).toBe("b2"));
-  test("最後の候補からは先頭に戻る", () => expect(nextCandidate(c, "w2")?.agent.id).toBe("b1"));
-  test("今いるペインが候補でなければ先頭へ移る", () => {
-    expect(nextCandidate(c, "idle")?.agent.id).toBe("b1");
-    expect(nextCandidate(c, null)?.agent.id).toBe("b1");
-    expect(nextCandidate(c, undefined)?.agent.id).toBe("b1");
+describe("前へ巡回する", () => {
+  test("今のエージェントの次へ進む", () => expect(nextCandidate(c, "b3")?.agent.id).toBe("b1"));
+  test("最後からは先頭に戻る", () => expect(nextCandidate(c, "i1")?.agent.id).toBe("b3"));
+  test("列に無ければ先頭へ移る", () => {
+    expect(nextCandidate(c, "work")?.agent.id).toBe("b3");
+    expect(nextCandidate(c, null)?.agent.id).toBe("b3");
+    expect(nextCandidate(c, undefined)?.agent.id).toBe("b3");
   });
   test("候補が無ければ移動先なし", () => {
     expect(nextCandidate([], "b1")).toBeUndefined();
     expect(nextCandidate([], undefined)).toBeUndefined();
   });
-  test("候補が無いときの文言は status ごとに違う", () => {
-    expect(messageWhenNoCandidate("blocked")).toBe("入力待ちのエージェントはありません");
-    expect(messageWhenNoCandidate("working")).toBe("作業中のエージェントはありません");
-    expect(messageWhenNoCandidate("idle")).toBe("待機中のエージェントはありません");
+});
+
+describe("後ろへ巡回する", () => {
+  test("今のエージェントの 1 つ前へ戻る", () => expect(prevCandidate(c, "b1")?.agent.id).toBe("b3"));
+  test("先頭からは最後へ回る", () => expect(prevCandidate(c, "b3")?.agent.id).toBe("i1"));
+  test("列に無ければ最後へ移る", () => {
+    expect(prevCandidate(c, "work")?.agent.id).toBe("i1");
+    expect(prevCandidate(c, undefined)?.agent.id).toBe("i1");
   });
+  test("候補が無ければ移動先なし", () => {
+    expect(prevCandidate([], "b1")).toBeUndefined();
+    expect(prevCandidate([], undefined)).toBeUndefined();
+  });
+  test("候補が無いときの文言", () => expect(MESSAGE_WHEN_NO_CANDIDATE).toBe("巡回するエージェントはありません"));
 });
 
 describe("今いるペインの決め方", () => {

@@ -51,6 +51,7 @@ export function toAgentRecord(t: HcTerminal, claudeSessionLabel: string): AgentR
     cwd: t.cwd,
     status: state && STATUSES.has(state) ? (state as AgentStatus) : "unknown",
     blockedReason: t.status?.kind ?? undefined,
+    statusMs: t.status_ms ?? undefined,
     message: t.status?.msg || undefined,
     alive: t.state === "live",
     parent: t.parent,

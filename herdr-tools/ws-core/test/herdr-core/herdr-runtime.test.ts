@@ -38,6 +38,11 @@ describe("toAgentRecord（herdr-core の言葉 → ドメインの言葉）", ()
   test("ラベル → workspace / worktree / 会話ID、status → 状態", () => {
     expect(toAgentRecord(raw, L)).toMatchObject({ id: "t7", recordedWorkspace: "/repo", recordedWorktree: "/repo=feat", claudeSessionId: "abc", alive: true, status: "blocked", blockedReason: "permission", message: "Allow?" });
   });
+  test("status_ms → statusMs（取れなければ undefined）", () => {
+    expect(toAgentRecord({ ...raw, status_ms: 1793788009632 }, L).statusMs).toBe(1793788009632);
+    expect(toAgentRecord({ ...raw, status_ms: null }, L).statusMs).toBeUndefined();
+    expect(toAgentRecord(raw, L).statusMs).toBeUndefined();
+  });
   test("前面がシェル → プログラム喪失（--keep の復旧）。終了後は分からない", () => {
     expect(toAgentRecord(raw, L).programLost).toBe(true);
     expect(toAgentRecord({ ...raw, foreground: { name: "claude" } }, L).programLost).toBe(false);
