@@ -1,6 +1,7 @@
 import { View, div, svg, type AsyncContext, type Color, type Context, type Element, type FocusHandle } from "gpui-kit";
 import { exec, theme, watchFolder } from "herdr";
 import { BRANCH_COLOR, REPOSITORY_COLOR, SELECTED_BG } from "../shared/colors";
+import { TITLE_BAR_HEIGHT } from "../shared/title-bar";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import { parseList, WS } from "../shared/ws-list";
 import { BASE_REF_CANDIDATES, READ, branchLabel, commitFiles, logArgs, prBaseRef, shortRef, type HistoryRange, localFiles, parseLog, relativeTime, showFilesArgs, sumNumstat, wsHunkArgs, type Commit, type FileChange } from "./git";
@@ -10,7 +11,6 @@ import { resolveTarget, type Target } from "./target";
 /** 予備の読み直しの間隔（ws list と git log・git status）。結果が前と同じなら再描画しない */
 const REFRESH_MS = 5000;
 const ROW_HEIGHT = 22;
-const TITLE_BAR_HEIGHT = 42;
 const NO_TARGET_MESSAGE = "tmux で worktree の中のペインを選ぶと、その履歴が出ます";
 
 type Theme = Record<"foreground" | "muted" | "dim" | "accent" | "raised" | "hover" | "background" | "border" | "blocked" | "ansi1" | "ansi2", Color>;

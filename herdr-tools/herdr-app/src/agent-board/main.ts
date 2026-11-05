@@ -1,6 +1,7 @@
 import { View, div, svg, type AsyncContext, type Color, type Context, type Element, type FocusHandle } from "gpui-kit";
 import { closeOverlay, exec, nextCommand, openOverlay, props, setShared, shared, terminals, theme } from "herdr";
 import { BRANCH_COLOR, REPOSITORY_COLOR, SELECTED_BG } from "../shared/colors";
+import { TITLE_BAR_HEIGHT } from "../shared/title-bar";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import type { Tag } from "@herdr-tools/utils/tag";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
@@ -18,7 +19,7 @@ const CURRENT_PANE_BG: Color = "#e6ff0014";
 const PIE_SIZE = 12;
 
 type Theme = Record<
-  "foreground" | "muted" | "dim" | "accent" | "raised" | "hover" | "solid" | "solid_foreground" | "background" | "popover" | "blocked" | "unknown" | "ansi1",
+  "foreground" | "muted" | "dim" | "accent" | "raised" | "hover" | "solid" | "solid_foreground" | "background" | "popover" | "border" | "blocked" | "unknown" | "ansi1",
   Color
 >;
 
@@ -364,14 +365,29 @@ export default class AgentBoard extends View {
     return true;
   }
 
+  /** commit-history mod と同じ形の題名の帯。右端に Claude の利用上限（円グラフと残り時間）を出す */
+  renderTitleBar(t: Theme) {
+    return div()
+      .flex()
+      .flex_none()
+      .items_center()
+      .gap(8)
+      .h(TITLE_BAR_HEIGHT)
+      .px(14)
+      .border_b(1)
+      .border_color(t.border)
+      .child(div().font_semibold().child("Worktrees"))
+      .child(div().flex_1())
+      .child(this.renderUsage(t));
+  }
+
   renderUsage(t: Theme) {
     const segments = usageSegments(this.list.usage, Math.floor(Date.now() / 1000));
     return div()
       .flex()
-      .justify_end()
       .gap(12)
-      .min_h(segments.length > 0 ? ROW_HEIGHT : 0)
       .items_center()
+      .text_size(12)
       .children(
         segments.map((s, i) =>
           div()
@@ -401,13 +417,21 @@ export default class AgentBoard extends View {
       .flex()
       .flex_col()
       .line_height(1.25)
-      .p(8)
       .text_size(13)
       .text_color(t.foreground)
-      .overflow_y_scrollbar()
-      .child(this.renderUsage(t))
-      .when(rows.length === 0, (el) => el.child(label("エージェントもセッションもありません", t.muted)))
-      .children(rows.map((r, i) => this.renderRow(r, t, i === 0, rowId(r) === this.selected)))
-      .when(this.error !== "", (el) => el.child(label(this.error, t.ansi1)));
+      .child(this.renderTitleBar(t))
+      .child(
+        div()
+          .id("agent-board:list")
+          .flex()
+          .flex_col()
+          .flex_1()
+          .min_h(0)
+          .p(8)
+          .overflow_y_scrollbar()
+          .when(rows.length === 0, (el) => el.child(label("エージェントもセッションもありません", t.muted)))
+          .children(rows.map((r, i) => this.renderRow(r, t, i === 0, rowId(r) === this.selected)))
+          .when(this.error !== "", (el) => el.child(label(this.error, t.ansi1))),
+      );
   }
 }
