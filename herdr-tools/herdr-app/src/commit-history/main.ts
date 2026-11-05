@@ -10,9 +10,10 @@ import { resolveTarget, type Target } from "./target";
 /** 予備の読み直しの間隔（ws list と git log・git status）。結果が前と同じなら再描画しない */
 const REFRESH_MS = 5000;
 const ROW_HEIGHT = 22;
+const TITLE_BAR_HEIGHT = 42;
 const NO_TARGET_MESSAGE = "tmux で worktree の中のペインを選ぶと、その履歴が出ます";
 
-type Theme = Record<"foreground" | "muted" | "dim" | "accent" | "raised" | "hover" | "background" | "blocked" | "ansi1" | "ansi2", Color>;
+type Theme = Record<"foreground" | "muted" | "dim" | "accent" | "raised" | "hover" | "background" | "border" | "blocked" | "ansi1" | "ansi2", Color>;
 
 function label(text: string, color: Color) {
   return div().text_color(color).child(text);
@@ -300,24 +301,30 @@ export default class CommitHistory extends View {
       .when(target.branch !== null && target.branch !== target.label, (el) => el.child(label(target.branch!, t.muted)));
   }
 
+  renderTitleBar(t: Theme) {
+    return div()
+      .flex()
+      .flex_none()
+      .items_center()
+      .gap(8)
+      .h(TITLE_BAR_HEIGHT)
+      .px(14)
+      .border_b(1)
+      .border_color(t.border)
+      .child(div().font_semibold().child("Commit history"))
+      .child(div().px(5).py(1).rounded(4).border_1().border_color(t.border).text_size(10).text_color(t.muted).child(`${this.commits.length} commits`));
+  }
+
   render() {
     const t = theme() as unknown as Theme;
     const rows = visibleRows(this.commits, this.local, this.expanded, this.filesOf);
     const now = Math.floor(Date.now() / 1000);
-    return div()
-      .id("commit-history")
-      .track_focus(this.focus)
-      .on_mouse_down("left", () => this.focus.focus())
-      .on_key_down((e, cx) => {
-        if (this.onKey(e.keystroke, rows, cx)) cx.stop_propagation();
-      })
-      .size_full()
+    const body = div()
       .flex()
       .flex_col()
-      .line_height(1.25)
+      .flex_1()
+      .min_h(0)
       .p(8)
-      .text_size(13)
-      .text_color(t.foreground)
       .when(this.target === null, (el) => el.child(label(this.error || NO_TARGET_MESSAGE, this.error ? t.ansi1 : t.muted)))
       .when(this.target !== null, (el) =>
         el
@@ -333,5 +340,20 @@ export default class CommitHistory extends View {
           )
           .when(this.error !== "", (el) => el.child(label(this.error, t.ansi1))),
       );
+    return div()
+      .id("commit-history")
+      .track_focus(this.focus)
+      .on_mouse_down("left", () => this.focus.focus())
+      .on_key_down((e, cx) => {
+        if (this.onKey(e.keystroke, rows, cx)) cx.stop_propagation();
+      })
+      .size_full()
+      .flex()
+      .flex_col()
+      .line_height(1.25)
+      .text_size(13)
+      .text_color(t.foreground)
+      .child(this.renderTitleBar(t))
+      .child(body);
   }
 }
