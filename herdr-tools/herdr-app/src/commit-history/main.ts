@@ -3,7 +3,7 @@ import { exec, theme, watchFolder } from "herdr";
 import { BRANCH_COLOR, REPOSITORY_COLOR, SELECTED_BG } from "../shared/colors";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import { parseList, WS } from "../shared/ws-list";
-import { BASE_REF_CANDIDATES, READ, commitFiles, logArgs, shortRef, type HistoryRange, localFiles, parseLog, relativeTime, showFilesArgs, sumNumstat, wsHunkArgs, type Commit, type FileChange } from "./git";
+import { BASE_REF_CANDIDATES, READ, branchLabel, commitFiles, logArgs, prBaseRef, shortRef, type HistoryRange, localFiles, parseLog, relativeTime, showFilesArgs, sumNumstat, wsHunkArgs, type Commit, type FileChange } from "./git";
 import { LOCAL_ID, moveSelection, visibleRows, type Row } from "./rows";
 import { resolveTarget, type Target } from "./target";
 
@@ -150,8 +150,22 @@ export default class CommitHistory extends View {
     if (this.expanded === LOCAL_ID && this.local.length === 0) this.expanded = null;
   }
 
-  /** ベースブランチ。origin/HEAD が指すブランチ（origin/main など）、無ければ手元の main、master の順に探す */
+  /**
+   * ベースブランチ。今のブランチのプルリクエストがあれば、その base ブランチを使う（gh pr view）。
+   * プルリクエストが無い・gh が使えないときは、origin/HEAD が指すブランチ（origin/main など）、無ければ手元の main、master の順に探す
+   */
   async findBaseRef(root: string) {
+    const pr = await exec("gh", ["pr", "view", "--json", "baseRefName", "--jq", ".baseRefName"], { cwd: root }).catch(() => null);
+    if (pr && pr.code === 0 && pr.stdout.trim()) {
+      const name = pr.stdout.trim();
+      const [remote, local] = await Promise.all([
+        this.git(root, ["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${name}`]),
+        this.git(root, ["rev-parse", "--verify", "--quiet", `refs/heads/${name}`]),
+      ]);
+      const found = new Set([remote.code === 0 ? `refs/remotes/origin/${name}` : "", local.code === 0 ? `refs/heads/${name}` : ""]);
+      const ref = prBaseRef(name, (r) => found.has(r));
+      if (ref) return ref;
+    }
     const remoteHead = await this.git(root, ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]);
     if (remoteHead.code === 0 && remoteHead.stdout.trim()) return shortRef(remoteHead.stdout);
     for (const ref of BASE_REF_CANDIDATES.slice(1)) {
@@ -337,9 +351,9 @@ export default class CommitHistory extends View {
       .child(div().font_semibold().child("Commit history"))
       .child(div().px(5).py(1).rounded(4).border_1().border_color(t.border).text_size(10).text_color(t.muted).child(`${this.commits.length} commits`))
       .child(div().flex_1())
-      .child(this.rangeButton("all", { text: "すべて" }, t))
+      .child(this.rangeButton("all", { icon: "history", tooltip: "すべてのコミット（HEAD からの履歴）" }, t))
       .child(this.rangeButton("unpushed", { icon: "push", tooltip: "push 前のコミット（上流のブランチにまだ無いもの）" }, t))
-      .child(this.rangeButton("base", { text: this.baseRef ? `${this.baseRef} から` : "ベースから" }, t));
+      .child(this.rangeButton("base", { text: this.baseRef ? branchLabel(this.baseRef) : "base" }, t));
   }
 
   rangeButton(range: HistoryRange, face: { text: string } | { icon: string; tooltip: string }, t: Theme) {
@@ -371,6 +385,8 @@ export default class CommitHistory extends View {
     this.range = range;
     this.commits = [];
     this.noUpstream = false;
+    // ベースは選ぶたびに調べ直す（mod を開いた後に作ったプルリクエストの base も拾う）
+    if (range === "base") this.baseRef = null;
     if (this.expanded !== LOCAL_ID) this.expanded = null;
     cx.notify();
     this.refresh(cx);

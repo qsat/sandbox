@@ -33,6 +33,23 @@ export function shortRef(ref: string) {
   return ref.trim().replace(/^refs\/(remotes|heads)\//, "");
 }
 
+/** ボタンに出すベースブランチの名前。リモートの名前（origin/）は外す */
+export function branchLabel(ref: string) {
+  return ref.replace(/^origin\//, "");
+}
+
+/**
+ * プルリクエストの base ブランチ（`gh pr view --json baseRefName` の値）を、git log に渡す ref にする。
+ * リモートのブランチ（origin/<base>）を先に、無ければ手元のブランチを使う。どちらも無ければ null
+ */
+export function prBaseRef(baseRefName: string, exists: (ref: string) => boolean) {
+  const name = baseRefName.trim();
+  if (!name) return null;
+  if (exists(`refs/remotes/origin/${name}`)) return `origin/${name}`;
+  if (exists(`refs/heads/${name}`)) return name;
+  return null;
+}
+
 export interface Commit {
   hash: string;
   short: string;

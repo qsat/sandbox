@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { LOG_ARGS, commitFiles, localFiles, logArgs, parseDecorations, parseLog, parseNameStatus, parseNumstat, parseStatus, relativeTime, shortRef, sumNumstat, wsHunkArgs } from "../src/commit-history/git";
+import { LOG_ARGS, branchLabel, commitFiles, localFiles, logArgs, prBaseRef, parseDecorations, parseLog, parseNameStatus, parseNumstat, parseStatus, relativeTime, shortRef, sumNumstat, wsHunkArgs } from "../src/commit-history/git";
 
 describe("一覧に出すコミットの範囲", () => {
   test("すべては HEAD からの履歴", () => expect(logArgs("all")).toEqual(LOG_ARGS));
@@ -12,6 +12,16 @@ describe("一覧に出すコミットの範囲", () => {
   test("ref の名前から refs/remotes/ と refs/heads/ を外す", () => {
     expect(shortRef("refs/remotes/origin/main\n")).toBe("origin/main");
     expect(shortRef("refs/heads/master")).toBe("master");
+  });
+  test("ボタンにはブランチ名だけを出す（origin/ を外す）", () => {
+    expect(branchLabel("origin/main")).toBe("main");
+    expect(branchLabel("develop")).toBe("develop");
+  });
+  test("プルリクエストの base ブランチは、リモートのブランチを先に、無ければ手元のブランチを使う", () => {
+    expect(prBaseRef("develop\n", (r) => r === "refs/remotes/origin/develop" || r === "refs/heads/develop")).toBe("origin/develop");
+    expect(prBaseRef("develop", (r) => r === "refs/heads/develop")).toBe("develop");
+    expect(prBaseRef("develop", () => false)).toBeNull();
+    expect(prBaseRef("", () => true)).toBeNull();
   });
 });
 import { LOCAL_ID, moveSelection, visibleRows } from "../src/commit-history/rows";
