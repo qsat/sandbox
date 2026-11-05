@@ -19,8 +19,8 @@ export function visibleRows(prs: PullRequest[], branch: string | null, expanded:
     rows.push({ kind: "pr", id: `pr:${pr.number}`, pr, open, current: isCurrent(pr) });
     if (!open) continue;
     const commits = commitsOf.get(pr.number);
-    if (!commits) rows.push({ kind: "note", id: `note:${pr.number}`, text: "コミットを読み込み中…" });
-    else if (commits.length === 0) rows.push({ kind: "note", id: `note:${pr.number}`, text: "コミットがありません" });
+    if (!commits) rows.push({ kind: "note", id: `note:${pr.number}`, text: "Loading commits…" });
+    else if (commits.length === 0) rows.push({ kind: "note", id: `note:${pr.number}`, text: "No commits" });
     else for (const commit of commits) rows.push({ kind: "commit", id: `commit:${pr.number}:${commit.hash}`, prNumber: pr.number, commit });
   }
   return rows;

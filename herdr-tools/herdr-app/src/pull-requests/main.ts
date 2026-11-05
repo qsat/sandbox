@@ -17,7 +17,7 @@ import { visibleRows, type Row } from "./rows";
 const FOLLOW_MS = 5000;
 /** gh（GitHub への問い合わせ）の読み直しの間隔 */
 const PR_REFRESH_MS = 60000;
-const NO_TARGET_MESSAGE = "tmux で worktree の中のペインを選ぶと、そのリポジトリのプルリクエストが出ます";
+const NO_TARGET_MESSAGE = "Select a tmux pane in a worktree";
 
 export default class PullRequests extends View {
   target!: Target | null;
@@ -292,7 +292,7 @@ export default class PullRequests extends View {
     const t = theme() as unknown as Theme;
     const rows = visibleRows(this.prs ?? [], this.target?.branch ?? null, this.expanded, this.commitsOf);
     const now = Math.floor(Date.now() / 1000);
-    const placeholder = this.prs === null ? "プルリクエストを読み込み中…" : this.message;
+    const placeholder = this.prs === null ? "Loading pull requests…" : this.message;
     const body = div()
       .flex()
       .flex_col()

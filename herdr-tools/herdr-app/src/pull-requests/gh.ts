@@ -84,16 +84,16 @@ export function parsePrCommits(stdout: string): PrCommit[] {
     .reverse();
 }
 
-export const NO_PULL_REQUESTS_MESSAGE = "開いているプルリクエストはありません";
+export const NO_PULL_REQUESTS_MESSAGE = "No open pull requests";
 
 /**
  * gh が失敗したときに一覧の代わりに出す文。r が null のときは gh を起動できなかった（インストールされていない）。
  * 見分けられない失敗は、gh の標準エラーの 1 行目をそのまま出す
  */
 export function ghFailureMessage(r: { code: number; stderr: string } | null): string {
-  if (r === null || r.code === 127) return "gh（GitHub の CLI）が見つかりません。インストールすると、プルリクエストが出ます";
+  if (r === null || r.code === 127) return "gh not found";
   const err = r.stderr.trim();
-  if (/gh auth login|GH_TOKEN|not logged in|authentication/i.test(err)) return "gh が GitHub にログインしていません。gh auth login を実行してください";
-  if (/none of the git remotes|no git remotes|known GitHub host|not a git repository/i.test(err)) return "GitHub のリポジトリではないので、プルリクエストを出せません";
-  return `gh pr list が失敗しました: ${err.split("\n")[0] || `exit ${r.code}`}`;
+  if (/gh auth login|GH_TOKEN|not logged in|authentication/i.test(err)) return "gh is not logged in (run gh auth login)";
+  if (/none of the git remotes|no git remotes|known GitHub host|not a git repository/i.test(err)) return "Not a GitHub repository";
+  return `gh pr list failed: ${err.split("\n")[0] || `exit ${r.code}`}`;
 }

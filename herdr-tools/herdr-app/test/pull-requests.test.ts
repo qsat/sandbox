@@ -53,14 +53,14 @@ describe("gh pr view --json commits の読み取り", () => {
 
 describe("gh が失敗したときの文", () => {
   test("gh が無い", () => {
-    expect(ghFailureMessage(null)).toContain("gh（GitHub の CLI）が見つかりません");
-    expect(ghFailureMessage({ code: 127, stderr: "" })).toContain("見つかりません");
+    expect(ghFailureMessage(null)).toBe("gh not found");
+    expect(ghFailureMessage({ code: 127, stderr: "" })).toBe("gh not found");
   });
-  test("認証が無い", () => expect(ghFailureMessage({ code: 4, stderr: "To get started with GitHub CLI, please run:  gh auth login" })).toContain("gh auth login"));
+  test("認証が無い", () => expect(ghFailureMessage({ code: 4, stderr: "To get started with GitHub CLI, please run:  gh auth login" })).toBe("gh is not logged in (run gh auth login)"));
   test("GitHub のリポジトリではない", () => {
-    expect(ghFailureMessage({ code: 1, stderr: "none of the git remotes configured for this repository point to a known GitHub host." })).toContain("GitHub のリポジトリではない");
+    expect(ghFailureMessage({ code: 1, stderr: "none of the git remotes configured for this repository point to a known GitHub host." })).toBe("Not a GitHub repository");
   });
-  test("見分けられない失敗は標準エラーの 1 行目を出す", () => expect(ghFailureMessage({ code: 1, stderr: "boom\nmore" })).toBe("gh pr list が失敗しました: boom"));
+  test("見分けられない失敗は標準エラーの 1 行目を出す", () => expect(ghFailureMessage({ code: 1, stderr: "boom\nmore" })).toBe("gh pr list failed: boom"));
 });
 
 describe("プルリクエストの行の並び", () => {

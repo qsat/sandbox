@@ -15,7 +15,7 @@ import { LOCAL_ID, visibleRows, type Row } from "./rows";
 
 /** 予備の読み直しの間隔（ws list と git log・git status）。結果が前と同じなら再描画しない */
 const REFRESH_MS = 5000;
-const NO_TARGET_MESSAGE = "tmux で worktree の中のペインを選ぶと、その履歴が出ます";
+const NO_TARGET_MESSAGE = "Select a tmux pane in a worktree";
 
 function statusColor(t: Theme, status: string) {
   return status === "A" || status === "?" ? t.ansi2 : status === "D" || status === "U" ? t.ansi1 : status === "R" ? t.accent : t.blocked;
@@ -122,7 +122,7 @@ export default class CommitHistory extends View {
       const dirs = await this.git(root, ["rev-parse", "--absolute-git-dir", "--git-common-dir"]);
       if (this.target?.path !== root) return;
       if (dirs.code !== 0) {
-        this.error = "git リポジトリではありません";
+        this.error = "Not a git repository";
         return;
       }
       const [gitDir = "", common = ""] = dirs.stdout.trim().split("\n");
@@ -383,9 +383,9 @@ export default class CommitHistory extends View {
   }
 
   emptyMessage() {
-    if (this.range === "all") return "コミットがありません";
-    if (this.range === "base") return this.baseRef ? `${this.baseRef} から分かれた後のコミットはありません` : "ベースブランチ（origin/HEAD・main・master）が見つかりません";
-    return this.noUpstream ? "上流のブランチが無いので、push 前のコミットを出せません" : "push していないコミットはありません";
+    if (this.range === "all") return "No commits";
+    if (this.range === "base") return this.baseRef ? `No commits since ${branchLabel(this.baseRef)}` : "No base branch";
+    return this.noUpstream ? "No upstream branch" : "No unpushed commits";
   }
 
   render() {
