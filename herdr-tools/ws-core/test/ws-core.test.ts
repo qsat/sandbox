@@ -74,9 +74,6 @@ class InMemoryWorkspaceSource implements WorkspaceSource {
   async worktrees(repo: string) {
     return this.infos.filter((i) => i.commonDir === `${repo}/.git`).map((i) => i.path);
   }
-  async changeAmount(worktree: string) {
-    return worktree.endsWith("=feat") ? { added: 3, deleted: 1 } : null;
-  }
 }
 
 const REPO = "/g/o/api";
@@ -94,11 +91,6 @@ describe("WsCore", () => {
     const r = await core.startAgent(WT, ["--model", "x"]);
     expect(r.id).toBe("a1");
     expect(rt.started[0]).toEqual({ workspace: REPO, worktree: WT, repo: "api", branch: "feat", command: ["claude", "--model", "x"] });
-  });
-
-  test("changeAmounts は worktree ごとの変更量を返し、出せない worktree は null", async () => {
-    const core = new WsCore(new InMemoryRuntime(), source());
-    expect(await core.changeAmounts([REPO, WT])).toEqual({ [REPO]: null, [WT]: { added: 3, deleted: 1 } });
   });
 
   test("newAgent は無いディレクトリを拒む", async () => {

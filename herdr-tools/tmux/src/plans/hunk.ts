@@ -2,40 +2,50 @@ import { bringClientTo, type GoContext, type Step } from "./go";
 
 export const HUNK_WINDOW = "hunk";
 
+/** hunk で開くもの */
+export type HunkSource =
+  | { kind: "worktree" }
+  | { kind: "commit"; rev: string }
+  | { kind: "range"; range: string }
+  | { kind: "against"; rev: string }
+  | { kind: "gh-pr"; number: string }
+  | { kind: "gh-commit"; sha: string };
+
 export interface HunkPlanInput {
   /** hunk の作業ディレクトリ（worktree のパス） */
   cwd: string;
-  /** hunk の実行ファイル */
   hunkBin: string;
-  /** 開くもの。commit があれば `hunk show <commit>`（手元のコミット）、無ければ未コミットの変更（`hunk diff`） */
-  commit?: string;
-  /** GitHub のプルリクエスト全体（`hunk gh pr <番号>`）。commit より優先する */
-  pr?: string;
-  /** GitHub のコミット（`hunk gh commit <sha>`）。手元に無いコミット用。pr の次に優先する */
-  ghCommit?: string;
-  /** ブランチ間の差分（`hunk diff <range>`。例: `origin/main...HEAD`）。ghCommit の次に優先する */
-  range?: string;
-  /** 作業ツリーと 1 つのリビジョンの差分（`hunk diff <rev>`。未コミット・追跡されていないファイルも含む）。range の次に優先する */
-  against?: string;
+  source: HunkSource;
   /** 開いたあとに移るファイル（worktree からの相対パス） */
   file?: string;
   /** その worktree の tmux セッション（無ければ作る steps を持つ） */
   session: { name: string; steps: Step[] };
-  /** セッションの中に hunk という名前のウィンドウがあるか */
   windowExists: boolean;
-  /** hunk のセッションが daemon に登録されているか（`hunk session get --repo <cwd>` が成功するか） */
+  /** `hunk session get --repo <cwd>` が成功するか */
   hunkSessionExists: boolean;
   ctx: GoContext;
 }
 
-type HunkSource = Pick<HunkPlanInput, "commit" | "pr" | "ghCommit" | "range" | "against">;
+export function hunkArgs(source: HunkSource) {
+  switch (source.kind) {
+    case "worktree":
+      return ["diff"];
+    case "commit":
+      return ["show", source.rev];
+    case "range":
+      return ["diff", source.range];
+    case "against":
+      return ["diff", source.rev];
+    case "gh-pr":
+      return ["gh", "pr", source.number];
+    case "gh-commit":
+      return ["gh", "commit", source.sha];
+  }
+}
 
-export function hunkArgs({ commit, pr, ghCommit, range, against }: HunkSource) {
-  if (pr) return ["gh", "pr", pr];
-  if (ghCommit) return ["gh", "commit", ghCommit];
-  if (range) return ["diff", range];
-  if (against) return ["diff", against];
-  return commit ? ["show", commit] : ["diff"];
+/** `hunk session reload` は diff と show しか入れ替えられない */
+function fromGithub(source: HunkSource) {
+  return source.kind === "gh-pr" || source.kind === "gh-commit";
 }
 
 /** hunk の起動時に `gh auth token` を GH_TOKEN に入れるシェルの断片（hunk の引数は $0 と $@ で渡す） */
@@ -50,38 +60,49 @@ export function githubLaunch(hunkBin: string, args: string[]) {
   return ["sh", "-c", GH_TOKEN_LAUNCH, hunkBin, ...args];
 }
 
-/** --range に受け付ける形。`<ref>..<ref>` か `<ref>...<ref>`。ref は git の ref に使える文字だけで、`-` で始まらない（hunk のオプションと取り違えない） */
 const RANGE_PATTERN = /^[\w@{}~^/][\w.@{}~^/-]*?\.\.\.?[\w@{}~^/][\w.@{}~^/-]*$/;
-
-/** --against に受け付ける形。1 つのリビジョン（範囲の `..` を含まない）で、`-` で始まらない */
 const REVISION_PATTERN = /^[\w@{}~^/][\w.@{}~^/-]*$/;
 
 /**
- * `ws hunk` の --commit / --pr / --gh-commit / --range / --against を確かめる。どれか 1 つだけ指定でき、
- * --pr は数字、--gh-commit は 7〜40 桁の 16 進数、--range は `<ref>...<ref>` の形、--against は 1 つのリビジョン（シェルや hunk の引数として安全な値）に限る
+ * `ws hunk` の --commit / --pr / --gh-commit / --range / --against を読む。どれか 1 つだけ指定でき、無ければ未コミットの変更。
+ * 値は hunk・git の引数とシェルに渡しても安全な形に限る（- で始まらない。--pr は数字、--gh-commit は 16 進数）
  */
 export function parseHunkSource(flags: { commit?: string; pr?: string; ghCommit?: string; range?: string; against?: string }): HunkSource {
-  const given = [flags.commit, flags.pr, flags.ghCommit, flags.range, flags.against].filter((v) => v !== undefined);
+  const given = Object.values(flags).filter((v) => v !== undefined);
   if (given.length > 1) throw new Error("--commit、--pr、--gh-commit、--range、--against は同時に指定できません");
-  if (flags.pr !== undefined && !/^\d+$/.test(flags.pr)) throw new Error(`--pr にはプルリクエストの番号（数字）を指定してください: ${flags.pr}`);
-  if (flags.ghCommit !== undefined && !/^[0-9a-fA-F]{7,40}$/.test(flags.ghCommit)) throw new Error(`--gh-commit にはコミットの sha（7〜40 桁の 16 進数）を指定してください: ${flags.ghCommit}`);
-  if (flags.range !== undefined && !RANGE_PATTERN.test(flags.range)) throw new Error(`--range には <ref>...<ref> の形を指定してください: ${flags.range}`);
-  if (flags.against !== undefined && (!REVISION_PATTERN.test(flags.against) || flags.against.includes("..")))
-    throw new Error(`--against には 1 つのリビジョン（ハッシュやブランチ名）を指定してください: ${flags.against}`);
-  return { commit: flags.commit, pr: flags.pr, ghCommit: flags.ghCommit, range: flags.range, against: flags.against };
+  const { commit, pr, ghCommit, range, against } = flags;
+  if (pr !== undefined) {
+    if (!/^\d+$/.test(pr)) throw new Error(`--pr にはプルリクエストの番号（数字）を指定してください: ${pr}`);
+    return { kind: "gh-pr", number: pr };
+  }
+  if (ghCommit !== undefined) {
+    if (!/^[0-9a-fA-F]{7,40}$/.test(ghCommit)) throw new Error(`--gh-commit にはコミットの sha（7〜40 桁の 16 進数）を指定してください: ${ghCommit}`);
+    return { kind: "gh-commit", sha: ghCommit };
+  }
+  if (range !== undefined) {
+    if (!RANGE_PATTERN.test(range)) throw new Error(`--range には <ref>...<ref> の形を指定してください: ${range}`);
+    return { kind: "range", range };
+  }
+  if (against !== undefined) {
+    if (!REVISION_PATTERN.test(against) || against.includes("..")) throw new Error(`--against には 1 つのリビジョン（ハッシュやブランチ名）を指定してください: ${against}`);
+    return { kind: "against", rev: against };
+  }
+  if (commit === undefined) return { kind: "worktree" };
+  if (!REVISION_PATTERN.test(commit)) throw new Error(`--commit には 1 つのリビジョン（ハッシュやブランチ名）を指定してください: ${commit}`);
+  return { kind: "commit", rev: commit };
 }
 
 /**
  * ファイルの差分を hunk で開く計画。
  * - hunk のセッションがある: 中身を入れ替える（reload）。hunk ウィンドウがあればそこへ移る。無ければ（tmux の外や別の名前で開いている）移らない
- * - GitHub のプルリクエスト・コミット（pr / ghCommit）: reload せず、hunk ウィンドウがあれば respawn-pane -k で作り直し、無ければ作る。GH_TOKEN は githubLaunch が渡す
+ * - GitHub のプルリクエスト・コミット（gh-pr / gh-commit）: reload せず、hunk ウィンドウがあれば respawn-pane -k で作り直し、無ければ作る。GH_TOKEN は githubLaunch が渡す
  * - セッションが無くウィンドウも無い: tmux セッション（無ければ作る）に hunk ウィンドウを作って起動する
  * - セッションが無いがウィンドウはある（hunk が終わっている、または起動中）: そのペインを respawn-pane -k で作り直す
  * 起動・入れ替えのあと、クライアントを hunk ウィンドウへ移し、最後に navigate でファイルへ移る（起動直後はセッションが現れるまで待つ）
  */
 export function planHunk(input: HunkPlanInput): Step[] {
-  const args = hunkArgs(input);
-  const github = !!(input.pr || input.ghCommit);
+  const args = hunkArgs(input.source);
+  const github = fromGithub(input.source);
   // GitHub のものは hunk session reload で入れ替えられないので、常にペインを作り直して起動し直す（起動を待って navigate する）
   const sessionLive = input.hunkSessionExists && !github;
   const navigate: Step[] = input.file ? [{ op: "hunkNavigate", cwd: input.cwd, file: input.file, wait: !sessionLive }] : [];

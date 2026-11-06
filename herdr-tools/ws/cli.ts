@@ -93,7 +93,7 @@ async function main(argv: string[]) {
     return 0;
   }
   const p = parseArgs(restArgs);
-  const { core, nav, prWorktrees } = composeFromEnv(process.env);
+  const { core, nav, prWorktrees, changeAmounts } = composeFromEnv(process.env);
   const goOpts = { client: str(p, "--client"), fromApp: has(p, "--from-app") };
 
   switch (cmd) {
@@ -180,7 +180,7 @@ async function main(argv: string[]) {
     case "hunk": {
       const path = absolutePathFromCwd(p.positional[0] ?? ".");
       const source = parseHunkSource({ commit: str(p, "--commit"), pr: str(p, "--pr"), ghCommit: str(p, "--gh-commit"), range: str(p, "--range"), against: str(p, "--against") });
-      await nav.openInHunk(path, { ...source, file: str(p, "--file"), client: str(p, "--client"), fromApp: goOpts.fromApp });
+      await nav.openInHunk(path, { source, file: str(p, "--file"), client: str(p, "--client"), fromApp: goOpts.fromApp });
       return 0;
     }
     case "pr": {
@@ -193,7 +193,7 @@ async function main(argv: string[]) {
     }
     case "changes": {
       if (p.positional.length === 0) throw new Error("ws changes [--json] <worktree>...");
-      const amounts = await core.changeAmounts(p.positional.map((path) => absolutePathFromCwd(path)));
+      const amounts = await changeAmounts.of(p.positional.map((path) => absolutePathFromCwd(path)));
       if (has(p, "--json")) process.stdout.write(JSON.stringify(amounts) + "\n");
       else for (const [path, a] of Object.entries(amounts)) process.stdout.write(`${a ? `+${a.added}\t−${a.deleted}` : "-\t-"}\t${path}\n`);
       return 0;

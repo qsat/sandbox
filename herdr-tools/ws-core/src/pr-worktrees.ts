@@ -2,22 +2,17 @@ import { existsSync } from "node:fs";
 import { run } from "@herdr-tools/utils/run";
 import { isSafeBranchName, parseAheadBehind, parsePrBranch, prWorktreePath, updateDecision, worktreeOfBranch, type PrWorktreeOutcome } from "./domain/pr-worktree";
 import { mainRepositoryOf } from "./domain/tree";
+import { GitCli } from "./git-cli";
 
 /**
  * プルリクエストのブランチの worktree を用意する（gh でブランチを調べ、git で作る・最新にする）。
  * 判断の規則は domain/pr-worktree.ts にあり、ここは git と gh を呼ぶだけ
  */
 export class PrWorktrees {
-  constructor(private readonly bins: { git?: string; gh?: string } = {}) {}
+  private readonly git: GitCli;
 
-  private git(cwd: string, args: string[]) {
-    return run(this.bins.git ?? "git", ["-C", cwd, ...args]);
-  }
-
-  private async gitOk(cwd: string, args: string[]) {
-    const r = await this.git(cwd, args);
-    if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr.trim() || `exit ${r.code}`}`);
-    return r.stdout;
+  constructor(private readonly bins: { git?: string; gh?: string } = {}) {
+    this.git = new GitCli(bins.git);
   }
 
   /**
@@ -35,31 +30,31 @@ export class PrWorktrees {
     if (pr.crossRepository) throw new Error(`#${number} はフォークからのプルリクエストなので、まだ扱えません`);
     if (!isSafeBranchName(pr.head)) throw new Error(`扱えないブランチ名です: ${pr.head}`);
 
-    const commonDir = (await this.gitOk(repo, ["rev-parse", "--path-format=absolute", "--git-common-dir"])).trim();
+    const commonDir = (await this.git.ok(repo, ["rev-parse", "--path-format=absolute", "--git-common-dir"])).trim();
     const main = mainRepositoryOf(commonDir);
     const remote = `refs/remotes/origin/${pr.head}`;
-    await this.gitOk(main, ["fetch", "--quiet", "origin", `+refs/heads/${pr.head}:${remote}`]);
+    await this.git.ok(main, ["fetch", "--quiet", "origin", `+refs/heads/${pr.head}:${remote}`]);
 
-    const existing = worktreeOfBranch(await this.gitOk(main, ["worktree", "list", "--porcelain"]), pr.head);
+    const existing = worktreeOfBranch(await this.git.ok(main, ["worktree", "list", "--porcelain"]), pr.head);
     if (existing) return this.update(existing, remote);
 
     const path = prWorktreePath(main, pr.head);
     if (existsSync(path)) throw new Error(`作る場所に既にファイルかフォルダーがあります: ${path}`);
-    const localBranch = (await this.git(main, ["rev-parse", "--verify", "--quiet", `refs/heads/${pr.head}`])).code === 0;
+    const localBranch = (await this.git.run(main, ["rev-parse", "--verify", "--quiet", `refs/heads/${pr.head}`])).code === 0;
     if (localBranch) {
-      await this.gitOk(main, ["worktree", "add", "--quiet", path, pr.head]);
+      await this.git.ok(main, ["worktree", "add", "--quiet", path, pr.head]);
       const updated = await this.update(path, remote);
       // 手元のブランチで作ったうえで、早送りできなかった・必要なかったときも「作った」と伝える（更新しなかった理由は別に出す）
       return updated.kind === "updated" || updated.kind === "up-to-date" ? { kind: "created", path, branch: pr.head } : updated;
     }
-    await this.gitOk(main, ["worktree", "add", "--quiet", "--track", "-b", pr.head, path, remote]);
+    await this.git.ok(main, ["worktree", "add", "--quiet", "--track", "-b", pr.head, path, remote]);
     return { kind: "created", path, branch: pr.head };
   }
 
   private async update(path: string, remote: string): Promise<PrWorktreeOutcome> {
     const [status, counts] = await Promise.all([
-      this.gitOk(path, ["status", "--porcelain", "--untracked-files=no"]),
-      this.gitOk(path, ["rev-list", "--left-right", "--count", `HEAD...${remote}`]),
+      this.git.ok(path, ["status", "--porcelain", "--untracked-files=no"]),
+      this.git.ok(path, ["rev-list", "--left-right", "--count", `HEAD...${remote}`]),
     ]);
     const { ahead, behind } = parseAheadBehind(counts);
     switch (updateDecision({ dirty: status.trim() !== "", ahead, behind })) {
@@ -70,7 +65,7 @@ export class PrWorktrees {
       case "up-to-date":
         return { kind: "up-to-date", path };
       case "fast-forward":
-        await this.gitOk(path, ["merge", "--ff-only", "--quiet", remote]);
+        await this.git.ok(path, ["merge", "--ff-only", "--quiet", remote]);
         return { kind: "updated", path, commits: behind };
     }
   }

@@ -74,12 +74,6 @@ export class WsCore {
     }
   }
 
-  /** worktree ごとの変更量（ベースブランチから分かれた点と作業ツリーの差）。出せない worktree は null */
-  async changeAmounts(worktrees: string[]) {
-    const amounts = await mapLimit(worktrees, 8, (wt) => this.source.changeAmount(wt).catch(() => null));
-    return Object.fromEntries(worktrees.map((wt, i) => [wt, amounts[i] ?? null]));
-  }
-
   private async siblingWorktreesOf(inspections: PathInspection[]) {
     const repos = [...new Set(inspections.flatMap((i) => (i.commonDir ? [mainRepositoryOf(i.commonDir)] : [])))];
     return (await mapLimit(repos, 16, (repo) => this.source.worktrees(repo))).flat();

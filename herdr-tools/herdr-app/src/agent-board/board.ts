@@ -8,8 +8,6 @@ import { worktreeTags } from "@herdr-tools/utils/worktree-tags";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
 import { sidebarItems, type LiveTerminal, type SidebarItem } from "@herdr-tools/tmux/sidebar-order";
 
-import { WS } from "../shared/ws-list";
-
 export { WS, EMPTY_LIST, parseList } from "../shared/ws-list";
 
 export type BoardAction = "go" | "new" | "resume" | "stop" | "close";
@@ -73,20 +71,20 @@ export function moveSelection(rows: BoardRow[], current: string | null, delta: 1
   return selectable[Math.min(selectable.length - 1, Math.max(0, i + delta))] ?? null;
 }
 
-export function wsCommandFor(row: BoardRow, action: BoardAction): [string, string[]] | null {
+export function wsArgsFor(row: BoardRow, action: BoardAction): string[] | null {
   if (row.kind === "workspace") return null;
-  if (row.kind === "pane") return action === "go" ? [WS, ["go", row.key, "--from-app"]] : null;
+  if (row.kind === "pane") return action === "go" ? ["go", row.key, "--from-app"] : null;
   switch (action) {
     case "go":
-      return [WS, ["go", row.key, "--from-app"]];
+      return ["go", row.key, "--from-app"];
     case "new":
-      return [WS, ["new", row.kind === "worktree" ? row.key : row.worktree, "--attach", "--from-app"]];
+      return ["new", row.kind === "worktree" ? row.key : row.worktree, "--attach", "--from-app"];
     case "resume":
-      return row.kind === "agent" && row.canResume ? [WS, ["resume", row.key]] : null;
+      return row.kind === "agent" && row.canResume ? ["resume", row.key] : null;
     case "stop":
-      return row.kind === "agent" ? [WS, ["stop", row.key]] : null;
+      return row.kind === "agent" ? ["stop", row.key] : null;
     case "close":
-      return row.kind === "worktree" && row.hasSession ? [WS, ["close", row.key]] : null;
+      return row.kind === "worktree" && row.hasSession ? ["close", row.key] : null;
   }
 }
 
@@ -144,5 +142,5 @@ export function keyActionFor(rows: BoardRow[], selected: string | null, keystrok
   const row = rows.find((r) => rowId(r) === selected);
   if (!action || !row) return null;
   const target = action === "close" && row.kind === "agent" ? rows.find((r) => r.kind === "worktree" && r.key === row.worktree) : row;
-  return target && wsCommandFor(target, action) ? { action, row: target } : null;
+  return target && wsArgsFor(target, action) ? { action, row: target } : null;
 }

@@ -1,16 +1,19 @@
-import { View, div, svg, type AsyncContext, type Color, type Context, type Element, type FocusHandle } from "gpui-kit";
+import { View, div, svg, type AsyncContext, type Context, type Element, type FocusHandle } from "gpui-kit";
 import { exec, theme, watchFolder } from "herdr";
-import { BRANCH_COLOR, REPOSITORY_COLOR } from "../shared/colors";
+import { BRANCH_COLOR } from "../shared/colors";
+import { readCurrentTarget } from "../shared/current-target";
 import { relativeTime } from "../shared/relative-time";
-import { ROW_HEIGHT, hunkLink, label, rowBase, type Theme } from "../shared/row-view";
+import { hunkLink, iconButton, label, rowBase, targetHeader, type Theme } from "../shared/row-view";
 import { moveSelection } from "../shared/selection";
-import { resolveTarget, type Target } from "../shared/target";
+import type { Target } from "../shared/target";
 import { TITLE_BAR_HEIGHT } from "../shared/title-bar";
 import { stackTabs } from "../shared/stack-tabs";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import { wsHunkAgainstArgs, wsHunkArgs, wsHunkRangeArgs } from "../shared/ws-hunk";
-import { parseList, WS } from "../shared/ws-list";
-import { BASE_REF_CANDIDATES, READ, branchLabel, commitFiles, compareRef, diffRange, logArgs, mergeBaseArgs, prBaseRef, shortRef, type HistoryRange, localFiles, parseLog, showFilesArgs, sumNumstat, type Commit, type FileChange } from "./git";
+import { execWs } from "../shared/ws-exec";
+import { GIT_READ_ARGS } from "@herdr-tools/utils/git-read-args";
+import { branchLabel, commitFiles, compareRef, diffRange, logArgs, mergeBaseArgs, type HistoryRange, localFiles, parseLog, showFilesArgs, sumNumstat, type Commit, type FileChange } from "./git";
+import { findBaseRef } from "./base-ref";
 import { LOCAL_ID, visibleRows, type Row } from "./rows";
 
 /** 予備の読み直しの間隔（ws list と git log・git status）。結果が前と同じなら再描画しない */
@@ -64,7 +67,7 @@ export default class CommitHistory extends View {
   }
 
   git(root: string, args: string[]) {
-    return exec("git", [...READ, ...args], { cwd: root });
+    return exec("git", [...GIT_READ_ARGS, ...args], { cwd: root });
   }
 
   /** ws list --json で今いるペインの worktree を決め、その git の状態を読む。結果が前と同じなら再描画しない */
@@ -77,11 +80,10 @@ export default class CommitHistory extends View {
     cx.spawn(
       async (cx) => {
         try {
-          const r = await exec(WS, ["list", "--json"]);
-          if (r.code !== 0) this.error = (r.stderr || `ws list: exit ${r.code}`).trim();
-          else {
-            this.error = "";
-            this.followTarget(resolveTarget(parseList(r.stdout), this.target));
+          const current = await readCurrentTarget(this.target);
+          this.error = current.error;
+          if (!current.error) {
+            this.followTarget(current.target);
             if (this.target) await this.readGit(this.target.path, cx);
           }
         } catch (e) {
@@ -130,7 +132,7 @@ export default class CommitHistory extends View {
       this.watchGit(root, this.gitDirs, cx);
     }
     const range = this.range;
-    if (this.baseRef === null) this.baseRef = await this.findBaseRef(root);
+    if (this.baseRef === null) this.baseRef = await findBaseRef((args) => this.git(root, args), (args) => exec("gh", args, { cwd: root }));
     const args = logArgs(range, this.baseRef);
     const [log, head, status] = await Promise.all([
       args ? this.git(root, args) : Promise.resolve({ code: 1, stdout: "", stderr: "" }),
@@ -146,31 +148,6 @@ export default class CommitHistory extends View {
     this.noUpstream = range === "unpushed" && hasHead && log.code !== 0;
     this.local = status.code === 0 ? localFiles(status.stdout, sumNumstat(...numstats.map((n) => n.stdout))) : [];
     if (this.expanded === LOCAL_ID && this.local.length === 0) this.expanded = null;
-  }
-
-  /**
-   * ベースブランチ。今のブランチのプルリクエストがあれば、その base ブランチを使う（gh pr view）。
-   * プルリクエストが無い・gh が使えないときは、origin/HEAD が指すブランチ（origin/main など）、無ければ手元の main、master の順に探す
-   */
-  async findBaseRef(root: string) {
-    const pr = await exec("gh", ["pr", "view", "--json", "baseRefName", "--jq", ".baseRefName"], { cwd: root }).catch(() => null);
-    if (pr && pr.code === 0 && pr.stdout.trim()) {
-      const name = pr.stdout.trim();
-      const [remote, local] = await Promise.all([
-        this.git(root, ["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${name}`]),
-        this.git(root, ["rev-parse", "--verify", "--quiet", `refs/heads/${name}`]),
-      ]);
-      const found = new Set([remote.code === 0 ? `refs/remotes/origin/${name}` : "", local.code === 0 ? `refs/heads/${name}` : ""]);
-      const ref = prBaseRef(name, (r) => found.has(r));
-      if (ref) return ref;
-    }
-    const remoteHead = await this.git(root, ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]);
-    if (remoteHead.code === 0 && remoteHead.stdout.trim()) return shortRef(remoteHead.stdout);
-    for (const ref of BASE_REF_CANDIDATES.slice(1)) {
-      const found = await this.git(root, ["rev-parse", "--verify", "--quiet", ref]);
-      if (found.code === 0) return shortRef(ref);
-    }
-    return null;
   }
 
   /**
@@ -294,12 +271,7 @@ export default class CommitHistory extends View {
     cx.notify();
     cx.spawn(
       async (cx) => {
-        try {
-          const r = await exec(WS, args);
-          this.error = r.code !== 0 ? (r.stderr.trim() || `ws hunk: exit ${r.code}`) : "";
-        } catch (e) {
-          this.error = String((e as Error)?.message ?? e);
-        }
+        this.error = (await execWs(args)).error;
         cx.notify();
       },
       { owner: this },
@@ -367,52 +339,22 @@ export default class CommitHistory extends View {
   }
 
   renderHeader(t: Theme) {
-    const target = this.target!;
-    return div()
-      .flex()
-      .items_center()
-      .gap(8)
-      .min_h(ROW_HEIGHT)
-      .px(4)
-      .overflow_hidden()
-      .whitespace_nowrap()
-      .child(div().font_semibold().text_color(REPOSITORY_COLOR).child(target.workspace))
-      .child(div().text_color(BRANCH_COLOR).child(target.label))
-      .when(target.branch !== null && target.branch !== target.label, (el) => el.child(label(target.branch!, t.muted)))
+    return targetHeader(this.target!, t)
       .child(div().flex_1())
       .when(this.canOpenBranchDiff(), (el) =>
-        el.child(this.branchDiffButton("branch-diff", "diff", `${this.compareLabel()} との差分（コミットだけ）を hunk で開く`, (cx) => this.openBranchDiff(cx), t)),
+        el.child(iconButton("commit-history:branch-diff", "mods/commit-history/diff.svg", `${this.compareLabel()} との差分（コミットだけ）を hunk で開く`, t, (cx) => this.openBranchDiff(cx))),
       )
       .when(this.canOpenBranchDiffWithLocal(), (el) =>
         el.child(
-          this.branchDiffButton("branch-diff-local", "diff-local", `${this.compareLabel()} との差分を、未コミットの変更も含めて hunk で開く`, (cx) => this.openBranchDiffWithLocal(cx), t),
+          iconButton("commit-history:branch-diff-local", "mods/commit-history/diff-local.svg", `${this.compareLabel()} との差分を、未コミットの変更も含めて hunk で開く`, t, (cx) =>
+            this.openBranchDiffWithLocal(cx),
+          ),
         ),
       );
   }
 
   compareLabel() {
     return this.range === "base" && this.baseRef ? branchLabel(this.baseRef) : "上流のブランチ";
-  }
-
-  /** ヘッダーの右端の、ブランチ間の差分を hunk で開くボタン（push 前・ベースからのときだけ） */
-  branchDiffButton(key: string, icon: string, tooltip: string, onClick: (cx: Context) => void, t: Theme) {
-    return div()
-      .id(`commit-history:${key}`)
-      .flex()
-      .flex_none()
-      .items_center()
-      .h(18)
-      .px(4)
-      .rounded(4)
-      .text_color(t.muted)
-      .cursor_pointer()
-      .hover((s) => s.bg(t.hover).text_color(t.foreground))
-      .tooltip(tooltip)
-      .on_click((_e, cx) => {
-        cx.stop_propagation();
-        onClick(cx);
-      })
-      .child(svg(`mods/commit-history/${icon}.svg`).size(12));
   }
 
   renderTitleBar(t: Theme) {
@@ -435,12 +377,13 @@ export default class CommitHistory extends View {
 
   rangeButton(range: HistoryRange, face: { text: string } | { icon: string; tooltip: string }, t: Theme) {
     const active = this.range === range;
+    const tooltip = "icon" in face ? face.tooltip : null;
     return div()
       .id(`commit-history:range:${range}`)
       .flex()
       .items_center()
       .h(18)
-      .px("icon" in face ? 4 : 8)
+      .px(tooltip !== null ? 4 : 8)
       .rounded(4)
       .border_1()
       .border_color(active ? t.border : "#00000000")
@@ -452,8 +395,8 @@ export default class CommitHistory extends View {
         cx.stop_propagation();
         this.switchRange(range, cx);
       })
-      .when("icon" in face, (el) => el.tooltip((face as { tooltip: string }).tooltip).child(svg(`mods/commit-history/${(face as { icon: string }).icon}.svg`).size(12)))
-      .when("text" in face, (el) => el.child((face as { text: string }).text));
+      .when(tooltip !== null, (el) => el.tooltip(tooltip!))
+      .child("icon" in face ? svg(`mods/commit-history/${face.icon}.svg`).size(12) : face.text);
   }
 
   /** 範囲を切り替えたら、開いていたコミットを閉じてすぐ読み直す */

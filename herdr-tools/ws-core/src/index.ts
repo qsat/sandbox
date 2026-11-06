@@ -6,6 +6,8 @@ export * from "./domain/pr-worktree";
 export * from "./ports";
 export * from "./ws-core";
 export { GhqWorkspaceSource } from "./ghq-workspace-source";
+export { GitChangeAmounts } from "./git-change-amounts";
+export { GitCli } from "./git-cli";
 export { PrWorktrees } from "./pr-worktrees";
 export * from "./domain/usage";
 export { HcClient } from "./herdr-core/hc-client";

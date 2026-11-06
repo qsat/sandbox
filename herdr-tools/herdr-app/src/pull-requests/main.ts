@@ -1,15 +1,16 @@
-import { View, div, svg, type AsyncContext, type Context, type Element, type FocusHandle } from "gpui-kit";
+import { View, div, type AsyncContext, type Context, type Element, type FocusHandle } from "gpui-kit";
 import { exec, theme } from "herdr";
-import { BRANCH_COLOR, REPOSITORY_COLOR } from "../shared/colors";
+import { BRANCH_COLOR } from "../shared/colors";
+import { readCurrentTarget } from "../shared/current-target";
 import { relativeTime } from "../shared/relative-time";
-import { ROW_HEIGHT, hunkLink, label, rowBase, type Theme } from "../shared/row-view";
+import { ROW_HEIGHT, hunkLink, iconButton, label, rowBase, targetHeader, type Theme } from "../shared/row-view";
 import { moveSelection } from "../shared/selection";
-import { resolveTarget, type Target } from "../shared/target";
+import type { Target } from "../shared/target";
 import { TITLE_BAR_HEIGHT } from "../shared/title-bar";
 import { stackTabs } from "../shared/stack-tabs";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import { wsHunkPrArgs, wsHunkPrCommitArgs } from "../shared/ws-hunk";
-import { parseList, WS } from "../shared/ws-list";
+import { execWs } from "../shared/ws-exec";
 import { NO_PULL_REQUESTS_MESSAGE, PR_LIST_ARGS, ghFailureMessage, parsePrCommits, parsePrList, prCommitsArgs, type PrCommit, type PullRequest } from "./gh";
 import { visibleRows, type Row } from "./rows";
 import { wsPrArgs } from "./ws-pr";
@@ -78,12 +79,9 @@ export default class PullRequests extends View {
     cx.spawn(
       async (cx) => {
         try {
-          const r = await exec(WS, ["list", "--json"]);
-          if (r.code !== 0) this.error = (r.stderr || `ws list: exit ${r.code}`).trim();
-          else {
-            this.error = "";
-            this.followTarget(resolveTarget(parseList(r.stdout), this.target));
-          }
+          const current = await readCurrentTarget(this.target);
+          this.error = current.error;
+          if (!current.error) this.followTarget(current.target);
         } catch (e) {
           this.error = String((e as Error)?.message ?? e);
         } finally {
@@ -185,8 +183,7 @@ export default class PullRequests extends View {
     cx.spawn(
       async (cx) => {
         try {
-          const r = await exec(WS, await resolveArgs(root));
-          this.error = r.code !== 0 ? (r.stderr.trim() || `ws hunk: exit ${r.code}`) : "";
+          this.error = (await execWs(await resolveArgs(root))).error;
         } catch (e) {
           this.error = String((e as Error)?.message ?? e);
         }
@@ -209,38 +206,13 @@ export default class PullRequests extends View {
     cx.notify();
     cx.spawn(
       async (cx) => {
-        try {
-          const r = await exec(WS, wsPrArgs(root, row.pr.number));
-          this.error = r.code !== 0 ? (r.stderr.trim() || `ws pr: exit ${r.code}`) : "";
-          this.notice = r.code === 0 ? r.stdout.trim() : "";
-        } catch (e) {
-          this.error = String((e as Error)?.message ?? e);
-          this.notice = "";
-        }
+        const r = await execWs(wsPrArgs(root, row.pr.number));
+        this.error = r.error;
+        this.notice = r.ok ? r.stdout.trim() : "";
         cx.notify();
       },
       { owner: this },
     );
-  }
-
-  worktreeButton(row: Extract<Row, { kind: "pr" }>, t: Theme) {
-    return div()
-      .id(`${row.id}:worktree`)
-      .flex()
-      .flex_none()
-      .items_center()
-      .h(18)
-      .px(4)
-      .rounded(4)
-      .text_color(t.muted)
-      .cursor_pointer()
-      .hover((s) => s.bg(t.hover).text_color(t.foreground))
-      .tooltip("このブランチの worktree を用意して移る（無ければ作り、あれば最新にする。エージェントは起動しない）")
-      .on_click((_e, cx) => {
-        cx.stop_propagation();
-        this.preparePrWorktree(row, cx);
-      })
-      .child(svg("mods/pull-requests/worktree.svg").size(12));
   }
 
   /** プルリクエスト全体の差分を hunk で開く（hunk gh pr） */
@@ -293,7 +265,13 @@ export default class PullRequests extends View {
           .child(div().flex_none().text_size(11).text_color(t.muted).child(`${p.headRef} → ${p.baseRef}`))
           .child(div().flex_none().text_size(11).text_color(t.muted).child(p.author || "作者不明"))
           .child(div().flex_none().text_size(11).text_color(t.dim).child(relativeTime(now, p.updatedAt)))
-          .when(!p.crossRepository, (el) => el.child(this.worktreeButton(row, t)));
+          .when(!p.crossRepository, (el) =>
+            el.child(
+              iconButton(`${row.id}:worktree`, "mods/pull-requests/worktree.svg", "このブランチの worktree を用意して移る（無ければ作り、あれば最新にする。エージェントは起動しない）", t, (cx) =>
+                this.preparePrWorktree(row, cx),
+              ),
+            ),
+          );
       }
       case "commit": {
         const c = row.commit;
@@ -310,20 +288,6 @@ export default class PullRequests extends View {
       case "note":
         return div().min_h(ROW_HEIGHT).flex().items_center().pl(24).text_color(t.muted).child(row.text);
     }
-  }
-
-  renderHeader(t: Theme) {
-    const target = this.target!;
-    return div()
-      .flex()
-      .items_center()
-      .gap(8)
-      .min_h(ROW_HEIGHT)
-      .px(4)
-      .overflow_hidden()
-      .whitespace_nowrap()
-      .child(div().font_semibold().text_color(REPOSITORY_COLOR).child(target.workspace))
-      .child(div().text_color(BRANCH_COLOR).child(target.label));
   }
 
   renderTitleBar(t: Theme) {
@@ -354,7 +318,7 @@ export default class PullRequests extends View {
       .when(this.target === null, (el) => el.child(label(this.error || NO_TARGET_MESSAGE, this.error ? t.ansi1 : t.muted)))
       .when(this.target !== null, (el) =>
         el
-          .child(this.renderHeader(t))
+          .child(targetHeader(this.target!, t))
           .child(
             div()
               .id("pull-requests:list")
