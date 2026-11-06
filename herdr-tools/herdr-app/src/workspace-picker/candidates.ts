@@ -11,13 +11,28 @@ export interface Candidate {
   worktree: string;
   /** その worktree で動いているエージェントの数 */
   agents: number;
+  /** workspace のパス（agent-board で畳んだ workspace を開くのに使う） */
+  workspacePath: string;
+  /** agent-board にもう出ている（`ws list --json` に入っている）か */
+  onBoard: boolean;
 }
 
-/** `ws list --json --all` から候補を作る。場所が在る worktree だけ、ws list の並びのまま */
-export function candidates(list: ListedTree): Candidate[] {
-  return list.workspaces.flatMap((ws) =>
-    ws.worktrees.filter((wt) => wt.exists).map((wt) => ({ path: wt.path, workspace: ws.name, worktree: worktreeDisplayName(wt), agents: wt.agents.length })),
+/**
+ * `ws list --json --all`（all）から候補を作る。場所が在る worktree だけ、ws list の並びのまま。
+ * board は agent-board が出している `ws list --json` で、そこにある worktree は onBoard にする
+ */
+export function candidates(all: ListedTree, board: ListedTree): Candidate[] {
+  const shown = new Set(board.workspaces.flatMap((ws) => ws.worktrees.map((wt) => wt.path)));
+  return all.workspaces.flatMap((ws) =>
+    ws.worktrees
+      .filter((wt) => wt.exists)
+      .map((wt) => ({ path: wt.path, workspace: ws.name, worktree: worktreeDisplayName(wt), agents: wt.agents.length, workspacePath: ws.path, onBoard: shown.has(wt.path) })),
   );
+}
+
+/** 選んだ候補ですること。ボードにあれば、その行を選ぶだけ。無ければ claude を起動してボードに出す */
+export function pickAction(c: Candidate): { kind: "reveal"; path: string; workspacePath: string } | { kind: "launch"; args: string[] } {
+  return c.onBoard ? { kind: "reveal", path: c.path, workspacePath: c.workspacePath } : { kind: "launch", args: wsNewArgs(c) };
 }
 
 /**
@@ -64,6 +79,12 @@ export function filterCandidates(items: Candidate[], query: string): Candidate[]
     return [{ c, total, order }];
   });
   return scored.sort((a, b) => a.total - b.total || a.order - b.order).map((x) => x.c);
+}
+
+/** 行に出す workspace の名前。幅を取らないよう、先頭のホスト名（github.com/ など）を省く。絞り込みには元の名前を使う */
+export function shortWorkspace(name: string) {
+  const parts = name.split("/");
+  return parts.length > 2 ? parts.slice(1).join("/") : name;
 }
 
 /** 選んだ行を 1 つ動かす。端では反対の端へ回る */

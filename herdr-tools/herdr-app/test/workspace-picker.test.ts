@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { candidates, filterCandidates, moveCursor, subsequenceSpan, wsNewArgs, type Candidate } from "../src/workspace-picker/candidates";
+import { candidates, filterCandidates, moveCursor, pickAction, shortWorkspace, subsequenceSpan, wsNewArgs, type Candidate } from "../src/workspace-picker/candidates";
+import { readReveal, unfold } from "../src/shared/board-reveal";
 
 const wt = (path: string, branch: string | null, exists = true, agents = 0) =>
   ({ path, branch, exists, isMain: false, tmux: { session: null, panes: [] }, agents: Array.from({ length: agents }, () => ({})) }) as unknown as ListedTree["workspaces"][number]["worktrees"][number];
@@ -13,17 +14,36 @@ const list = {
   ],
 } as unknown as ListedTree;
 
-const c = (workspace: string, worktree: string): Candidate => ({ path: `/${workspace}/${worktree}`, workspace, worktree, agents: 0 });
+/** agent-board が出している一覧（ws list --json）。api の main だけが出ている */
+const board = { usage: {}, workspaces: [{ path: "/g/o/api", name: "github.com/o/api", worktrees: [wt("/g/o/api", "main", true, 1)] }] } as unknown as ListedTree;
+
+const c = (workspace: string, worktree: string, onBoard = false): Candidate => ({ path: `/${workspace}/${worktree}`, workspace, worktree, agents: 0, workspacePath: `/${workspace}`, onBoard });
 const names = (items: Candidate[]) => items.map((x) => `${x.workspace} ${x.worktree}`);
 
 describe("candidates", () => {
-  test("場所が在る worktree を ws list の並びで候補にする。名前はブランチ、無ければフォルダー名", () => {
-    expect(candidates(list)).toEqual([
-      { path: "/g/o/api", workspace: "github.com/o/api", worktree: "main", agents: 1 },
-      { path: "/g/o/api=feat", workspace: "github.com/o/api", worktree: "feat/login", agents: 0 },
-      { path: "/g/o/web", workspace: "github.com/o/web", worktree: "web", agents: 0 },
+  test("場所が在る worktree を ws list の並びで候補にする。名前はブランチ、無ければフォルダー名。ボードにあるものに印", () => {
+    expect(candidates(list, board)).toEqual([
+      { path: "/g/o/api", workspace: "github.com/o/api", worktree: "main", agents: 1, workspacePath: "/g/o/api", onBoard: true },
+      { path: "/g/o/api=feat", workspace: "github.com/o/api", worktree: "feat/login", agents: 0, workspacePath: "/g/o/api", onBoard: false },
+      { path: "/g/o/web", workspace: "github.com/o/web", worktree: "web", agents: 0, workspacePath: "/g/o/web", onBoard: false },
     ]);
   });
+});
+
+describe("pickAction", () => {
+  test("ボードにある worktree は、起動せずにその行を選ぶ", () =>
+    expect(pickAction(c("github.com/o/api", "main", true))).toEqual({ kind: "reveal", path: "/github.com/o/api/main", workspacePath: "/github.com/o/api" }));
+  test("ボードに無い worktree は、claude を起動してボードに出す", () =>
+    expect(pickAction(c("github.com/o/api", "feat"))).toEqual({ kind: "launch", args: ["new", "/github.com/o/api/feat", "--attach", "--from-app"] }));
+});
+
+describe("board-reveal", () => {
+  test("頼みは path と at がそろっているときだけ読む", () => {
+    expect(readReveal({ path: "/g/o/api", at: 5 })).toEqual({ path: "/g/o/api", at: 5 });
+    expect(readReveal({ path: "/g/o/api" })).toBeNull();
+    expect(readReveal(undefined)).toBeNull();
+  });
+  test("頼まれた worktree の workspace を、畳んだ一覧から外す", () => expect(unfold(["/g/o/api", "/g/o/web"], "/g/o/api")).toEqual(["/g/o/web"]));
 });
 
 describe("subsequenceSpan", () => {
@@ -58,4 +78,9 @@ describe("moveCursor", () => {
 describe("wsNewArgs", () => {
   test("agent-board の「＋ claude」と同じく、起動して会話へ移る", () =>
     expect(wsNewArgs(c("github.com/o/api", "main"))).toEqual(["new", "/github.com/o/api/main", "--attach", "--from-app"]));
+});
+
+describe("shortWorkspace", () => {
+  test("先頭のホスト名を省く", () => expect(shortWorkspace("github.com/creal/compass-wiki")).toBe("creal/compass-wiki"));
+  test("区切りが 2 つ未満ならそのまま", () => expect(shortWorkspace("local/repo")).toBe("local/repo"));
 });

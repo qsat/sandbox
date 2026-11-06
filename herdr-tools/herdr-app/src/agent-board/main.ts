@@ -1,6 +1,7 @@
 import { View, div, svg, type AsyncContext, type Color, type Context, type Element, type FocusHandle } from "gpui-kit";
 import { closeOverlay, exec, nextCommand, openOverlay, props, run, setShared, shared, terminals, theme, window } from "herdr";
 import { attentionChanges, attentionMessage, osascriptArgs } from "./attention";
+import { COLLAPSED_KEY, readReveal, REVEAL_KEY } from "../shared/board-reveal";
 import { ROW_HEIGHT, label, type Theme as RowTheme } from "../shared/row-view";
 import { execWs } from "../shared/ws-exec";
 import { BRANCH_COLOR, REPOSITORY_COLOR, SELECTED_BG } from "../shared/colors";
@@ -17,7 +18,6 @@ const LIST_REFRESH_MS = 2000;
 const CHANGES_REFRESH_MS = 10000;
 const CONFIRM_DIALOG_WIDTH = 360;
 const CONFIRM_DIALOG_HEIGHT = 160;
-const COLLAPSED_KEY = "agent-board.collapsed";
 const REPOSITORY_SPACING = ROW_HEIGHT * 0.5;
 const CURRENT_PANE_BG: Color = "#e6ff0014";
 const PIE_SIZE = 12;
@@ -134,9 +134,13 @@ export default class AgentBoard extends View {
   fetchingChanges!: boolean;
   /** エージェントごとの前回の status（macOS の通知を出すかの判断に使う）。null は、まだ一度も見ていない */
   lastStatuses!: Map<string, string> | null;
+  /** workspace-picker からの「この worktree の行を選んで」をこなした印（頼みの時刻） */
+  revealedAt!: number;
 
   init(_props: unknown, cx: AsyncContext) {
     this.lastStatuses = null;
+    // 読み込む前に出ていた頼みは、もうこなしたものとみなす（入れ直すたびに選び直さない）
+    this.revealedAt = readReveal(shared(REVEAL_KEY))?.at ?? 0;
     this.list = EMPTY_LIST;
     this.error = "";
     this.fetching = false;
@@ -476,6 +480,13 @@ export default class AgentBoard extends View {
     // キーボードがボードに無い（ほかのペインへ移った、Herdr app が後ろに回った）なら、j / k の選択（カーソル）を消す。
     // gpui-kit にはフォーカスが外れたイベントが無いので、描くたびに確かめる（2 秒ごとの読み直しでも描き直される）
     if (this.selected !== null && !(this.focus.is_focused() && window().active)) this.selected = null;
+    // workspace-picker が「この worktree の行を選んで」と頼んだら（setShared で全 mod が描き直される）、その行を選び、キーボードをボードに移す
+    const reveal = readReveal(shared(REVEAL_KEY));
+    if (reveal && reveal.at !== this.revealedAt) {
+      this.revealedAt = reveal.at;
+      this.selected = rowId({ kind: "worktree", key: reveal.path } as BoardRow);
+      this.focus.focus();
+    }
     return div()
       .id("agent-board")
       .track_focus(this.focus)
