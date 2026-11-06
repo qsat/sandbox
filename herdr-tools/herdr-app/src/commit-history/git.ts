@@ -31,9 +31,23 @@ export function logArgs(range: HistoryRange, baseRef: string | null = null) {
  * all はブランチ間の比較ではないので null、base はベースブランチが分からなければ null
  */
 export function diffRange(range: HistoryRange, baseRef: string | null = null) {
-  if (range === "unpushed") return "@{upstream}...HEAD";
-  if (range === "base") return baseRef ? `${baseRef}...HEAD` : null;
+  const ref = compareRef(range, baseRef);
+  return ref ? `${ref}...HEAD` : null;
+}
+
+/** 範囲に合わせた、比べる相手のブランチ（push 前なら上流のブランチ、ベースからならベースブランチ）。all と、ベースが分からないときは null */
+export function compareRef(range: HistoryRange, baseRef: string | null = null) {
+  if (range === "unpushed") return "@{upstream}";
+  if (range === "base") return baseRef;
   return null;
+}
+
+/**
+ * 未コミットの変更も含めたブランチの差分の起点（分かれた点のコミット）を求める引数。
+ * 出てきたハッシュと作業ツリーを hunk diff <hash> で比べる（git diff --merge-base <ref> と同じ。hunk は - で始まる引数を受け付けないので先に求める）
+ */
+export function mergeBaseArgs(ref: string) {
+  return ["merge-base", ref, "HEAD"];
 }
 
 /** ベースブランチの候補。上から順に、git rev-parse --verify で在るものを使う */

@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { LOG_ARGS, branchLabel, commitFiles, diffRange, localFiles, logArgs, prBaseRef, parseDecorations, parseLog, parseNameStatus, parseNumstat, parseStatus, shortRef, sumNumstat } from "../src/commit-history/git";
+import { LOG_ARGS, branchLabel, commitFiles, compareRef, diffRange, mergeBaseArgs, localFiles, logArgs, prBaseRef, parseDecorations, parseLog, parseNameStatus, parseNumstat, parseStatus, shortRef, sumNumstat } from "../src/commit-history/git";
 import { relativeTime } from "../src/shared/relative-time";
 import { moveSelection } from "../src/shared/selection";
-import { wsHunkArgs, wsHunkRangeArgs } from "../src/shared/ws-hunk";
+import { wsHunkAgainstArgs, wsHunkArgs, wsHunkRangeArgs } from "../src/shared/ws-hunk";
 
 describe("一覧に出すコミットの範囲", () => {
   test("すべては HEAD からの履歴", () => expect(logArgs("all")).toEqual(LOG_ARGS));
@@ -18,6 +18,14 @@ describe("一覧に出すコミットの範囲", () => {
     expect(diffRange("base", null)).toBeNull();
     expect(diffRange("all", "origin/main")).toBeNull();
     expect(wsHunkRangeArgs("/w", "origin/main...HEAD")).toEqual(["hunk", "/w", "--range", "origin/main...HEAD", "--from-app"]);
+  });
+  test("未コミットも含めるときは、比べる相手から分かれた点を求めて、作業ツリーと比べる", () => {
+    expect(compareRef("unpushed")).toBe("@{upstream}");
+    expect(compareRef("base", "origin/main")).toBe("origin/main");
+    expect(compareRef("base", null)).toBeNull();
+    expect(compareRef("all", "origin/main")).toBeNull();
+    expect(mergeBaseArgs("origin/main")).toEqual(["merge-base", "origin/main", "HEAD"]);
+    expect(wsHunkAgainstArgs("/w", "abc1234")).toEqual(["hunk", "/w", "--against", "abc1234", "--from-app"]);
   });
   test("ref の名前から refs/remotes/ と refs/heads/ を外す", () => {
     expect(shortRef("refs/remotes/origin/main\n")).toBe("origin/main");

@@ -19,6 +19,14 @@ describe("ws hunk の引数", () => {
     expect(() => parseHunkSource({ range: "--output=x...HEAD" })).toThrow("--range");
     expect(() => parseHunkSource({ range: "main...HEAD; rm" })).toThrow("--range");
   });
+  test("--against は 1 つのリビジョンだけ受け付ける", () => {
+    expect(parseHunkSource({ against: "0123456789abcdef0123456789abcdef01234567" }).against).toBe("0123456789abcdef0123456789abcdef01234567");
+    expect(parseHunkSource({ against: "origin/main" }).against).toBe("origin/main");
+    expect(() => parseHunkSource({ against: "main...HEAD" })).toThrow("--against");
+    expect(() => parseHunkSource({ against: "--cached" })).toThrow("--against");
+    expect(() => parseHunkSource({ against: "main; rm" })).toThrow("--against");
+    expect(() => parseHunkSource({ against: "main", range: "a...b" })).toThrow("同時");
+  });
   test("--pr は数字、--gh-commit は 16 進数の sha だけ受け付ける", () => {
     expect(() => parseHunkSource({ pr: "5x" })).toThrow("--pr");
     expect(() => parseHunkSource({ pr: "" })).toThrow("--pr");
@@ -55,6 +63,11 @@ describe("planHunk", () => {
   test("ブランチ間の差分は hunk diff <range>（reload で入れ替えられる）", () => {
     const steps = planHunk({ ...base, commit: undefined, range: "origin/main...HEAD", hunkSessionExists: true, windowExists: true });
     expect(steps[0]).toMatchObject({ op: "hunkReload", args: ["diff", "origin/main...HEAD"] });
+  });
+
+  test("作業ツリーとリビジョンの差分は hunk diff <rev>", () => {
+    const steps = planHunk({ ...base, commit: undefined, against: "abc1234", hunkSessionExists: true, windowExists: true });
+    expect(steps[0]).toMatchObject({ op: "hunkReload", args: ["diff", "abc1234"] });
   });
 
   test("未コミットの変更は hunk diff", () => {

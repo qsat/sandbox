@@ -15,6 +15,8 @@ export interface HunkPlanInput {
   ghCommit?: string;
   /** ブランチ間の差分（`hunk diff <range>`。例: `origin/main...HEAD`）。ghCommit の次に優先する */
   range?: string;
+  /** 作業ツリーと 1 つのリビジョンの差分（`hunk diff <rev>`。未コミット・追跡されていないファイルも含む）。range の次に優先する */
+  against?: string;
   /** 開いたあとに移るファイル（worktree からの相対パス） */
   file?: string;
   /** その worktree の tmux セッション（無ければ作る steps を持つ） */
@@ -26,12 +28,13 @@ export interface HunkPlanInput {
   ctx: GoContext;
 }
 
-type HunkSource = Pick<HunkPlanInput, "commit" | "pr" | "ghCommit" | "range">;
+type HunkSource = Pick<HunkPlanInput, "commit" | "pr" | "ghCommit" | "range" | "against">;
 
-export function hunkArgs({ commit, pr, ghCommit, range }: HunkSource) {
+export function hunkArgs({ commit, pr, ghCommit, range, against }: HunkSource) {
   if (pr) return ["gh", "pr", pr];
   if (ghCommit) return ["gh", "commit", ghCommit];
   if (range) return ["diff", range];
+  if (against) return ["diff", against];
   return commit ? ["show", commit] : ["diff"];
 }
 
@@ -50,17 +53,22 @@ export function githubLaunch(hunkBin: string, args: string[]) {
 /** --range に受け付ける形。`<ref>..<ref>` か `<ref>...<ref>`。ref は git の ref に使える文字だけで、`-` で始まらない（hunk のオプションと取り違えない） */
 const RANGE_PATTERN = /^[\w@{}~^/][\w.@{}~^/-]*?\.\.\.?[\w@{}~^/][\w.@{}~^/-]*$/;
 
+/** --against に受け付ける形。1 つのリビジョン（範囲の `..` を含まない）で、`-` で始まらない */
+const REVISION_PATTERN = /^[\w@{}~^/][\w.@{}~^/-]*$/;
+
 /**
- * `ws hunk` の --commit / --pr / --gh-commit / --range を確かめる。どれか 1 つだけ指定でき、
- * --pr は数字、--gh-commit は 7〜40 桁の 16 進数、--range は `<ref>...<ref>` の形（シェルや hunk の引数として安全な値）に限る
+ * `ws hunk` の --commit / --pr / --gh-commit / --range / --against を確かめる。どれか 1 つだけ指定でき、
+ * --pr は数字、--gh-commit は 7〜40 桁の 16 進数、--range は `<ref>...<ref>` の形、--against は 1 つのリビジョン（シェルや hunk の引数として安全な値）に限る
  */
-export function parseHunkSource(flags: { commit?: string; pr?: string; ghCommit?: string; range?: string }): HunkSource {
-  const given = [flags.commit, flags.pr, flags.ghCommit, flags.range].filter((v) => v !== undefined);
-  if (given.length > 1) throw new Error("--commit、--pr、--gh-commit、--range は同時に指定できません");
+export function parseHunkSource(flags: { commit?: string; pr?: string; ghCommit?: string; range?: string; against?: string }): HunkSource {
+  const given = [flags.commit, flags.pr, flags.ghCommit, flags.range, flags.against].filter((v) => v !== undefined);
+  if (given.length > 1) throw new Error("--commit、--pr、--gh-commit、--range、--against は同時に指定できません");
   if (flags.pr !== undefined && !/^\d+$/.test(flags.pr)) throw new Error(`--pr にはプルリクエストの番号（数字）を指定してください: ${flags.pr}`);
   if (flags.ghCommit !== undefined && !/^[0-9a-fA-F]{7,40}$/.test(flags.ghCommit)) throw new Error(`--gh-commit にはコミットの sha（7〜40 桁の 16 進数）を指定してください: ${flags.ghCommit}`);
   if (flags.range !== undefined && !RANGE_PATTERN.test(flags.range)) throw new Error(`--range には <ref>...<ref> の形を指定してください: ${flags.range}`);
-  return { commit: flags.commit, pr: flags.pr, ghCommit: flags.ghCommit, range: flags.range };
+  if (flags.against !== undefined && (!REVISION_PATTERN.test(flags.against) || flags.against.includes("..")))
+    throw new Error(`--against には 1 つのリビジョン（ハッシュやブランチ名）を指定してください: ${flags.against}`);
+  return { commit: flags.commit, pr: flags.pr, ghCommit: flags.ghCommit, range: flags.range, against: flags.against };
 }
 
 /**
