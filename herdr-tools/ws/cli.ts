@@ -3,7 +3,7 @@
 import { homedir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
 import { expandHome } from "@herdr-tools/utils/expand-home";
-import { agentsInMissingWorktrees, looksLikePath } from "@herdr-tools/ws-core";
+import { agentsInMissingWorktrees, looksLikePath, prWorktreeMessage } from "@herdr-tools/ws-core";
 import { itemId, itemLabel, parseHunkSource, renderText, runPopup, sessionsOfMissingWorktrees, toListJson, usageLine } from "@herdr-tools/tmux";
 import { composeFromEnv } from "./src/compose-from-env";
 
@@ -26,6 +26,8 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
   ws hunk [<worktree>] [--commit <hash> | --pr <number> | --gh-commit <sha> | --range <ref>...<ref> | --against <rev>] [--file <path>] [--client <name> | --from-app]
                                                    差分を hunk で開く。--commit なら hunk show <hash>、--pr なら GitHub のプルリクエスト全体（hunk gh pr）、--gh-commit なら GitHub のコミット（hunk gh commit）、--range ならブランチ間の差分（hunk diff <range>）、--against なら作業ツリーと <rev> の差分（hunk diff <rev>。未コミットも含む）、無ければ未コミットの変更（hunk diff）。--file のファイルへ移る。
                                                    hunk のセッションがあれば中身を入れ替え、無ければ tmux セッションの hunk ウィンドウで起動する（HUNK_BIN で実行ファイルを指定）
+  ws pr <number> [<worktree>] [--no-go] [--client <name> | --from-app]
+                                                   プルリクエストのブランチの worktree を用意する（無ければ本体の横に作り、あれば早送りできるときだけ最新にする。エージェントは起動しない）。そのあと tmux セッションへ移る（--no-go で移らない）
   ws changes [--json] <worktree>...               worktree ごとの変更量（ベースブランチから分かれた点と作業ツリーの差の +/− 行数。未コミット・追跡されていないファイルも含む）
   ws ui [--client <name>]                       tmux popup 用の対話一覧
   ws hook session-start                            Claude Code の SessionStart hook
@@ -91,7 +93,7 @@ async function main(argv: string[]) {
     return 0;
   }
   const p = parseArgs(restArgs);
-  const { core, nav } = composeFromEnv(process.env);
+  const { core, nav, prWorktrees } = composeFromEnv(process.env);
   const goOpts = { client: str(p, "--client"), fromApp: has(p, "--from-app") };
 
   switch (cmd) {
@@ -179,6 +181,14 @@ async function main(argv: string[]) {
       const path = absolutePathFromCwd(p.positional[0] ?? ".");
       const source = parseHunkSource({ commit: str(p, "--commit"), pr: str(p, "--pr"), ghCommit: str(p, "--gh-commit"), range: str(p, "--range"), against: str(p, "--against") });
       await nav.openInHunk(path, { ...source, file: str(p, "--file"), client: str(p, "--client"), fromApp: goOpts.fromApp });
+      return 0;
+    }
+    case "pr": {
+      const number = p.positional[0];
+      if (!number || !/^\d+$/.test(number)) throw new Error("ws pr <number> [<worktree>] [--no-go] [--client <name> | --from-app]");
+      const outcome = await prWorktrees.prepare(absolutePathFromCwd(p.positional[1] ?? "."), Number(number));
+      process.stdout.write(prWorktreeMessage(outcome) + "\n");
+      if (!has(p, "--no-go")) await nav.goRef(outcome.path, goOpts);
       return 0;
     }
     case "changes": {

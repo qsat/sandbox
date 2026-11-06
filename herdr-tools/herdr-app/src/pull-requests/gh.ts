@@ -3,7 +3,7 @@
  * 引数の組み立てと出力の読み取りをここに置き、exec は main.ts だけが呼ぶ。
  */
 
-export const PR_LIST_ARGS = ["pr", "list", "--state", "open", "--limit", "30", "--json", "number,title,author,headRefName,baseRefName,isDraft,updatedAt,url"];
+export const PR_LIST_ARGS = ["pr", "list", "--state", "open", "--limit", "30", "--json", "number,title,author,headRefName,baseRefName,isDraft,isCrossRepository,updatedAt,url"];
 
 /** プルリクエストのコミットの一覧を読む引数 */
 export function prCommitsArgs(number: number) {
@@ -18,6 +18,8 @@ export interface PullRequest {
   headRef: string;
   baseRef: string;
   isDraft: boolean;
+  /** フォークからのプルリクエスト（ブランチが origin に無いので、ws pr で worktree を用意できない） */
+  crossRepository: boolean;
   /** 更新日時（unix 秒） */
   updatedAt: number;
   url: string;
@@ -62,6 +64,7 @@ export function parsePrList(stdout: string): PullRequest[] {
         headRef: str(r.headRefName),
         baseRef: str(r.baseRefName),
         isDraft: r.isDraft === true,
+        crossRepository: r.isCrossRepository === true,
         updatedAt: sec(r.updatedAt),
         url: str(r.url),
       },
