@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { candidates, filterCandidates, moveCursor, pickAction, shortWorkspace, subsequenceSpan, wsNewArgs, type Candidate } from "../src/workspace-picker/candidates";
+import { candidates, filterCandidates, moveCursor, pickAction, shortWorkspace, subsequenceSpan, type Candidate } from "../src/workspace-picker/candidates";
+import { wsNewArgs } from "../src/shared/ws-new";
 import { readReveal, unfold } from "../src/shared/board-reveal";
 
 const wt = (path: string, branch: string | null, exists = true, agents = 0) =>
@@ -77,7 +78,7 @@ describe("moveCursor", () => {
 
 describe("wsNewArgs", () => {
   test("agent-board の「＋ claude」と同じく、起動して会話へ移る", () =>
-    expect(wsNewArgs(c("github.com/o/api", "main"))).toEqual(["new", "/github.com/o/api/main", "--attach", "--from-app"]));
+    expect(wsNewArgs("/g/o/api")).toEqual(["new", "/g/o/api", "--attach", "--from-app"]));
 });
 
 describe("shortWorkspace", () => {

@@ -1,6 +1,7 @@
 import { View, div, svg, type AsyncContext, type Color, type Context, type Element, type FocusHandle } from "gpui-kit";
 import { closeOverlay, exec, home, nextCommand, openOverlay, props, readTextFile, run, setShared, shared, terminals, theme, window, writeTextFile } from "herdr";
-import { agentContext, attentionChanges, attentionMessage, notifyCommands, parseTranscriptTail, transcriptPath } from "./attention";
+import { attentionChanges } from "./notify/attention";
+import { notifyAgent } from "./notify/notifier";
 import { COLLAPSED_KEY, readReveal, REVEAL_KEY } from "../shared/board-reveal";
 import { ROW_HEIGHT, label, type Theme as RowTheme } from "../shared/row-view";
 import { execWs } from "../shared/ws-exec";
@@ -21,10 +22,6 @@ const CONFIRM_DIALOG_HEIGHT = 160;
 const REPOSITORY_SPACING = ROW_HEIGHT * 0.5;
 const CURRENT_PANE_BG: Color = "#e6ff0014";
 const PIE_SIZE = 12;
-/** 最後に出した通知で試したコマンドとその結果（ホームからの相対パス） */
-const NOTIFY_LOG = ".cache/herdr-tools/notify.log";
-/** 通知に書く最後の依頼と返答を探す、会話の記録の末尾の行数 */
-const TRANSCRIPT_TAIL_LINES = 300;
 
 type Theme = RowTheme & Record<"solid" | "solid_foreground" | "popover" | "unknown", Color>;
 
@@ -205,45 +202,8 @@ export default class AgentBoard extends View {
     const { changed, next } = attentionChanges(this.lastStatuses, boardRows(this.list, liveTerminals(), []));
     this.lastStatuses = next;
     if (window().active) return;
-    for (const row of changed) void this.notifyAgent(row);
-  }
-
-  /** 1 つのエージェントの通知を出す。会話の記録の末尾から、最後の依頼と返答の冒頭を読んで書き添える */
-  async notifyAgent(row: AgentRow) {
-    const ctx = agentContext(this.list, row.key);
-    const tail = ctx?.claudeSessionId ? parseTranscriptTail(await this.readTranscriptTail(transcriptPath(home(), ctx.cwd, ctx.claudeSessionId))) : { lastPrompt: null, lastReply: null };
-    await this.postNotification(notifyCommands(attentionMessage(row, ctx, tail), row.key, home()));
-  }
-
-  /** 会話の記録の末尾を読む。記録は数 MB になるので、readTextFile（1 MiB まで）ではなく tail で末尾の行だけを読む。読めなければ空 */
-  async readTranscriptTail(path: string) {
-    try {
-      const r = await exec("tail", ["-n", String(TRANSCRIPT_TAIL_LINES), path]);
-      return r.code === 0 ? r.stdout : "";
-    } catch {
-      return "";
-    }
-  }
-
-  /**
-   * 通知を出すコマンドを順に試し、終了コード 0 で終わったところで止める。
-   * 起動できない（exec が reject する）ときと、通知の許可が無い（terminal-notifier が 0 以外で終わる）ときは次を試す
-   */
-  async postNotification(commands: [string, string[]][]) {
-    const attempts: string[] = [];
-    for (const [command, args] of commands) {
-      try {
-        const r = await exec(command, args);
-        attempts.push(`${command}: exit ${r.code} ${r.stderr.trim()}`.trim());
-        if (r.code === 0) break;
-      } catch (e) {
-        attempts.push(`${command}: 起動できない ${String((e as Error)?.message ?? e)}`);
-      }
-    }
-    // 最後の通知で、どのコマンドを試してどう終わったかを残す（スクリプトエディタから届いたとき、terminal-notifier が失敗した理由を確かめる）
-    const path = `${home()}/${NOTIFY_LOG}`;
-    const text = `${new Date().toISOString()}\n${attempts.join("\n")}\n`;
-    await writeTextFile(path, text, await readTextFile(path)).catch(() => {});
+    const io = { home: home(), exec, readTextFile, writeTextFile };
+    for (const row of changed) void notifyAgent(row, this.list, io);
   }
 
   /** worktree ごとの変更量を ws changes --json で読む。失敗しても一覧は壊さない（前の値のまま） */
@@ -516,20 +476,30 @@ export default class AgentBoard extends View {
       );
   }
 
+  /**
+   * 描く前に、選択（カーソル）を今の状況に合わせる。gpui-kit にはフォーカスが外れたイベントも共有値が変わったイベントも無いので、
+   * 描くたびに確かめる（2 秒ごとの読み直しと、setShared による全 mod の描き直しで呼ばれる）
+   */
+  syncSelection() {
+    // キーボードがボードに無い（ほかのペインへ移った、Herdr app が後ろに回った）なら、j / k の選択を消す
+    if (this.selected !== null && !(this.focus.is_focused() && window().active)) this.selected = null;
+    this.consumeReveal();
+  }
+
+  /** workspace-picker が「この worktree の行を選んで」と頼んでいたら、その行を選び、キーボードをボードに移す。同じ頼みは一度だけこなす */
+  consumeReveal() {
+    const reveal = readReveal(shared(REVEAL_KEY));
+    if (!reveal || reveal.at === this.revealedAt) return;
+    this.revealedAt = reveal.at;
+    this.selected = rowId({ kind: "worktree", key: reveal.path } as BoardRow);
+    this.focus.focus();
+  }
+
   render() {
     const t = theme() as unknown as Theme;
     if (this.confirmRequest) return this.renderConfirmDialog(this.confirmRequest, t);
     const rows = boardRows(this.list, liveTerminals(), collapsedState());
-    // キーボードがボードに無い（ほかのペインへ移った、Herdr app が後ろに回った）なら、j / k の選択（カーソル）を消す。
-    // gpui-kit にはフォーカスが外れたイベントが無いので、描くたびに確かめる（2 秒ごとの読み直しでも描き直される）
-    if (this.selected !== null && !(this.focus.is_focused() && window().active)) this.selected = null;
-    // workspace-picker が「この worktree の行を選んで」と頼んだら（setShared で全 mod が描き直される）、その行を選び、キーボードをボードに移す
-    const reveal = readReveal(shared(REVEAL_KEY));
-    if (reveal && reveal.at !== this.revealedAt) {
-      this.revealedAt = reveal.at;
-      this.selected = rowId({ kind: "worktree", key: reveal.path } as BoardRow);
-      this.focus.focus();
-    }
+    this.syncSelection();
     return div()
       .id("agent-board")
       .track_focus(this.focus)

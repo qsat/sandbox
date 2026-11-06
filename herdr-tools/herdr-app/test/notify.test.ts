@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { agentContext, attentionChanges, attentionMessage, goOnClickCommand, notifyCommands, osascriptArgs, parseTranscriptTail, replyHead, transcriptPath } from "../src/agent-board/attention";
+import { attentionChanges } from "../src/agent-board/notify/attention";
+import { goOnClickCommand, notifyCommands, osascriptArgs } from "../src/agent-board/notify/commands";
+import { agentContext, attentionMessage, replyHead } from "../src/agent-board/notify/message";
+import { NOTIFY_LOG, notifyAgent, postNotification, type NotifyIo } from "../src/agent-board/notify/notifier";
+import { parseTranscriptTail, transcriptPath } from "../src/agent-board/notify/transcript";
 import type { BoardRow } from "../src/agent-board/board";
 
 type AgentRow = Extract<BoardRow, { kind: "agent" }>;
@@ -115,8 +119,9 @@ describe("osascriptArgs", () => {
 
 describe("goOnClickCommand", () => {
   test("ws go <エージェント> --from-app を、ws と tmux が見つかる PATH で実行する", () =>
-    expect(goOnClickCommand("t1f", "/Users/me")).toBe("PATH='/Users/me/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin' ws go 't1f' --from-app"));
+    expect(goOnClickCommand("t1f", "/Users/me")).toBe("PATH=/Users/me/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin ws go t1f --from-app"));
   test("引用符を含む値も 1 語として渡す", () => expect(goOnClickCommand("a'b", "/h")).toContain(`ws go 'a'\\''b' --from-app`));
+  test("ホームに空白があっても PATH は 1 語になる", () => expect(goOnClickCommand("t1f", "/Users/my me")).toStartWith("PATH='/Users/my me/.local/bin:"));
 
   test("シェルで実行すると、ws に渡る引数がエージェントのキーそのものになる", () => {
     const cmd = goOnClickCommand("a'b c", "/h").replace(/ ws go /, " printf '%s\\n' go ");
@@ -133,4 +138,72 @@ describe("notifyCommands", () => {
     expect(cmds[0]![1]).toEqual(["-title", "api (main) が待っています", "-subtitle", "依頼", "-message", "返答", "-group", "herdr-tools.t1f", "-execute", goOnClickCommand("t1f", "/Users/me")]));
   test("本文が [ で始まるときは \\ を前に付ける", () =>
     expect(notifyCommands({ title: "t", subtitle: "s", body: "[main] 返答" }, "t1f", "/h")[0]![1]).toContain("\\[main] 返答"));
+});
+
+/** 偽の I/O。exec はコマンドごとに決めた結果を返し（"reject" なら起動できない）、呼ばれた順と書いたファイルを残す */
+function fakeIo(results: Record<string, { code: number; stdout?: string; stderr?: string } | "reject">) {
+  const calls: { command: string; args: string[] }[] = [];
+  const files: Record<string, string> = {};
+  const io: NotifyIo = {
+    home: "/Users/me",
+    async exec(command, args) {
+      calls.push({ command, args });
+      const r = results[command];
+      if (r === undefined || r === "reject") throw new Error(`${command}: not found`);
+      return { code: r.code, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+    },
+    async readTextFile(path) {
+      return files[path] ?? null;
+    },
+    async writeTextFile(path, text) {
+      files[path] = text;
+      return null;
+    },
+  };
+  return { io, calls, files };
+}
+
+describe("postNotification", () => {
+  const commands: [string, string[]][] = [
+    ["/opt/homebrew/bin/terminal-notifier", ["-title", "t"]],
+    ["terminal-notifier", ["-title", "t"]],
+    ["osascript", ["-e", "x"]],
+  ];
+  const now = new Date("2026-11-06T09:00:00Z");
+
+  test("最初のコマンドが終了コード 0 なら、そこで止める", async () => {
+    const { io, calls } = fakeIo({ "/opt/homebrew/bin/terminal-notifier": { code: 0 } });
+    expect(await postNotification(commands, io, now)).toEqual(["/opt/homebrew/bin/terminal-notifier: exit 0"]);
+    expect(calls.map((c) => c.command)).toEqual(["/opt/homebrew/bin/terminal-notifier"]);
+  });
+
+  test("通知の許可が無く 0 以外で終わったら、次のコマンドを試す", async () => {
+    const { io, calls } = fakeIo({ "/opt/homebrew/bin/terminal-notifier": { code: 3, stderr: "not allowed" }, "terminal-notifier": { code: 3 }, osascript: { code: 0 } });
+    await postNotification(commands, io, now);
+    expect(calls.map((c) => c.command)).toEqual(["/opt/homebrew/bin/terminal-notifier", "terminal-notifier", "osascript"]);
+  });
+
+  test("起動できないコマンドは飛ばし、試した結果をログに残す", async () => {
+    const { io, files } = fakeIo({ "/opt/homebrew/bin/terminal-notifier": "reject", "terminal-notifier": "reject", osascript: { code: 0 } });
+    await postNotification(commands, io, now);
+    expect(files[`/Users/me/${NOTIFY_LOG}`]).toBe(
+      "2026-11-06T09:00:00.000Z\n/opt/homebrew/bin/terminal-notifier: 起動できない /opt/homebrew/bin/terminal-notifier: not found\nterminal-notifier: 起動できない terminal-notifier: not found\nosascript: exit 0\n",
+    );
+  });
+});
+
+describe("notifyAgent", () => {
+  test("会話の記録の末尾を tail で読み、依頼と返答を書いた通知を terminal-notifier で出す", async () => {
+    const transcript = [JSON.stringify({ type: "last-prompt", lastPrompt: "落ちた ID の原因を教えて" }), JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "5 個が通った。" }] } })].join("\n");
+    const { io, calls } = fakeIo({ tail: { code: 0, stdout: transcript }, "/opt/homebrew/bin/terminal-notifier": { code: 0 } });
+    await notifyAgent(agentRow("t1g", "done"), list, io);
+    expect(calls[0]).toEqual({ command: "tail", args: ["-n", "300", transcriptPath("/Users/me", "/g/creal/compass-wiki=e2e", "s-1")] });
+    expect(calls[1]!.args.slice(0, 6)).toEqual(["-title", "compass-wiki (e2e-package) が終わりました", "-subtitle", "落ちた ID の原因を教えて", "-message", "5 個が通った。"]);
+  });
+
+  test("会話の記録が読めなければ、エージェントの名前で埋めて出す", async () => {
+    const { io, calls } = fakeIo({ tail: "reject", "/opt/homebrew/bin/terminal-notifier": { code: 0 } });
+    await notifyAgent(agentRow("t1g", "done", "t1g x"), list, io);
+    expect(calls[1]!.args.slice(2, 6)).toEqual(["-subtitle", "t1g x", "-message", "t1g x"]);
+  });
 });

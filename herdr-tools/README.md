@@ -27,6 +27,7 @@ herdr-tools/
 │   └── herdr-core/               AgentRuntime の実装（hc-terminal: schema/hc.openrpc.json の Terminal、hc-client: JSON-RPC、herdr-runtime: 翻訳）
 ├── tmux/src/                     クライアント: tmux でエージェントへ移動し、会話する
 │   ├── facts.ts                  tmux のセッション・ペイン・クライアント
+│   ├── current-pane.ts           今いるペイン（最後に操作したクライアントが見ているペイン）の判定。I/O なし
 │   ├── tmux-index.ts             木の worktree → セッション、エージェント → 会話ペイン
 │   ├── plans/                    go（ws go の判断フロー）/ panes / prune / hunk（ws hunk の計画）。I/O なし
 │   ├── navigator.ts              計画を TmuxServer と WsCore で実行する
@@ -36,12 +37,13 @@ herdr-tools/
 │   ├── step-state.ts             ws step が読み書くファイル（畳んだ workspace、最後に移った行の記録）
 │   └── ui/                       rows（一覧の行）/ popup（ws ui）/ keys
 ├── herdr-app/                    クライアント: Herdr app の mod（ws を exec するだけ）
-│   ├── src/agent-board/          board.ts（行と ws の呼び出し）/ main.ts（Herdr app の API）
+│   ├── src/agent-board/          board.ts（行と ws の呼び出し）/ main.ts（Herdr app の API）/ notify/（エージェントが blocked・done に変わったときの macOS の通知。attention.ts（通知するかの判断）/ transcript.ts（Claude Code の会話の記録の場所と解析）/ message.ts（通知の文面）/ commands.ts（terminal-notifier と osascript の引数）/ notifier.ts（記録を読み、コマンドを順に試し、ログを書く。I/O は引数で受ける））
+│   ├── src/workspace-picker/     ghq の worktree を絞り込んで選ぶ popup の mod。candidates.ts（候補・絞り込み・選んだときにすること。I/O なし）/ main.ts（Herdr app の API）
 │   ├── src/commit-history/       コミット履歴の mod。git.ts（git の出力の読み取り）/ base-ref.ts（ベースブランチを探す）/ rows.ts（行の並びと選択）/ main.ts（Herdr app の API）
 │   ├── src/pull-requests/        プルリクエストの mod。gh.ts（gh の出力の読み取りと失敗の文）/ rows.ts（行の並び）/ main.ts（Herdr app の API）
-│   ├── src/shared/               mod で共通の処理: ws-exec.ts（ws の呼び出しと失敗の文）/ current-target.ts（ws list から今いるペインの worktree を読む）/ ws-list.ts（ws list --json の読み取り）/ target.ts（今いるペインの worktree）/ ws-hunk.ts（ws hunk の引数）/ relative-time.ts / selection.ts（j・k の選択）/ row-view.ts（行の見た目・アイコンボタン・worktree の見出し）/ tmux-focus.ts（tmux のペインの変化の見張り）/ colors.ts / title-bar.ts
+│   ├── src/shared/               mod で共通の処理: ws-exec.ts（ws の呼び出しと失敗の文）/ current-target.ts（ws list から今いるペインの worktree を読む）/ ws-list.ts（ws list --json の読み取り）/ target.ts（今いるペインの worktree）/ ws-hunk.ts（ws hunk の引数）/ ws-new.ts（ws new の引数）/ board-reveal.ts（agent-board と workspace-picker が共有値でやりとりする名前と形）/ relative-time.ts / selection.ts（j・k の選択）/ row-view.ts（行の見た目・アイコンボタン・worktree の見出し）/ tmux-focus.ts（tmux のペインの変化の見張り）/ colors.ts / title-bar.ts
 │   ├── sync-types.sh, tsconfig.json   Herdr app が生成した型（types/、gitignore）で mod の main.ts を検査する
-│   ├── mod/agent-board/mod.json, mod/commit-history/mod.json, mod/pull-requests/mod.json, layouts/agents.json
+│   ├── mod/agent-board/mod.json, mod/commit-history/mod.json, mod/pull-requests/mod.json, mod/workspace-picker/mod.json, layouts/agents.json
 └── ws/                           CLI。cli.ts と compose-from-env.ts で全部をつなぐ
 ```
 
@@ -61,7 +63,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 2. Herdr app（herdr-core を含む）を入れ、シェルで `hc ls` が動くことを確認する
 3. `./install.sh`（`--dry-run` で内容だけ確認できる）
    - `ws` をビルドして `~/.local/bin/ws` に置く（`bun build --compile` の単一バイナリ）
-   - mod 3 つ（agent-board・commit-history・pull-requests）をバンドル（`dist/mods/<mod>/`）して `~/.config/herdr-app/mods/<mod>/` に、レイアウトを `~/.config/herdr-app/layouts/agents.json` に置く（上半分に agent-board、下半分の stack（id `lower`）に commit-history と pull-requests を重ねる。2 つは各 mod の題名の帯のタブ「Commits」「Pull requests」で切り替える。Herdr app の stack の帯は番号しか出さないので使わない。既にある `agents.json` は上書きしないので、前の形のままなら `herdr-app/layouts/agents.json` を手で写す）
+   - mod 4 つ（agent-board・commit-history・pull-requests・workspace-picker）をバンドル（`dist/mods/<mod>/`）して `~/.config/herdr-app/mods/<mod>/` に、レイアウトを `~/.config/herdr-app/layouts/agents.json` に置く（上半分に agent-board、下半分の stack（id `lower`）に commit-history と pull-requests を重ねる。2 つは各 mod の題名の帯のタブ「Commits」「Pull requests」で切り替える。Herdr app の stack の帯は番号しか出さないので使わない。既にある `agents.json` は上書きしないので、前の形のままなら `herdr-app/layouts/agents.json` を手で写す）
    - `herdr-app` があれば `herdr-app check` を通す
 4. `ws/config/claude-settings.json` の SessionStart hook と statusLine を `~/.claude/settings.json` に足す
 5. `tmux/config/tmux.conf` のキー（`prefix a` 一覧を枠線なしの popup で開く、`prefix A` 全ペイン表示、`prefix b` で次のエージェントへ巡回、`prefix B` で後ろへ巡回、`M-B` / `M-W` で prefix 無しの巡回）を `~/.tmux.conf` に足す
@@ -430,7 +432,7 @@ bun install
 bun test            # utils / ws-core（herdr-core の翻訳を含む）/ tmux / mod / アーキテクチャの検査
 bun run typecheck   # 全体と mod（typecheck:mod。Herdr app を一度起動して生成された型が要る）
 bun run e2e         # 偽の herdr-core（ws-core/test/fake-hc）と実際の tmux（専用ソケット）で全コマンドを通す。E2E_KEEP_TMP=1 で後片付けしない
-bun run build       # dist/ws（単一バイナリ）と dist/mods/（バンドルした mod 3 つ）
+bun run build       # dist/ws（単一バイナリ）と dist/mods/（バンドルした mod 4 つ）
 bun run build:mod   # mod だけ
 ```
 

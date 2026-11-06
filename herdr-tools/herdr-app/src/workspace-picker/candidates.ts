@@ -1,5 +1,6 @@
 import { worktreeDisplayName } from "@herdr-tools/utils/worktree-display-name";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
+import { wsNewArgs } from "../shared/ws-new";
 
 /** picker の候補 1 つ。claude を起動する先の worktree */
 export interface Candidate {
@@ -32,7 +33,7 @@ export function candidates(all: ListedTree, board: ListedTree): Candidate[] {
 
 /** 選んだ候補ですること。ボードにあれば、その行を選ぶだけ。無ければ claude を起動してボードに出す */
 export function pickAction(c: Candidate): { kind: "reveal"; path: string; workspacePath: string } | { kind: "launch"; args: string[] } {
-  return c.onBoard ? { kind: "reveal", path: c.path, workspacePath: c.workspacePath } : { kind: "launch", args: wsNewArgs(c) };
+  return c.onBoard ? { kind: "reveal", path: c.path, workspacePath: c.workspacePath } : { kind: "launch", args: wsNewArgs(c.path) };
 }
 
 /**
@@ -87,13 +88,11 @@ export function shortWorkspace(name: string) {
   return parts.length > 2 ? parts.slice(1).join("/") : name;
 }
 
-/** 選んだ行を 1 つ動かす。端では反対の端へ回る */
+/**
+ * 選んだ行を 1 つ動かす。端では反対の端へ回る（fzf と同じ）。
+ * shared/selection.ts の moveSelection（行の id で選び、端で止まる）とは、添字で選ぶことと端の扱いが違う
+ */
 export function moveCursor(at: number, length: number, delta: 1 | -1) {
   if (length === 0) return 0;
   return (at + delta + length) % length;
-}
-
-/** 選んだ候補で claude を起動する ws の引数。agent-board の「＋ claude」と同じく、起動して会話へ移る */
-export function wsNewArgs(c: Candidate) {
-  return ["new", c.path, "--attach", "--from-app"];
 }
