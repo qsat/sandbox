@@ -4,13 +4,13 @@ import type { Theme } from "./row-view";
 /** mod の下端のフッターの高さ */
 export const FOOTER_HEIGHT = 30;
 
-/** mod の下端のフッター。commit-history の範囲のボタンと worktree-changes の表示の切り替えのボタンを、右の子として並べる */
+/** mod の下端のフッター。commit-history と worktree-changes の範囲のボタンを、子として並べる */
 export function footerBar(t: Theme) {
   return div().flex().flex_none().items_center().gap(4).h(FOOTER_HEIGHT).px(10).border_t(1).border_color(t.border);
 }
 
 /**
- * フッターの切り替えのボタン。選んでいるボタンは背景と枠を付ける。
+ * 切り替えのボタン（フッターの範囲のボタンと、worktree-changes の本文の上の表示のボタン）。選んでいるボタンは背景と枠を付ける。
  * face は文字か、アイコン（mod の中の svg のパス `mods/<mod>/<name>.svg`）とツールチップ
  */
 export function footerButton(id: string, face: { text: string } | { icon: string; tooltip: string }, active: boolean, t: Theme, onClick: (cx: Context) => void) {

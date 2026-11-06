@@ -3,6 +3,20 @@ import type { FileChange } from "../shared/local-changes";
 /** 表示の仕方。tree はフォルダーごとにまとめ、flat はパスの一覧 */
 export type ViewMode = "tree" | "flat";
 
+/**
+ * 出す変更の範囲。
+ * head は作業ツリーと HEAD の差（未コミット）、unpushed は上流のブランチと作業ツリーの差（push 前のコミットと未コミット）、
+ * base はベースブランチから分かれた点と作業ツリーの差
+ */
+export type ChangeRange = "head" | "unpushed" | "base";
+
+/** 変更が 0 個のときに出す文言。上流のブランチ・ベースブランチが無いときは、その旨を出す */
+export function emptyMessage(range: ChangeRange, noCompare: boolean, baseLabel: string | null) {
+  if (range === "unpushed") return noCompare ? "No upstream branch" : "No unpushed changes";
+  if (range === "base") return noCompare ? "No base branch" : `No changes since ${baseLabel ?? "base"}`;
+  return "No changes";
+}
+
 export type Row =
   | { kind: "dir"; id: string; path: string; name: string; depth: number; open: boolean; count: number }
   | { kind: "file"; id: string; file: FileChange; name: string; depth: number };

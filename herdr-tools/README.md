@@ -40,7 +40,7 @@ herdr-tools/
 │   ├── src/agent-board/          board.ts（行と ws の呼び出し）/ main.ts（Herdr app の API）/ notify/（エージェントが blocked・done に変わったときの macOS の通知。attention.ts（通知するかの判断）/ transcript.ts（Claude Code の会話の記録の場所と解析）/ message.ts（通知の文面）/ commands.ts（terminal-notifier と osascript の引数）/ notifier.ts（記録を読み、コマンドを順に試し、ログを書く。I/O は引数で受ける））
 │   ├── src/workspace-picker/     ghq の worktree を絞り込んで選ぶ popup の mod。candidates.ts（候補・絞り込み・選んだときにすること。I/O なし）/ main.ts（Herdr app の API）
 │   ├── src/commit-history/       コミット履歴の mod。git.ts（git の出力の読み取り）/ base-ref.ts（ベースブランチを探す）/ rows.ts（行の並びと選択）/ main.ts（Herdr app の API）
-│   ├── src/worktree-changes/     未コミットの変更の mod。rows.ts（ツリー・フラットの行の並び）/ main.ts（Herdr app の API）
+│   ├── src/worktree-changes/     変更ファイルの mod。rows.ts（ツリー・フラットの行の並び、範囲の型、空のときの文言）/ main.ts（Herdr app の API）
 │   ├── src/pull-requests/        プルリクエストの mod。gh.ts（gh の出力の読み取りと失敗の文）/ rows.ts（行の並び）/ main.ts（Herdr app の API）
 │   ├── src/shared/               mod で共通の処理: ws-exec.ts（ws の呼び出しと失敗の文）/ current-target.ts（ws list から今いるペインの worktree を読む）/ ws-list.ts（ws list --json の読み取り）/ target.ts（今いるペインの worktree）/ ws-hunk.ts（ws hunk の引数）/ ws-edit.ts（ws edit の引数）/ local-changes.ts（未コミットの変更の読み取り）/ footer-bar.ts（下端のフッターと切り替えのボタン）/ ws-new.ts（ws new の引数）/ board-reveal.ts（agent-board と workspace-picker が共有値でやりとりする名前と形）/ relative-time.ts / selection.ts（j・k の選択）/ row-view.ts（行の見た目・アイコンボタン・worktree の見出し）/ tmux-focus.ts（tmux のペインの変化の見張り）/ colors.ts / title-bar.ts
 │   ├── sync-types.sh, tsconfig.json   Herdr app が生成した型（types/、gitignore）で mod の main.ts を検査する
@@ -246,10 +246,20 @@ tmux で今いるペインの worktree のコミット履歴を出す。Herdr ap
 
 ### Herdr app の mod `worktree-changes`
 
-下半分の stack の最初のタブ「Changes」。`commit-history` の「未コミットの変更」と同じ中身（`git status` の追跡していないファイルを含む。各ファイルの +/−）を、tmux で今いるペインの worktree について出す。読み取りは `shared/local-changes.ts` を `commit-history` と共有する。
+下半分の stack の最初のタブ「Changes」。tmux で今いるペインの worktree の変更ファイル（各ファイルの +/−）を、選んだ範囲で出す。読み取りは `shared/local-changes.ts`、ベースブランチの決定は `shared/base-ref.ts` を `commit-history` と共有する。
 
-- 題名の帯: 左端にタブ、右端にファイルの数（`12 files`）。下端のフッターの Tree / Flat で表示を切り替える（ツリーはフォルダーごとにまとめ、フォルダーの行で開閉する）
-- ファイルの行を押す（または `j` / `k` で選んで `Enter`）と、`ws edit` で $EDITOR で開く
+- 題名の帯: 左端にタブ、右端に選んでいる範囲のファイルの数（`12 files`）
+- 本文の一番上の行: Tree / Flat の切り替え（ツリーはフォルダーごとにまとめ、フォルダーの行で開閉する）。その下のリポジトリ名の行の右端に、ツリー表示でファイルがあるとき「すべて開く」「すべて閉じる」のアイコンボタン
+- 下端のフッター: 範囲のボタン 3 つ
+
+| 範囲 | 出すもの | git |
+| --- | --- | --- |
+| 未コミット（既定） | 作業ツリーと HEAD の差。追跡していないファイルを含む | `git status`（追跡していないファイルも）+ `git diff HEAD --numstat` |
+| push 前 | 上流のブランチ（`@{upstream}`）から分かれた点と作業ツリーの差（push していないコミットと未コミットの両方）。追跡していないファイルを含む。上流が無ければ「No upstream branch」 | `git merge-base @{upstream} HEAD` で求めたハッシュに対し `git diff <hash> --name-status -z -M` と `--numstat -z -M`、追跡していないファイルは `git status` の `?` |
+| ベースから | ベースブランチ（`commit-history` と同じ決め方。ボタンにはブランチ名）から分かれた点と作業ツリーの差。追跡していないファイルを含む。分からなければ「No base branch」 | 同上（`<ref>` がベースブランチ） |
+
+- 範囲を切り替えたらすぐ読み直す。ベースブランチは「ベースから」を選ぶたびに調べ直す
+- ファイルの行を押す（または `j` / `k` で選んで `Enter`）と、`ws edit` で $EDITOR で開く。削除されたファイル（D）は作業ツリーに無いので開かず、「削除されたファイルは開けない」と出す
 - 読み直しは数秒ごとと、tmux のペインの変化の見張り
 
 ### Herdr app の mod `pull-requests`

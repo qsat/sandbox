@@ -2,16 +2,17 @@ import { View, div, type AsyncContext, type Context, type FocusHandle } from "gp
 import { exec, theme } from "herdr";
 import { readCurrentTarget } from "../shared/current-target";
 import { footerBar, footerButton } from "../shared/footer-bar";
-import { HEAD_ARGS, readLocalFiles, type FileChange } from "../shared/local-changes";
+import { branchLabel, compareRef, findBaseRef } from "../shared/base-ref";
+import { HEAD_ARGS, readLocalFiles, readRangeFiles, type FileChange } from "../shared/local-changes";
 import { iconButton, label, rowBase, statusColor, targetHeader, type Theme } from "../shared/row-view";
 import { moveSelection } from "../shared/selection";
 import { stackTitleBar } from "../shared/stack-tabs";
 import type { Target } from "../shared/target";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import { execWs } from "../shared/ws-exec";
-import { wsEditArgs } from "../shared/ws-edit";
+import { editBlockedReason, wsEditArgs } from "../shared/ws-edit";
 import { GIT_READ_ARGS } from "@herdr-tools/utils/git-read-args";
-import { changeRows, dirPaths, type Row, type ViewMode } from "./rows";
+import { changeRows, dirPaths, emptyMessage, type ChangeRange, type Row, type ViewMode } from "./rows";
 
 /** 予備の読み直しの間隔（ws list と git status）。結果が前と同じなら再描画しない */
 const REFRESH_MS = 5000;
@@ -23,6 +24,11 @@ export default class WorktreeChanges extends View {
   target!: Target | null;
   files!: FileChange[];
   mode!: ViewMode;
+  range!: ChangeRange;
+  /** ベースブランチ（origin/main など）。まだ調べていなければ null */
+  baseRef!: string | null;
+  /** 範囲 unpushed・base で、比べる相手のブランチが無い（上流のブランチ・ベースブランチが無い） */
+  noCompare!: boolean;
   /** 閉じているフォルダーのパス */
   collapsed!: Set<string>;
   selected!: string | null;
@@ -36,6 +42,9 @@ export default class WorktreeChanges extends View {
     this.target = null;
     this.files = [];
     this.mode = "tree";
+    this.range = "head";
+    this.baseRef = null;
+    this.noCompare = false;
     this.collapsed = new Set();
     this.selected = null;
     this.error = "";
@@ -74,7 +83,7 @@ export default class WorktreeChanges extends View {
         } finally {
           this.fetching = false;
         }
-        const snapshot = JSON.stringify([this.target, this.error, this.mode, this.files, [...this.collapsed]]);
+        const snapshot = JSON.stringify([this.target, this.error, this.mode, this.range, this.baseRef, this.noCompare, this.files, [...this.collapsed]]);
         if (snapshot !== this.snapshot) {
           this.snapshot = snapshot;
           cx.notify();
@@ -92,6 +101,8 @@ export default class WorktreeChanges extends View {
   followTarget(next: Target | null) {
     if (next?.path !== this.target?.path) {
       this.files = [];
+      this.baseRef = null;
+      this.noCompare = false;
       this.collapsed = new Set();
       this.selected = null;
     }
@@ -100,13 +111,24 @@ export default class WorktreeChanges extends View {
 
   async readFiles(root: string) {
     const git = (args: string[]) => this.git(root, args);
+    const range = this.range;
     const head = await git(HEAD_ARGS);
-    if (head.code !== 0 && (await git(["rev-parse", "--git-dir"])).code !== 0) {
+    const hasHead = head.code === 0;
+    if (!hasHead && (await git(["rev-parse", "--git-dir"])).code !== 0) {
       this.error = "Not a git repository";
       return;
     }
-    const files = await readLocalFiles(git, head.code === 0);
-    if (this.target?.path === root) this.files = files;
+    let files: FileChange[] | null;
+    if (range === "head") {
+      files = await readLocalFiles(git, hasHead);
+    } else {
+      if (range === "base" && this.baseRef === null) this.baseRef = await findBaseRef(git, (args) => exec("gh", args, { cwd: root }));
+      const ref = compareRef(range, this.baseRef);
+      files = hasHead && ref ? await readRangeFiles(git, ref) : null;
+    }
+    if (this.target?.path !== root || this.range !== range) return;
+    this.noCompare = files === null;
+    this.files = files ?? [];
   }
 
   /** ファイルを $EDITOR で開く（`ws edit`。tmux の新しいウィンドウで起動し、クライアントをそこへ移す） */
@@ -114,6 +136,12 @@ export default class WorktreeChanges extends View {
     const root = this.target?.path;
     if (!root) return;
     this.selected = row.id;
+    const blocked = editBlockedReason(row.file);
+    if (blocked) {
+      this.error = blocked;
+      cx.notify();
+      return;
+    }
     cx.notify();
     cx.spawn(
       async (cx) => {
@@ -153,10 +181,35 @@ export default class WorktreeChanges extends View {
       );
   }
 
+  /** 本文の一番上の行。表示を「ツリー」と「フラット」で切り替えるボタンを置く */
+  renderModeBar(t: Theme) {
+    return div()
+      .flex()
+      .flex_none()
+      .items_center()
+      .gap(4)
+      .px(4)
+      .pb(4)
+      .child(footerButton("worktree-changes:mode:tree", { text: "Tree" }, this.mode === "tree", t, (cx) => this.switchMode("tree", cx)))
+      .child(footerButton("worktree-changes:mode:flat", { text: "Flat" }, this.mode === "flat", t, (cx) => this.switchMode("flat", cx)));
+  }
+
   switchMode(mode: ViewMode, cx: Context) {
     if (this.mode === mode) return;
     this.mode = mode;
     cx.notify();
+  }
+
+  /** 範囲を切り替えたら、前の範囲の表示を捨ててすぐ読み直す（ベースブランチは選ぶたびに調べ直す。mod を開いた後に作ったプルリクエストの base も拾う） */
+  switchRange(range: ChangeRange, cx: Context) {
+    if (this.range === range) return;
+    this.range = range;
+    this.files = [];
+    this.noCompare = false;
+    this.error = "";
+    if (range === "base") this.baseRef = null;
+    cx.notify();
+    this.refresh(cx);
   }
 
   act(row: Row, cx: Context) {
@@ -197,11 +250,16 @@ export default class WorktreeChanges extends View {
       .when(!f.binary && f.del > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.ansi1).child(`−${f.del}`)));
   }
 
-  /** 下端のフッター。表示を「ツリー」と「フラット」で切り替えるボタンを置く */
+  /** 下端のフッター。出す変更の範囲（未コミット・push 前・ベースから）を切り替えるボタンを置く */
   renderFooter(t: Theme) {
     return footerBar(t)
-      .child(footerButton("worktree-changes:mode:tree", { text: "Tree" }, this.mode === "tree", t, (cx) => this.switchMode("tree", cx)))
-      .child(footerButton("worktree-changes:mode:flat", { text: "Flat" }, this.mode === "flat", t, (cx) => this.switchMode("flat", cx)));
+      .child(this.rangeButton("head", "未コミット", t))
+      .child(this.rangeButton("unpushed", "push 前", t))
+      .child(this.rangeButton("base", this.baseRef ? branchLabel(this.baseRef) : "base", t));
+  }
+
+  rangeButton(range: ChangeRange, text: string, t: Theme) {
+    return footerButton(`worktree-changes:range:${range}`, { text }, this.range === range, t, (cx) => this.switchRange(range, cx));
   }
 
   render() {
@@ -216,6 +274,7 @@ export default class WorktreeChanges extends View {
       .when(this.target === null, (el) => el.child(label(this.error || NO_TARGET_MESSAGE, this.error ? t.ansi1 : t.muted)))
       .when(this.target !== null, (el) =>
         el
+          .child(this.renderModeBar(t))
           .child(this.renderHeader(t))
           .child(
             div()
@@ -223,7 +282,7 @@ export default class WorktreeChanges extends View {
               .flex_1()
               .min_h(0)
               .overflow_y_scrollbar()
-              .when(this.files.length === 0 && this.error === "", (el) => el.child(label("No changes", t.muted)))
+              .when(this.files.length === 0 && this.error === "", (el) => el.child(label(emptyMessage(this.range, this.noCompare, this.baseRef ? branchLabel(this.baseRef) : null), t.muted)))
               .children(rows.map((r) => this.renderRow(r, t))),
           )
           .when(this.error !== "", (el) => el.child(label(this.error, t.ansi1))),
