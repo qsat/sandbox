@@ -26,7 +26,7 @@ type Theme = RowTheme & Record<"solid" | "solid_foreground" | "popover" | "unkno
 type AgentRow = Extract<BoardRow, { kind: "agent" }>;
 type WorktreeRow = Extract<BoardRow, { kind: "worktree" }>;
 
-type ButtonLook = "secondary" | "outline" | "primary" | "quiet" | "alert" | "danger";
+type ButtonLook = "secondary" | "outline" | "primary" | "quiet" | "plain" | "alert" | "danger";
 
 interface ConfirmRequest {
   title: string;
@@ -87,6 +87,8 @@ function styled(el: Element, look: ButtonLook, t: Theme) {
       return el.bg(t.raised).text_color(t.foreground).hover((s) => s.bg(t.hover));
     case "quiet":
       return el.text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.ansi1));
+    case "plain":
+      return el.text_color(t.foreground).hover((s) => s.bg(t.hover));
     case "outline":
       return el.h(ROW_HEIGHT - 4).text_size(11).border_1().border_color(t.dim).text_color(t.foreground).hover((s) => s.bg(t.hover));
     case "alert":
@@ -328,7 +330,7 @@ export default class AgentBoard extends View {
           .child(this.info([div().child(row.label), label(row.icon, color), ...(row.status ? [label(row.status, color)] : []), ...this.contextPie(row, t), this.tags(row.tags, t)]))
           .when(row.canResume, (el) =>
             el.child(
-              button({ id: `resume:${row.key}`, icon: "play", tooltip: "再開: claude --resume で会話を再開する（R）", look: "primary" }, t, (cx) =>
+              button({ id: `resume:${row.key}`, icon: "play", tooltip: "再開: claude --resume で会話を再開する（R）", look: "plain" }, t, (cx) =>
                 this.runRow(row, "resume", cx),
               ),
             ),
