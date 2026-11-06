@@ -1,6 +1,6 @@
 import { View, div, svg, type AsyncContext, type Color, type Context, type Element, type FocusHandle } from "gpui-kit";
-import { closeOverlay, exec, nextCommand, openOverlay, props, run, setShared, shared, terminals, theme, window } from "herdr";
-import { attentionChanges, attentionMessage, osascriptArgs } from "./attention";
+import { closeOverlay, exec, home, nextCommand, openOverlay, props, readTextFile, run, setShared, shared, terminals, theme, window, writeTextFile } from "herdr";
+import { agentContext, attentionChanges, attentionMessage, notifyCommands, parseTranscriptTail, transcriptPath } from "./attention";
 import { COLLAPSED_KEY, readReveal, REVEAL_KEY } from "../shared/board-reveal";
 import { ROW_HEIGHT, label, type Theme as RowTheme } from "../shared/row-view";
 import { execWs } from "../shared/ws-exec";
@@ -21,6 +21,10 @@ const CONFIRM_DIALOG_HEIGHT = 160;
 const REPOSITORY_SPACING = ROW_HEIGHT * 0.5;
 const CURRENT_PANE_BG: Color = "#e6ff0014";
 const PIE_SIZE = 12;
+/** 最後に出した通知で試したコマンドとその結果（ホームからの相対パス） */
+const NOTIFY_LOG = ".cache/herdr-tools/notify.log";
+/** 通知に書く最後の依頼と返答を探す、会話の記録の末尾の行数 */
+const TRANSCRIPT_TAIL_LINES = 300;
 
 type Theme = RowTheme & Record<"solid" | "solid_foreground" | "popover" | "unknown", Color>;
 
@@ -192,7 +196,8 @@ export default class AgentBoard extends View {
   }
 
   /**
-   * エージェントが blocked（人を待っている）か done（見ていない間に終わった）に変わったら、macOS の通知を出す。
+   * エージェントが blocked（ユーザーを待っている）か done（見ていない間に終わった）に変わったら、macOS の通知を出す。
+   * terminal-notifier があれば、通知のクリックでその会話（tmux のペイン）へ移る。無ければ osascript で出す（クリックしても移らない）。
    * Herdr app のウィンドウが前にあるときは、Herdr app が自分で出すトーストに任せて出さない。
    * 畳んだ workspace のエージェントも対象にするため、畳んだ状態は渡さない。通知の失敗は一覧に出さない
    */
@@ -200,7 +205,45 @@ export default class AgentBoard extends View {
     const { changed, next } = attentionChanges(this.lastStatuses, boardRows(this.list, liveTerminals(), []));
     this.lastStatuses = next;
     if (window().active) return;
-    for (const row of changed) exec("osascript", osascriptArgs(attentionMessage(row))).catch(() => {});
+    for (const row of changed) void this.notifyAgent(row);
+  }
+
+  /** 1 つのエージェントの通知を出す。会話の記録の末尾から、最後の依頼と返答の冒頭を読んで書き添える */
+  async notifyAgent(row: AgentRow) {
+    const ctx = agentContext(this.list, row.key);
+    const tail = ctx?.claudeSessionId ? parseTranscriptTail(await this.readTranscriptTail(transcriptPath(home(), ctx.cwd, ctx.claudeSessionId))) : { lastPrompt: null, lastReply: null };
+    await this.postNotification(notifyCommands(attentionMessage(row, ctx, tail), row.key, home()));
+  }
+
+  /** 会話の記録の末尾を読む。記録は数 MB になるので、readTextFile（1 MiB まで）ではなく tail で末尾の行だけを読む。読めなければ空 */
+  async readTranscriptTail(path: string) {
+    try {
+      const r = await exec("tail", ["-n", String(TRANSCRIPT_TAIL_LINES), path]);
+      return r.code === 0 ? r.stdout : "";
+    } catch {
+      return "";
+    }
+  }
+
+  /**
+   * 通知を出すコマンドを順に試し、終了コード 0 で終わったところで止める。
+   * 起動できない（exec が reject する）ときと、通知の許可が無い（terminal-notifier が 0 以外で終わる）ときは次を試す
+   */
+  async postNotification(commands: [string, string[]][]) {
+    const attempts: string[] = [];
+    for (const [command, args] of commands) {
+      try {
+        const r = await exec(command, args);
+        attempts.push(`${command}: exit ${r.code} ${r.stderr.trim()}`.trim());
+        if (r.code === 0) break;
+      } catch (e) {
+        attempts.push(`${command}: 起動できない ${String((e as Error)?.message ?? e)}`);
+      }
+    }
+    // 最後の通知で、どのコマンドを試してどう終わったかを残す（スクリプトエディタから届いたとき、terminal-notifier が失敗した理由を確かめる）
+    const path = `${home()}/${NOTIFY_LOG}`;
+    const text = `${new Date().toISOString()}\n${attempts.join("\n")}\n`;
+    await writeTextFile(path, text, await readTextFile(path)).catch(() => {});
   }
 
   /** worktree ごとの変更量を ws changes --json で読む。失敗しても一覧は壊さない（前の値のまま） */
