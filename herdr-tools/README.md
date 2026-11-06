@@ -88,6 +88,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | プルリクエストのブランチの worktree を用意する | `ws pr <番号>`（無ければ作り、あれば最新にして、その tmux セッションへ移る。エージェントは起動しない） | pull-requests の行の worktree のアイコン |
 | その worktree に入る | `C-e`（tm）で選ぶ（今までどおり） | 一覧で worktree をクリック → Ghostty が前に出る |
 | エージェントを起動する | `cc`（`ws new --here`。今のペインで会話）か `ws new --attach`（agents ウィンドウへ移る） | worktree の「＋ claude」ボタン |
+| workspace を絞り込んで選び、エージェントを起動する | — | `ctrl-e`（`keys.json` の `layout:agents` に `"ctrl-e": "mod.open:workspace-picker"` を足す。agents のレイアウトはターミナルを持たないので、ターミナルの `ctrl-e` は奪わない）か、agent-board の題名の帯の ＋ ボタンで workspace-picker を開く。ghq のすべての worktree（`ws list --json --all`）を、打った文字で fzf のように絞り込み（空白で区切った語はすべてに当てはまるもの）、`ctrl-j` / `ctrl-k`（↓ / ↑）で選び、`Enter` かクリックで `ws new <worktree> --attach --from-app`。`Esc` で閉じる |
 | 待っているエージェントを探す | `prefix a`（blocked が先頭） | 一覧を見る（常時表示） |
 | 待っている・終わったエージェントを通知で知る | — | agent-board が、エージェントが blocked（人を待っている）か done（見ていない間に終わった）に変わったら macOS の通知を出す（`osascript`。題名にエージェントの名前、本文に worktree のフォルダー名）。Herdr app のウィンドウが前にあるときは、Herdr app のトーストに任せて出さない。通知をクリックしても会話へは移らない。agent-board が画面にあるときだけ動く |
 | 注意が要るエージェントを次へ巡回する | `prefix b`、または Ghostty の `ctrl+alt+shift+j`（`ws next`）。列は blocked → done → idle の順で、同じ status の中は status になった時刻が新しい順（working は入れない）。3 秒以内に続けて押すと前回の続き、間が空くと先頭から。無ければステータス行に表示 | `ctrl+alt+shift+j`（`ws next --from-app`） |

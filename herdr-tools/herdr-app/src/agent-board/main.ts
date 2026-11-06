@@ -1,5 +1,5 @@
 import { View, div, svg, type AsyncContext, type Color, type Context, type Element, type FocusHandle } from "gpui-kit";
-import { closeOverlay, exec, nextCommand, openOverlay, props, setShared, shared, terminals, theme, window } from "herdr";
+import { closeOverlay, exec, nextCommand, openOverlay, props, run, setShared, shared, terminals, theme, window } from "herdr";
 import { attentionChanges, attentionMessage, osascriptArgs } from "./attention";
 import { ROW_HEIGHT, label, type Theme as RowTheme } from "../shared/row-view";
 import { execWs } from "../shared/ws-exec";
@@ -439,6 +439,11 @@ export default class AgentBoard extends View {
       .border_b(1)
       .border_color(t.border)
       .child(div().font_semibold().child("Worktrees"))
+      .child(
+        button({ id: "open-workspace-picker", icon: "plus", tooltip: "workspace を選んで claude を起動する（ctrl-e）", look: "plain" }, t, () =>
+          run("mod.open", { name: "workspace-picker" }),
+        ),
+      )
       .child(div().flex_1())
       .child(this.renderUsage(t));
   }
