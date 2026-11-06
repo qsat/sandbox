@@ -89,6 +89,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | その worktree に入る | `C-e`（tm）で選ぶ（今までどおり） | 一覧で worktree をクリック → Ghostty が前に出る |
 | エージェントを起動する | `cc`（`ws new --here`。今のペインで会話）か `ws new --attach`（agents ウィンドウへ移る） | worktree の「＋ claude」ボタン |
 | 待っているエージェントを探す | `prefix a`（blocked が先頭） | 一覧を見る（常時表示） |
+| 待っている・終わったエージェントを通知で知る | — | agent-board が、エージェントが blocked（人を待っている）か done（見ていない間に終わった）に変わったら macOS の通知を出す（`osascript`。題名にエージェントの名前、本文に worktree のフォルダー名）。Herdr app のウィンドウが前にあるときは、Herdr app のトーストに任せて出さない。通知をクリックしても会話へは移らない。agent-board が画面にあるときだけ動く |
 | 注意が要るエージェントを次へ巡回する | `prefix b`、または Ghostty の `ctrl+alt+shift+j`（`ws next`）。列は blocked → done → idle の順で、同じ status の中は status になった時刻が新しい順（working は入れない）。3 秒以内に続けて押すと前回の続き、間が空くと先頭から。無ければステータス行に表示 | `ctrl+alt+shift+j`（`ws next --from-app`） |
 | サイドバーの並び順でペインを移る | skhd の `shift+alt+j`（1 つ下）と `shift+alt+k`（1 つ上）（`ws step --from-app`、`ws step --prev --from-app`）。エージェントとペインの行が対象で、worktree の行（tmux セッション）と、mod で畳んだ workspace の中は飛ばす | 同じ（skhd のキー） |
 | 同じ列を後ろへ巡回する | `prefix B`、または Ghostty の `ctrl+alt+shift+k`（`ws next --prev`） | `ctrl+alt+shift+k`（`ws next --prev --from-app`） |

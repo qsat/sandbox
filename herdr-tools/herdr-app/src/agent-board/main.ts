@@ -1,5 +1,6 @@
 import { View, div, svg, type AsyncContext, type Color, type Context, type Element, type FocusHandle } from "gpui-kit";
-import { closeOverlay, nextCommand, openOverlay, props, setShared, shared, terminals, theme, window } from "herdr";
+import { closeOverlay, exec, nextCommand, openOverlay, props, setShared, shared, terminals, theme, window } from "herdr";
+import { attentionChanges, attentionMessage, osascriptArgs } from "./attention";
 import { ROW_HEIGHT, label, type Theme as RowTheme } from "../shared/row-view";
 import { execWs } from "../shared/ws-exec";
 import { BRANCH_COLOR, REPOSITORY_COLOR, SELECTED_BG } from "../shared/colors";
@@ -131,8 +132,11 @@ export default class AgentBoard extends View {
   changes!: Record<string, ChangeAmount>;
   changeTargets!: string;
   fetchingChanges!: boolean;
+  /** エージェントごとの前回の status（macOS の通知を出すかの判断に使う）。null は、まだ一度も見ていない */
+  lastStatuses!: Map<string, string> | null;
 
   init(_props: unknown, cx: AsyncContext) {
+    this.lastStatuses = null;
     this.list = EMPTY_LIST;
     this.error = "";
     this.fetching = false;
@@ -176,10 +180,23 @@ export default class AgentBoard extends View {
       this.list = parseList(r.stdout);
       this.error = r.error;
       this.fetching = false;
+      if (r.ok) this.notifyAttention();
       cx.notify();
       // 並ぶ worktree が変わったら、10 秒を待たずに変更量を読む
       if (changeTargets(this.list).join("\n") !== this.changeTargets) this.refreshChanges(cx);
     }, { owner: this });
+  }
+
+  /**
+   * エージェントが blocked（人を待っている）か done（見ていない間に終わった）に変わったら、macOS の通知を出す。
+   * Herdr app のウィンドウが前にあるときは、Herdr app が自分で出すトーストに任せて出さない。
+   * 畳んだ workspace のエージェントも対象にするため、畳んだ状態は渡さない。通知の失敗は一覧に出さない
+   */
+  notifyAttention() {
+    const { changed, next } = attentionChanges(this.lastStatuses, boardRows(this.list, liveTerminals(), []));
+    this.lastStatuses = next;
+    if (window().active) return;
+    for (const row of changed) exec("osascript", osascriptArgs(attentionMessage(row))).catch(() => {});
   }
 
   /** worktree ごとの変更量を ws changes --json で読む。失敗しても一覧は壊さない（前の値のまま） */
