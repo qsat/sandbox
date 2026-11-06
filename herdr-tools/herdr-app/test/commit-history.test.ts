@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { LOG_ARGS, branchLabel, commitFiles, compareRef, diffRange, mergeBaseArgs, localFiles, logArgs, prBaseRef, parseDecorations, parseLog, parseNameStatus, parseStatus, shortRef, sumNumstat } from "../src/commit-history/git";
+import { LOG_ARGS, branchLabel, commitFiles, compareRef, diffRange, mergeBaseArgs, logArgs, prBaseRef, parseDecorations, parseLog, parseNameStatus, shortRef } from "../src/commit-history/git";
+import { localFiles, parseStatus, sumNumstat } from "../src/shared/local-changes";
 import { parseNumstat } from "@herdr-tools/utils/parse-numstat";
 import { relativeTime } from "../src/shared/relative-time";
 import { moveSelection } from "../src/shared/selection";

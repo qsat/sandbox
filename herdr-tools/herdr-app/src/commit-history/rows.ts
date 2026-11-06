@@ -1,4 +1,5 @@
-import type { Commit, FileChange } from "./git";
+import type { FileChange } from "../shared/local-changes";
+import type { Commit } from "./git";
 
 export const LOCAL_ID = "local";
 

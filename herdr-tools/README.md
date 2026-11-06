@@ -29,7 +29,7 @@ herdr-tools/
 │   ├── facts.ts                  tmux のセッション・ペイン・クライアント
 │   ├── current-pane.ts           今いるペイン（最後に操作したクライアントが見ているペイン）の判定。I/O なし
 │   ├── tmux-index.ts             木の worktree → セッション、エージェント → 会話ペイン
-│   ├── plans/                    go（ws go の判断フロー）/ panes / prune / hunk（ws hunk の計画）。I/O なし
+│   ├── plans/                    go（ws go の判断フロー）/ panes / prune / hunk（ws hunk の計画）/ edit（ws edit の計画）。I/O なし
 │   ├── navigator.ts              計画を TmuxServer と WsCore で実行する
 │   ├── tmux-server.ts, ghostty.ts, hunk-cli.ts（hunk の daemon への問い合わせ）
 │   ├── list-json.ts              ws list --json の形（ListedTree）
@@ -40,10 +40,11 @@ herdr-tools/
 │   ├── src/agent-board/          board.ts（行と ws の呼び出し）/ main.ts（Herdr app の API）/ notify/（エージェントが blocked・done に変わったときの macOS の通知。attention.ts（通知するかの判断）/ transcript.ts（Claude Code の会話の記録の場所と解析）/ message.ts（通知の文面）/ commands.ts（terminal-notifier と osascript の引数）/ notifier.ts（記録を読み、コマンドを順に試し、ログを書く。I/O は引数で受ける））
 │   ├── src/workspace-picker/     ghq の worktree を絞り込んで選ぶ popup の mod。candidates.ts（候補・絞り込み・選んだときにすること。I/O なし）/ main.ts（Herdr app の API）
 │   ├── src/commit-history/       コミット履歴の mod。git.ts（git の出力の読み取り）/ base-ref.ts（ベースブランチを探す）/ rows.ts（行の並びと選択）/ main.ts（Herdr app の API）
+│   ├── src/worktree-changes/     未コミットの変更の mod。rows.ts（ツリー・フラットの行の並び）/ main.ts（Herdr app の API）
 │   ├── src/pull-requests/        プルリクエストの mod。gh.ts（gh の出力の読み取りと失敗の文）/ rows.ts（行の並び）/ main.ts（Herdr app の API）
-│   ├── src/shared/               mod で共通の処理: ws-exec.ts（ws の呼び出しと失敗の文）/ current-target.ts（ws list から今いるペインの worktree を読む）/ ws-list.ts（ws list --json の読み取り）/ target.ts（今いるペインの worktree）/ ws-hunk.ts（ws hunk の引数）/ ws-new.ts（ws new の引数）/ board-reveal.ts（agent-board と workspace-picker が共有値でやりとりする名前と形）/ relative-time.ts / selection.ts（j・k の選択）/ row-view.ts（行の見た目・アイコンボタン・worktree の見出し）/ tmux-focus.ts（tmux のペインの変化の見張り）/ colors.ts / title-bar.ts
+│   ├── src/shared/               mod で共通の処理: ws-exec.ts（ws の呼び出しと失敗の文）/ current-target.ts（ws list から今いるペインの worktree を読む）/ ws-list.ts（ws list --json の読み取り）/ target.ts（今いるペインの worktree）/ ws-hunk.ts（ws hunk の引数）/ ws-edit.ts（ws edit の引数）/ local-changes.ts（未コミットの変更の読み取り）/ footer-bar.ts（下端のフッターと切り替えのボタン）/ ws-new.ts（ws new の引数）/ board-reveal.ts（agent-board と workspace-picker が共有値でやりとりする名前と形）/ relative-time.ts / selection.ts（j・k の選択）/ row-view.ts（行の見た目・アイコンボタン・worktree の見出し）/ tmux-focus.ts（tmux のペインの変化の見張り）/ colors.ts / title-bar.ts
 │   ├── sync-types.sh, tsconfig.json   Herdr app が生成した型（types/、gitignore）で mod の main.ts を検査する
-│   ├── mod/agent-board/mod.json, mod/commit-history/mod.json, mod/pull-requests/mod.json, mod/workspace-picker/mod.json, layouts/agents.json
+│   ├── mod/agent-board/mod.json, mod/commit-history/mod.json, mod/pull-requests/mod.json, mod/workspace-picker/mod.json, mod/worktree-changes/mod.json, layouts/agents.json
 └── ws/                           CLI。cli.ts と compose-from-env.ts で全部をつなぐ
 ```
 
@@ -63,7 +64,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 2. Herdr app（herdr-core を含む）を入れ、シェルで `hc ls` が動くことを確認する
 3. `./install.sh`（`--dry-run` で内容だけ確認できる）
    - `ws` をビルドして `~/.local/bin/ws` に置く（`bun build --compile` の単一バイナリ）
-   - mod 4 つ（agent-board・commit-history・pull-requests・workspace-picker）をバンドル（`dist/mods/<mod>/`）して `~/.config/herdr-app/mods/<mod>/` に、レイアウトを `~/.config/herdr-app/layouts/agents.json` に置く（上半分に agent-board、下半分の stack（id `lower`）に commit-history と pull-requests を重ねる。2 つは各 mod の題名の帯のタブ「Commits」「Pull requests」で切り替える。Herdr app の stack の帯は番号しか出さないので使わない。既にある `agents.json` は上書きしないので、前の形のままなら `herdr-app/layouts/agents.json` を手で写す）
+   - mod 5 つ（agent-board・commit-history・pull-requests・workspace-picker・worktree-changes）をバンドル（`dist/mods/<mod>/`）して `~/.config/herdr-app/mods/<mod>/` に、レイアウトを `~/.config/herdr-app/layouts/agents.json` に置く（上半分に agent-board、下半分の stack（id `lower`）に worktree-changes・commit-history・pull-requests を重ねる。3 つは各 mod の題名の帯のタブ「Changes」「Commits」「Pull requests」で切り替える。Herdr app の stack の帯は番号しか出さないので使わない。既にある `agents.json` は上書きしないので、前の形のままなら `herdr-app/layouts/agents.json` を手で写す）
    - `herdr-app` があれば `herdr-app check` を通す
 4. `ws/config/claude-settings.json` の SessionStart hook と statusLine を `~/.claude/settings.json` に足す
 5. `tmux/config/tmux.conf` のキー（`prefix a` 一覧を枠線なしの popup で開く、`prefix A` 全ペイン表示、`prefix b` で次のエージェントへ巡回、`prefix B` で後ろへ巡回、`M-B` / `M-W` で prefix 無しの巡回）を `~/.tmux.conf` に足す
@@ -103,6 +104,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | 再起動後に続きをやる | 一覧で `R`（再開できる行に「R で再開」と出る）か `ws resume <agent>`。移動では再開しない | エージェントの再開ボタン（▶ のアイコン） |
 | エージェントを止める | `ws stop <agent>`（止めて一覧から消す）。claude の中なら `/exit` | エージェントの停止ボタン（■ のアイコン。確認のダイアログで「停止する」か Enter で止める。「キャンセル」か Esc で取りやめる）。終了済みなら「削除」。再開できる行には停止ボタンを出さない（`s` では止められる） |
 | worktree の tmux セッションを閉じる（エージェントは止めない） | 一覧で `x` → `y`。または `ws close [<worktree>]` | worktree の「閉じる」ボタン（tmux セッションがある行に出る。確認のダイアログで「閉じる」か Enter） |
+| 未コミットの変更のファイルを $EDITOR で開く | `ws edit <worktree> --file <path>`（tmux のグローバルな環境の EDITOR で、そのファイル専用の tmux ウィンドウを作って移る） | worktree-changes のファイルの行を押す（または選んで `Enter`） |
 | 片付ける | claude を `/exit` → `gwq remove` → 必要なら `ws prune` | — |
 
 ### コマンド
@@ -122,6 +124,8 @@ ws step [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]
                                                  サイドバー（mod）に並ぶ行の順で、1 つ下（--prev で 1 つ上）の行へ移動。移る先はエージェントとペインの行（workspace の見出し、worktree の行、mod で畳んだ workspace の中の行は数えない）。端では反対の端へ回り、今いる行が無ければ下は先頭・上は最後。--list は移動せず、並びを「今いる行の印（*）・種類・ref・名前」で 1 行ずつ出す。--from-app は移動後に Ghostty を前に出す
 ws hunk [<worktree>] [--commit <hash> | --pr <number> | --gh-commit <sha> | --range <ref>...<ref> | --against <rev>] [--file <path>] [--client <name> | --from-app]
                                                  差分を hunk で開く（下の「ws hunk」を参照）
+ws edit <worktree> --file <path> [--client <name> | --from-app]
+                                                 ファイルを $EDITOR で開く（下の「ws edit」を参照）
 ws pr <number> [<worktree>] [--no-go] [--client <name> | --from-app]
                                                  プルリクエストのブランチの worktree を用意して移る（下の「ws pr」を参照）
 ws changes [--json] <worktree>...               worktree ごとの変更量（下の「worktree の変更量」を参照）
@@ -162,6 +166,12 @@ hunk を開いた tmux のペインへ、`ws go` と同じ移動の部品（ク�
 hunk の中で `e` を押すと、選んでいる行をエディターで開く。hunk は `$EDITOR` だけを見る（`$VISUAL` や hunk の設定ファイルは見ない。`vim` / `nvim` / `vi` なら `+<行>` を付け、hunk を止めて同じペインで開く）。
 `ws hunk` は hunk を tmux のウィンドウで起動するので、hunk の環境は tmux サーバーのグローバルな環境になる。`tmux/config/tmux.conf` の `set-environment -g EDITOR nvim` を `~/.tmux.conf` に写す。
 写したあとは `tmux source-file ~/.tmux.conf` で読み直し、開いている hunk は一度終わらせる（`hunk session reload` は hunk を起動し直さないので、前の環境のまま）。
+
+### `ws edit`: ファイルを $EDITOR で開く
+
+`ws edit <worktree> --file <path> [--from-app]` は、worktree の tmux セッション（無ければ作る）にそのファイル専用のウィンドウ（`edit-<ファイル名>-<パスのハッシュ>`）を作り、`${EDITOR:-vi} <path>` を起動して、tmux のクライアントをそこへ移す（`--from-app` なら Ghostty を前に出す）。
+EDITOR は tmux のグローバルな環境（`set-environment -g EDITOR nvim`）のものが使われる。エディターを終えるとウィンドウは閉じる。
+`ws hunk` は決まった名前の `hunk` ウィンドウを作り直す（respawn-pane -k）が、`ws edit` は作り直さない。エディターを止めると保存していない編集を失うので、同じファイルのウィンドウが既にあれば起動せずそこへ移るだけにし、別のファイルなら別のウィンドウを作る。判断は `tmux/src/plans/edit.ts`（I/O なし）。
 
 ### `ws pr`: プルリクエストのブランチの worktree を用意する
 
@@ -233,6 +243,14 @@ tmux で今いるペインの worktree のコミット履歴を出す。Herdr ap
 - git は `.git` に何も書かない引数（`--no-optional-locks` など）で読む
 - レイアウトに置いて使う（`mod.json` は `{"place": "none"}`）。`herdr-app/layouts/agents.json` では下半分の stack に入っていて、題名の帯のタブ「Commits」で選ぶ
 - プルリクエストは別の mod `pull-requests`（下の節）にある
+
+### Herdr app の mod `worktree-changes`
+
+下半分の stack の最初のタブ「Changes」。`commit-history` の「未コミットの変更」と同じ中身（`git status` の追跡していないファイルを含む。各ファイルの +/−）を、tmux で今いるペインの worktree について出す。読み取りは `shared/local-changes.ts` を `commit-history` と共有する。
+
+- 題名の帯: 左端にタブ、右端にファイルの数（`12 files`）。下端のフッターの Tree / Flat で表示を切り替える（ツリーはフォルダーごとにまとめ、フォルダーの行で開閉する）
+- ファイルの行を押す（または `j` / `k` で選んで `Enter`）と、`ws edit` で $EDITOR で開く
+- 読み直しは数秒ごとと、tmux のペインの変化の見張り
 
 ### Herdr app の mod `pull-requests`
 

@@ -14,6 +14,7 @@ export type Step =
   | { op: "focusGhostty" }
   | { op: "openHunkWindow"; session: string; cwd: string; argv: string[] }
   | { op: "respawnHunkWindow"; session: string; cwd: string; argv: string[] }
+  | { op: "openEditWindow"; session: string; window: string; cwd: string; argv: string[] }
   | { op: "hunkReload"; cwd: string; hunkBin: string; args: string[] }
   | { op: "hunkNavigate"; cwd: string; file: string; wait: boolean };
 

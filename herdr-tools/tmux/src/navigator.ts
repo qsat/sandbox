@@ -6,6 +6,7 @@ import { AGENTS_WINDOW, chooseClient, ensureSession, planGo, workingDir, type Pa
 import { continuingRecord, cycleCandidates, decideCurrentPane, inRecordedOrder, MESSAGE_WHEN_NO_CANDIDATE, nextCandidate, prevCandidate } from "./plans/cycle";
 import { planPanes } from "./plans/panes";
 import { HUNK_WINDOW, planHunk, type HunkSource } from "./plans/hunk";
+import { editWindowName, planEdit } from "./plans/edit";
 import { HunkCli } from "./hunk-cli";
 import { toListJson } from "./list-json";
 import { currentRowId, goRefOf, itemId, sidebarItems, stepFrom, steppableItems } from "./sidebar-order";
@@ -54,6 +55,30 @@ export class TmuxNavigator {
       session,
       windowExists: await this.tmux.hasWindow(session.name, HUNK_WINDOW),
       hunkSessionExists: await this.hunk.hasSession(cwd),
+      ctx: { client, fromApp: !!opts.fromApp, cwdWhenMissing: this.cwdWhenMissing },
+    });
+    for (const step of steps) await this.run(step);
+    return steps;
+  }
+
+  /** worktree のファイルを $EDITOR（tmux のグローバルな環境の EDITOR）で開く。そのファイル専用の tmux ウィンドウで起動し、クライアントをそこへ移す */
+  async openInEditor(path: string, opts: { file: string; client?: string; fromApp?: boolean }) {
+    const view = await this.view({ alsoShow: [path] });
+    const target = resolveRef(view.snap, path);
+    if (!target) throw new Error(`見つかりません: ${path}`);
+    const cwd = workingDir(target.worktree, this.cwdWhenMissing);
+    const client = chooseClient({
+      explicit: opts.client,
+      fromApp: !!opts.fromApp,
+      callerClient: opts.fromApp ? undefined : await this.tmux.callerClient(this.env),
+      clients: await this.tmux.listClients(),
+    });
+    const session = ensureSession(target.worktree, view.idx, cwd);
+    const steps = planEdit({
+      cwd,
+      file: opts.file,
+      session,
+      windowExists: await this.tmux.hasWindow(session.name, editWindowName(opts.file)),
       ctx: { client, fromApp: !!opts.fromApp, cwdWhenMissing: this.cwdWhenMissing },
     });
     for (const step of steps) await this.run(step);
@@ -122,6 +147,8 @@ export class TmuxNavigator {
         return void (await this.tmux.openWindowRunning(step.session, HUNK_WINDOW, step.cwd, step.argv));
       case "respawnHunkWindow":
         return this.tmux.respawnWindowRunning(step.session, HUNK_WINDOW, step.cwd, step.argv);
+      case "openEditWindow":
+        return void (await this.tmux.openWindowRunning(step.session, step.window, step.cwd, step.argv));
       case "hunkReload":
         return this.hunk.reload(step.cwd, step.args);
       case "hunkNavigate":

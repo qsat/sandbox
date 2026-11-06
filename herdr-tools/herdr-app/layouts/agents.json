@@ -25,6 +25,13 @@
       "active": "commit-history",
       "children": [
         {
+          "id": "worktree-changes",
+          "type": "block",
+          "content": {
+            "mod": "worktree-changes"
+          }
+        },
+        {
           "id": "commit-history",
           "type": "block",
           "content": {

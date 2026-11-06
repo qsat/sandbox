@@ -85,6 +85,7 @@ describe("依存の向き（ws → ws-core / tmux、tmux → ws-core、herdr-app
     ["commit-history", ["gpui-kit", "herdr"]],
     ["pull-requests", ["gpui-kit", "herdr"]],
     ["workspace-picker", ["gpui-base", "gpui-kit", "herdr"]],
+    ["worktree-changes", ["gpui-kit", "herdr"]],
   ] as const) {
     test(`mod ${mod} のバンドルは Herdr app の API だけを import し、Node / Bun の API を含まない`, async () => {
       const out = await Bun.build({

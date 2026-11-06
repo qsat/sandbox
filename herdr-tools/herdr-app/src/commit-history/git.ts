@@ -3,7 +3,8 @@
  * 引数の組み立てと出力の読み取りをここに置き、exec は main.ts だけが呼ぶ。
  */
 
-import { parseNumstat, type NumstatEntry } from "@herdr-tools/utils/parse-numstat";
+import { parseNumstat } from "@herdr-tools/utils/parse-numstat";
+import type { FileChange } from "../shared/local-changes";
 
 export const LOG_LIMIT = 50;
 export const LOG_ARGS = ["log", "-n", String(LOG_LIMIT), "--no-color", "--format=%x1e%H%x1f%h%x1f%an%x1f%at%x1f%D%x1f%s"];
@@ -82,16 +83,6 @@ export interface Commit {
   subject: string;
 }
 
-export interface FileChange {
-  /** A 追加 / M 変更 / D 削除 / R 名前の変更 / U 競合 / ? 追跡されていない */
-  status: string;
-  path: string;
-  oldPath?: string;
-  add: number;
-  del: number;
-  binary: boolean;
-}
-
 export function parseDecorations(raw: string): string[] {
   return raw
     .split(", ")
@@ -144,53 +135,6 @@ export function parseNameStatus(stdout: string): NameStatusEntry[] {
 export function commitFiles(nameStatus: string, numstat: string): FileChange[] {
   const stats = new Map(parseNumstat(numstat).map((e) => [e.path, e]));
   return parseNameStatus(nameStatus).map((e) => {
-    const s = stats.get(e.path);
-    return { ...e, add: s?.add ?? 0, del: s?.del ?? 0, binary: s?.binary ?? false };
-  });
-}
-
-export interface StatusEntry {
-  status: string;
-  path: string;
-  oldPath?: string;
-}
-
-/** `git status --porcelain=v1 -z` を読む。名前の変更は「XY 新 NUL 旧 NUL」の順 */
-export function parseStatus(stdout: string): StatusEntry[] {
-  const tokens = stdout.split("\0");
-  const out: StatusEntry[] = [];
-  for (let i = 0; i < tokens.length; ) {
-    const entry = tokens[i];
-    if (!entry || entry.length < 4) {
-      i += 1;
-      continue;
-    }
-    const xy = entry.slice(0, 2);
-    const path = entry.slice(3);
-    const renamed = xy.includes("R") || xy.includes("C");
-    const status =
-      xy === "??" ? "?" : xy.includes("U") || xy === "AA" || xy === "DD" ? "U" : renamed ? "R" : xy.includes("D") ? "D" : xy.includes("A") ? "A" : "M";
-    out.push(renamed ? { status, path, oldPath: tokens[i + 1] ?? "" } : { status, path });
-    i += renamed ? 2 : 1;
-  }
-  return out;
-}
-
-/** 複数の numstat（HEAD が無いときのステージ済みと未ステージ）を path ごとに足す */
-export function sumNumstat(...outputs: string[]): Map<string, NumstatEntry> {
-  const sum = new Map<string, NumstatEntry>();
-  for (const out of outputs) {
-    for (const e of parseNumstat(out)) {
-      const old = sum.get(e.path);
-      sum.set(e.path, { path: e.path, add: (old?.add ?? 0) + e.add, del: (old?.del ?? 0) + e.del, binary: (old?.binary ?? false) || e.binary });
-    }
-  }
-  return sum;
-}
-
-/** 未コミットで変わったファイル = status（種類）に numstat（行数）を path で合わせる。追跡されていないファイルは行数が無い */
-export function localFiles(status: string, stats: Map<string, NumstatEntry>): FileChange[] {
-  return parseStatus(status).map((e) => {
     const s = stats.get(e.path);
     return { ...e, add: s?.add ?? 0, del: s?.del ?? 0, binary: s?.binary ?? false };
   });
