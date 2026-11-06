@@ -2,13 +2,16 @@
 import { shellQuote } from "@herdr-tools/utils/shell-quote";
 import type { NotificationMessage } from "./message";
 
+/** 通知で鳴らす音。macOS の既定の通知音（/System/Library/Sounds の名前を書けば、その音になる） */
+export const NOTIFY_SOUND = "default";
+
 /** osascript の引数。題名・副題・本文は argv で渡し、AppleScript の文字列に埋め込まない（引用符を含んでも壊れない） */
 export function osascriptArgs(message: NotificationMessage) {
   return [
     "-e",
     "on run argv",
     "-e",
-    "display notification (item 3 of argv) with title (item 1 of argv) subtitle (item 2 of argv)",
+    `display notification (item 3 of argv) with title (item 1 of argv) subtitle (item 2 of argv) sound name "${NOTIFY_SOUND}"`,
     "-e",
     "end run",
     "--",
@@ -43,6 +46,8 @@ export function notifyCommands(message: NotificationMessage, agentKey: string, h
     message.subtitle,
     "-message",
     body,
+    "-sound",
+    NOTIFY_SOUND,
     "-group",
     `herdr-tools.${agentKey}`,
     "-execute",

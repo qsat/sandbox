@@ -203,7 +203,7 @@ export default class AgentBoard extends View {
     this.lastStatuses = next;
     if (window().active) return;
     const io = { home: home(), exec, readTextFile, writeTextFile };
-    for (const row of changed) void notifyAgent(row, this.list, io);
+    for (const change of changed) void notifyAgent(change, this.list, io);
   }
 
   /** worktree ごとの変更量を ws changes --json で読む。失敗しても一覧は壊さない（前の値のまま） */
