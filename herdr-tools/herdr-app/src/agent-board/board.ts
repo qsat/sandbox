@@ -101,6 +101,35 @@ export function wsArgsForModCommand(command: string): string[] | null {
   }
 }
 
+/** worktree の変更量（`ws changes --json` の値）。ベースブランチから分かれた点と作業ツリーの差の +/− 行数 */
+export interface ChangeAmount {
+  added: number;
+  deleted: number;
+}
+
+/** 変更量を読む worktree（場所が在るものだけ。並びは ws list のまま） */
+export function changeTargets(listJson: ListedTree) {
+  return listJson.workspaces.flatMap((ws) => ws.worktrees.filter((wt) => wt.exists).map((wt) => wt.path));
+}
+
+/** `ws changes --json` の出力を読む。読めない値・変更が無い worktree は入れない */
+export function parseChanges(stdout: string): Record<string, ChangeAmount> {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(stdout);
+  } catch {
+    return {};
+  }
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, ChangeAmount> = {};
+  for (const [path, v] of Object.entries(raw as Record<string, unknown>)) {
+    const a = v as Partial<ChangeAmount> | null;
+    if (!a || typeof a.added !== "number" || typeof a.deleted !== "number") continue;
+    if (a.added + a.deleted > 0) out[path] = { added: a.added, deleted: a.deleted };
+  }
+  return out;
+}
+
 export function toggleCollapsed(collapsed: string[], key: string) {
   const s = new Set(collapsed);
   if (s.has(key)) s.delete(key);

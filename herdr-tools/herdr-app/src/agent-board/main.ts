@@ -6,10 +6,12 @@ import { watchTmuxFocus } from "../shared/tmux-focus";
 import type { Tag } from "@herdr-tools/utils/tag";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
 import { usageSegments } from "@herdr-tools/utils/usage-segments";
-import { boardRows, EMPTY_LIST, keyActionFor, moveSelection, parseList, rowId, toggleCollapsed, WS, wsCommandFor, type BoardAction, type BoardRow, type LiveTerminal, wsArgsForModCommand } from "./board";
+import { boardRows, changeTargets, EMPTY_LIST, parseChanges, type ChangeAmount, keyActionFor, moveSelection, parseList, rowId, toggleCollapsed, WS, wsCommandFor, type BoardAction, type BoardRow, type LiveTerminal, wsArgsForModCommand } from "./board";
 
 const MOD_NAME = "agent-board";
 const LIST_REFRESH_MS = 2000;
+/** 変更量（ws changes）の読み直しの間隔。worktree ごとに git を何度か呼ぶので、一覧（2 秒）より長くする */
+const CHANGES_REFRESH_MS = 10000;
 const CONFIRM_DIALOG_WIDTH = 360;
 const CONFIRM_DIALOG_HEIGHT = 160;
 const COLLAPSED_KEY = "agent-board.collapsed";
@@ -19,7 +21,7 @@ const CURRENT_PANE_BG: Color = "#e6ff0014";
 const PIE_SIZE = 12;
 
 type Theme = Record<
-  "foreground" | "muted" | "dim" | "accent" | "raised" | "hover" | "solid" | "solid_foreground" | "background" | "popover" | "border" | "blocked" | "unknown" | "ansi1",
+  "foreground" | "muted" | "dim" | "accent" | "raised" | "hover" | "solid" | "solid_foreground" | "background" | "popover" | "border" | "blocked" | "unknown" | "ansi1" | "ansi2",
   Color
 >;
 
@@ -129,6 +131,9 @@ export default class AgentBoard extends View {
   confirming!: boolean;
   focus!: FocusHandle;
   selected!: string | null;
+  changes!: Record<string, ChangeAmount>;
+  changeTargets!: string;
+  fetchingChanges!: boolean;
 
   init(_props: unknown, cx: AsyncContext) {
     this.list = EMPTY_LIST;
@@ -137,12 +142,16 @@ export default class AgentBoard extends View {
     this.confirmRequest = (props()?.confirm as ConfirmRequest | undefined) ?? null;
     this.confirming = false;
     this.selected = null;
+    this.changes = {};
+    this.changeTargets = "";
+    this.fetchingChanges = false;
     this.focus = cx.focus_handle();
     if (this.confirmRequest) {
       this.focus.focus();
       return;
     }
     cx.timer.every(LIST_REFRESH_MS, (cx) => this.refresh(cx));
+    cx.timer.every(CHANGES_REFRESH_MS, (cx) => this.refreshChanges(cx));
     this.refresh(cx);
     this.listenForKeyCommands(cx);
     // tmux の hook が今いるペインの変化を知らせたら、2 秒を待たずに読み直す（見張れなくても 2 秒ごとの読み直しで動く）
@@ -179,7 +188,54 @@ export default class AgentBoard extends View {
         this.fetching = false;
       }
       cx.notify();
+      // 並ぶ worktree が変わったら、10 秒を待たずに変更量を読む
+      if (changeTargets(this.list).join("\n") !== this.changeTargets) this.refreshChanges(cx);
     }, { owner: this });
+  }
+
+  /** worktree ごとの変更量を ws changes --json で読む。失敗しても一覧は壊さない（前の値のまま） */
+  refreshChanges(cx: Context) {
+    if (this.fetchingChanges) return;
+    const targets = changeTargets(this.list);
+    this.changeTargets = targets.join("\n");
+    if (targets.length === 0) {
+      this.changes = {};
+      return;
+    }
+    this.fetchingChanges = true;
+    cx.spawn(async (cx) => {
+      try {
+        const r = await exec(WS, ["changes", "--json", ...targets]);
+        if (r.code === 0) {
+          const next = parseChanges(r.stdout);
+          if (JSON.stringify(next) !== JSON.stringify(this.changes)) {
+            this.changes = next;
+            cx.notify();
+          }
+        }
+      } catch {
+        // 変更量は補助の表示なので、読めなくても何もしない
+      } finally {
+        this.fetchingChanges = false;
+      }
+    }, { owner: this });
+  }
+
+  /** worktree の行の変更量（+足した行 −消した行）。変更が無ければ出さない */
+  changeAmount(row: WorktreeRow, t: Theme) {
+    const a = this.changes[row.key];
+    if (!a) return [];
+    return [
+      div()
+        .id(`changes:${row.key}`)
+        .flex()
+        .flex_none()
+        .gap(4)
+        .text_size(11)
+        .tooltip("ベースブランチから分かれた点と作業ツリーの差（未コミット・新しいファイルも含む）")
+        .when(a.added > 0, (el) => el.child(label(`+${a.added}`, t.ansi2)))
+        .when(a.deleted > 0, (el) => el.child(label(`−${a.deleted}`, t.ansi1))),
+    ];
   }
 
   runRow(row: BoardRow, action: BoardAction, cx: Context) {
@@ -269,7 +325,13 @@ export default class AgentBoard extends View {
         return base
           .pl(16)
           .on_click((_e, cx) => this.runRow(row, "go", cx))
-          .child(this.info([div().text_color(row.hasSession ? BRANCH_COLOR : t.dim).when(row.isMain, (el) => el.font_semibold()).child(row.label), this.tags(row.tags, t)]))
+          .child(
+            this.info([
+              div().text_color(row.hasSession ? BRANCH_COLOR : t.dim).when(row.isMain, (el) => el.font_semibold()).child(row.label),
+              this.tags(row.tags, t),
+              ...this.changeAmount(row, t),
+            ]),
+          )
           .when(row.hasSession, (el) => el.child(this.closeSessionButton(row, t)))
           .when(row.exists, (el) =>
             el.child(

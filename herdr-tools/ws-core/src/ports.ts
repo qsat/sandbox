@@ -1,4 +1,5 @@
 import type { AgentRecord } from "./domain/agent";
+import type { ChangeAmount } from "./domain/change-amount";
 import type { PathInspection } from "./domain/tree";
 import type { ClaudeUsage } from "./domain/usage";
 
@@ -29,6 +30,8 @@ export interface WorkspaceSource {
   entries(root: string): Promise<string[]>;
   inspect(paths: string[]): Promise<PathInspection[]>;
   worktrees(repo: string): Promise<string[]>;
+  /** worktree の変更量（ベースブランチから分かれた点と作業ツリーの差）。git のリポジトリでない・ベースブランチが無いときは null */
+  changeAmount(worktree: string): Promise<ChangeAmount | null>;
 }
 
 export interface UsageStore {

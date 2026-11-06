@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { boardRows, keyActionFor, moveSelection, rowId, wsCommandFor, wsArgsForModCommand, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
+import { boardRows, changeTargets, keyActionFor, parseChanges, moveSelection, rowId, wsCommandFor, wsArgsForModCommand, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
 
 const agent = (p: { id: string; name: string; status: "working" | "idle"; resumable: boolean; attached: boolean; current?: boolean; contextUsedPercentage?: number }) => ({
   contextUsedPercentage: p.contextUsedPercentage,
@@ -246,4 +246,16 @@ describe("wsArgsForModCommand", () => {
   });
   test("廃止した next-blocked などは何もしない", () => expect(wsArgsForModCommand("next-blocked")).toBeNull());
   test("知らないコマンド名は何もしない", () => expect(wsArgsForModCommand("other")).toBeNull());
+});
+
+describe("worktree の変更量", () => {
+  test("ws changes --json を読み、変更が無いもの・読めない値は入れない", () => {
+    const out = JSON.stringify({ "/w/a": { added: 3, deleted: 1 }, "/w/b": { added: 0, deleted: 0 }, "/w/c": null, "/w/d": { added: "x" } });
+    expect(parseChanges(out)).toEqual({ "/w/a": { added: 3, deleted: 1 } });
+    expect(parseChanges("not json")).toEqual({});
+  });
+  test("読むのは場所が在る worktree だけ", () => {
+    const list = { usage: {}, workspaces: [{ path: "/w", name: "w", worktrees: [{ path: "/w/a", exists: true }, { path: "/w/gone", exists: false }] }] } as unknown as ListedTree;
+    expect(changeTargets(list)).toEqual(["/w/a"]);
+  });
 });

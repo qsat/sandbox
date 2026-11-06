@@ -112,6 +112,7 @@ ws step [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]
                                                  サイドバー（mod）に並ぶ行の順で、1 つ下（--prev で 1 つ上）の行へ移動。移る先はエージェントとペインの行（workspace の見出し、worktree の行、mod で畳んだ workspace の中の行は数えない）。端では反対の端へ回り、今いる行が無ければ下は先頭・上は最後。--list は移動せず、並びを「今いる行の印（*）・種類・ref・名前」で 1 行ずつ出す。--from-app は移動後に Ghostty を前に出す
 ws hunk [<worktree>] [--commit <hash> | --pr <number> | --gh-commit <sha> | --range <ref>...<ref> | --against <rev>] [--file <path>] [--client <name> | --from-app]
                                                  差分を hunk で開く（下の「ws hunk」を参照）
+ws changes [--json] <worktree>...               worktree ごとの変更量（下の「worktree の変更量」を参照）
 ws ui [--client <name>]                          tmux popup 用の対話一覧
 ws hook session-start                            Claude Code の SessionStart hook
 ws statusline [--quiet]                          Claude Code の statusLine。5h / 週の利用上限を記録して表示する
@@ -149,6 +150,17 @@ hunk を開いた tmux のペインへ、`ws go` と同じ移動の部品（ク�
 hunk の中で `e` を押すと、選んでいる行をエディターで開く。hunk は `$EDITOR` だけを見る（`$VISUAL` や hunk の設定ファイルは見ない。`vim` / `nvim` / `vi` なら `+<行>` を付け、hunk を止めて同じペインで開く）。
 `ws hunk` は hunk を tmux のウィンドウで起動するので、hunk の環境は tmux サーバーのグローバルな環境になる。`tmux/config/tmux.conf` の `set-environment -g EDITOR nvim` を `~/.tmux.conf` に写す。
 写したあとは `tmux source-file ~/.tmux.conf` で読み直し、開いている hunk は一度終わらせる（`hunk session reload` は hunk を起動し直さないので、前の環境のまま）。
+
+### worktree の変更量（`ws changes`）
+
+`ws changes --json <worktree>...` は、worktree ごとに「ベースブランチから分かれた点と作業ツリーの差」を、足した行と消した行の数で出す（`{"<worktree>": {"added": 12, "deleted": 3}}`。出せない worktree は `null`）。
+エージェントの作業がどれだけ溜まっているかを見るためのもので、agent-board の worktree の行に `+12 −3` として出す（変更が無ければ出さない）。
+
+- ベースブランチは `origin/HEAD` が指すブランチ、無ければ手元の `main`、`master` の順（gh には問い合わせない。commit-history のベースのようにプルリクエストの base は見ない）。どれも無ければ `null`
+- 分かれた点は `git merge-base <ベース> HEAD`。そこと作業ツリーを `git diff --numstat` で比べるので、コミット済み・未コミットの変更が入り、ベースブランチに後から入ったコミットは入らない
+- 追跡されていないファイル（`git ls-files --others --exclude-standard`）は、行数を足した行に数える。200 個を超えるとき（ビルドの出力を ignore し忘れたときなど）は数えない。1 MB を超えるファイルとバイナリ（NUL を含む）も数えない
+- git は `.git` に何も書かない引数（`--no-optional-locks` など）で読む
+- agent-board は 10 秒ごとと、並ぶ worktree が変わったときに読み直す（一覧の 2 秒ごとより長い。worktree ごとに git を何度か呼ぶため）。読めなくても一覧は壊れない
 
 ### Herdr app の mod `commit-history`（Diffview の `:DiffviewFileHistory` にあたる）
 

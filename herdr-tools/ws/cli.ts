@@ -26,6 +26,7 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
   ws hunk [<worktree>] [--commit <hash> | --pr <number> | --gh-commit <sha> | --range <ref>...<ref> | --against <rev>] [--file <path>] [--client <name> | --from-app]
                                                    差分を hunk で開く。--commit なら hunk show <hash>、--pr なら GitHub のプルリクエスト全体（hunk gh pr）、--gh-commit なら GitHub のコミット（hunk gh commit）、--range ならブランチ間の差分（hunk diff <range>）、--against なら作業ツリーと <rev> の差分（hunk diff <rev>。未コミットも含む）、無ければ未コミットの変更（hunk diff）。--file のファイルへ移る。
                                                    hunk のセッションがあれば中身を入れ替え、無ければ tmux セッションの hunk ウィンドウで起動する（HUNK_BIN で実行ファイルを指定）
+  ws changes [--json] <worktree>...               worktree ごとの変更量（ベースブランチから分かれた点と作業ツリーの差の +/− 行数。未コミット・追跡されていないファイルも含む）
   ws ui [--client <name>]                       tmux popup 用の対話一覧
   ws hook session-start                            Claude Code の SessionStart hook
   ws statusline [--quiet]                          Claude Code の statusLine。5h / 週の利用上限を記録して表示する
@@ -178,6 +179,13 @@ async function main(argv: string[]) {
       const path = absolutePathFromCwd(p.positional[0] ?? ".");
       const source = parseHunkSource({ commit: str(p, "--commit"), pr: str(p, "--pr"), ghCommit: str(p, "--gh-commit"), range: str(p, "--range"), against: str(p, "--against") });
       await nav.openInHunk(path, { ...source, file: str(p, "--file"), client: str(p, "--client"), fromApp: goOpts.fromApp });
+      return 0;
+    }
+    case "changes": {
+      if (p.positional.length === 0) throw new Error("ws changes [--json] <worktree>...");
+      const amounts = await core.changeAmounts(p.positional.map((path) => absolutePathFromCwd(path)));
+      if (has(p, "--json")) process.stdout.write(JSON.stringify(amounts) + "\n");
+      else for (const [path, a] of Object.entries(amounts)) process.stdout.write(`${a ? `+${a.added}\t−${a.deleted}` : "-\t-"}\t${path}\n`);
       return 0;
     }
     case "ui": {
