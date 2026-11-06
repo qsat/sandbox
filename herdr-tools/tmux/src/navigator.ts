@@ -21,6 +21,13 @@ const HUNK_START_ATTEMPTS = 30;
 const NVIM_SOCKET_DIR = `${homedir()}/.cache/herdr-tools/nvim`;
 /** `edit` ウィンドウがあるのに nvim が応答しないとき（起動した直後）、応答するのを待つ試行の回数（150ms 間隔） */
 const NVIM_START_ATTEMPTS = 10;
+/** nvim が応答するかを確かめる（--remote-expr）ときの時間の上限。固まった nvim で待ち続けないため */
+const NVIM_RESPOND_TIMEOUT_MS = 1000;
+/**
+ * nvim --remote の時間の上限。--remote はサーバーにつながらないと、その場で nvim を開いて待ち続ける
+ * （応答を確かめた直後に nvim が終わったときなど）ので、止めて失敗として返す
+ */
+const NVIM_REMOTE_TIMEOUT_MS = 3000;
 import { indexTmux, isPaneId, sessionPaths } from "./tmux-index";
 import { TmuxServer } from "./tmux-server";
 
@@ -70,7 +77,7 @@ export class TmuxNavigator {
   /** その nvim が応答するか（`--remote-expr 1` の答えで確かめる） */
   private async nvimResponds(bin: string, socket: string) {
     if (!existsSync(socket)) return false;
-    const r = await run(bin, ["--server", socket, "--remote-expr", "1"]);
+    const r = await run(bin, ["--server", socket, "--remote-expr", "1"], { timeoutMs: NVIM_RESPOND_TIMEOUT_MS });
     return r.code === 0 && r.stdout.trim() === "1";
   }
 
@@ -181,7 +188,7 @@ export class TmuxNavigator {
         mkdirSync(NVIM_SOCKET_DIR, { recursive: true });
         return void (await this.tmux.openWindowRunning(step.session, step.window, step.cwd, step.argv));
       case "remoteEdit":
-        await run(step.bin, ["--server", step.socket, "--remote", step.file]).then((r) => {
+        await run(step.bin, ["--server", step.socket, "--remote", step.file], { timeoutMs: NVIM_REMOTE_TIMEOUT_MS }).then((r) => {
           if (r.code !== 0) throw new Error(`${step.bin} --remote: ${r.stderr.trim() || r.stdout.trim()}`);
         });
         return;
