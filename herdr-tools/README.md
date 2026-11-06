@@ -104,7 +104,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | 再起動後に続きをやる | 一覧で `R`（再開できる行に「R で再開」と出る）か `ws resume <agent>`。移動では再開しない | エージェントの再開ボタン（▶ のアイコン） |
 | エージェントを止める | `ws stop <agent>`（止めて一覧から消す）。claude の中なら `/exit` | エージェントの停止ボタン（■ のアイコン。確認のダイアログで「停止する」か Enter で止める。「キャンセル」か Esc で取りやめる）。終了済みなら「削除」。再開できる行には停止ボタンを出さない（`s` では止められる） |
 | worktree の tmux セッションを閉じる（エージェントは止めない） | 一覧で `x` → `y`。または `ws close [<worktree>]` | worktree の「閉じる」ボタン（tmux セッションがある行に出る。確認のダイアログで「閉じる」か Enter） |
-| 未コミットの変更のファイルを $EDITOR で開く | `ws edit <worktree> --file <path>`（tmux のグローバルな環境の EDITOR で、そのファイル専用の tmux ウィンドウを作って移る） | worktree-changes のファイルの行を押す（または選んで `Enter`） |
+| 未コミットの変更のファイルを $EDITOR で開く | `ws edit <worktree> --file <path>`（tmux のグローバルな環境の EDITOR が nvim なら、worktree の tmux セッションごとに 1 つの nvim（`edit` ウィンドウ）に開かせて移る。nvim でなければファイルごとのウィンドウ） | worktree-changes のファイルの行を押す（または選んで `Enter`） |
 | 片付ける | claude を `/exit` → `gwq remove` → 必要なら `ws prune` | — |
 
 ### コマンド
@@ -169,9 +169,17 @@ hunk の中で `e` を押すと、選んでいる行をエディターで開く�
 
 ### `ws edit`: ファイルを $EDITOR で開く
 
-`ws edit <worktree> --file <path> [--from-app]` は、worktree の tmux セッション（無ければ作る）にそのファイル専用のウィンドウ（`edit-<ファイル名>-<パスのハッシュ>`）を作り、`${EDITOR:-vi} <path>` を起動して、tmux のクライアントをそこへ移す（`--from-app` なら Ghostty を前に出す）。
-EDITOR は tmux のグローバルな環境（`set-environment -g EDITOR nvim`）のものが使われる。エディターを終えるとウィンドウは閉じる。
-`ws hunk` は決まった名前の `hunk` ウィンドウを作り直す（respawn-pane -k）が、`ws edit` は作り直さない。エディターを止めると保存していない編集を失うので、同じファイルのウィンドウが既にあれば起動せずそこへ移るだけにし、別のファイルなら別のウィンドウを作る。判断は `tmux/src/plans/edit.ts`（I/O なし）。
+`ws edit <worktree> --file <path> [--from-app]` は、tmux のグローバルな環境の EDITOR（`set-environment -g EDITOR nvim`）で、worktree のファイルを開き、tmux のクライアントをそのウィンドウへ移す（`--from-app` なら Ghostty を前に出す）。
+開き方は EDITOR と、その tmux セッションの状態で決まる。
+
+| 状態 | 動き |
+|---|---|
+| EDITOR が nvim で、`edit` ウィンドウがあり、nvim が応答する | 新しいウィンドウを作らず、`nvim --server <ソケット> --remote <絶対パス>` でその nvim にファイルを開かせる |
+| EDITOR が nvim で、`edit` ウィンドウもソケットの nvim も無い | tmux セッション（無ければ作る）に `edit` ウィンドウを作り、`nvim --listen <ソケット> <path>` を起動する。ソケットは `~/.cache/herdr-tools/nvim/<セッション名>-<ハッシュ>.sock`（セッションごとに 1 つ） |
+| `edit` ウィンドウはあるが nvim が応答しない（起動中・固まっている）、または `edit` ウィンドウが無いのに nvim が応答する | どの nvim も止めず、ファイルごとのウィンドウ（下の行）で開く。起動した直後は、応答するまで最大約 1.5 秒待ってから判定する |
+| EDITOR が nvim でない（vim・空など）、またはソケットのパスが長すぎる（100 バイト超） | ファイルごとのウィンドウ（`edit-<ファイル名>-<パスのハッシュ>`）を作り、`${EDITOR:-vi} <path>` を起動する。同じファイルのウィンドウが既にあれば、起動せずそこへ移る |
+
+nvim を止めると保存していない編集を失うので、`ws edit` は動いている nvim を kill も respawn もしない（`ws hunk` は `hunk` ウィンドウを作り直す）。nvim を終えると `edit` ウィンドウは閉じ、次に開くときに作り直す。残ったソケットのファイルは、起動のときに消してから `--listen` する。判断は `tmux/src/plans/edit.ts`（I/O なし）。
 
 ### `ws pr`: プルリクエストのブランチの worktree を用意する
 

@@ -7,10 +7,24 @@ export interface EditPlanInput {
   file: string;
   /** その worktree の tmux セッション（無ければ作る steps を持つ） */
   session: { name: string; steps: Step[] };
-  /** 同じファイルのエディターのウィンドウ（editWindowName の名前）が既にあるか */
-  windowExists: boolean;
+  /** tmux のグローバルな環境の EDITOR（無ければ空） */
+  editor: string;
+  /** その tmux セッションの nvim が待ち受けるソケットのパス（editSocketPath） */
+  socket: string;
+  /** 使い回すウィンドウ（SHARED_EDIT_WINDOW）が既にあるか */
+  sharedWindowExists: boolean;
+  /** そのソケットの nvim が応答するか */
+  serverResponds: boolean;
+  /** 同じファイルのウィンドウ（editWindowName の名前）が既にあるか */
+  fileWindowExists: boolean;
   ctx: GoContext;
 }
+
+/** worktree の tmux セッションごとに 1 つだけ使う、nvim のウィンドウの名前 */
+export const SHARED_EDIT_WINDOW = "edit";
+
+/** unix ソケットのパスの長さの上限（macOS は 104 バイトで、終端の NUL を含む）。超えると nvim が --listen できない */
+const SOCKET_PATH_MAX = 100;
 
 /** 文字列の短いハッシュ（djb2。ウィンドウ名の衝突を避けるためだけに使う） */
 function shortHash(s: string) {
@@ -43,15 +57,47 @@ export function parseEditFile(file: string | undefined) {
   return file;
 }
 
+/** EDITOR が nvim（`--listen` / `--server` を持つエディター）なら、その実行ファイル（EDITOR の最初の単語）。違えば undefined */
+export function serverEditorBin(editor: string) {
+  const bin = editor.trim().split(/\s+/)[0] ?? "";
+  return bin.split("/").pop() === "nvim" ? bin : undefined;
+}
+
+/** tmux セッション名から、nvim のソケットのファイル名（`<sanitized>-<hash>.sock`）。unix ソケットのパスは長さに上限があるので、名前は 24 文字までにする */
+export function editSocketPath(dir: string, session: string) {
+  const safe = session.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 24);
+  return `${dir.replace(/\/$/, "")}/${safe}-${shortHash(session)}.sock`;
+}
+
+/** ファイルの絶対パス（nvim --remote は nvim の作業ディレクトリで解釈するので、絶対パスで渡す） */
+export function absoluteFile(cwd: string, file: string) {
+  return file.startsWith("/") ? file : `${cwd.replace(/\/$/, "")}/${file.replace(/^\.\//, "")}`;
+}
+
+/** nvim を `--listen` 付きで起動するコマンド。前の nvim が残した（応答しない）ソケットのファイルは bind できないので消してから起動する。引数は $0（EDITOR 以外の位置引数）で渡す */
+export function serverLaunch(socket: string, file: string) {
+  return ["sh", "-c", 'rm -f "$0"; exec ${EDITOR:-vi} --listen "$0" "$1"', socket, file.startsWith("-") ? `./${file}` : file];
+}
+
 /**
  * ファイルをエディターで開く計画。
- * - 同じファイルのウィンドウが既にある: 何も起動せず、そのウィンドウへ移る（エディターを止めない。保存していない編集を失わないため）
- * - 無い: tmux セッション（無ければ作る）に、そのファイル専用のウィンドウを作って EDITOR を起動し、クライアントをそこへ移す
- * エディターを終えるとウィンドウは閉じる
+ * - EDITOR が nvim で、そのセッションの `edit` ウィンドウがあり nvim が応答する: 新しいウィンドウを作らず、その nvim に `--remote` でファイルを開かせ、クライアントをそのウィンドウへ移す
+ * - EDITOR が nvim で、`edit` ウィンドウもソケットの nvim も無い: tmux セッション（無ければ作る）に `edit` ウィンドウを作り、`nvim --listen <ソケット>` でファイルを開いて、クライアントを移す
+ * - それ以外は、ファイルごとのウィンドウ（今までの動き）に退く。nvim でないエディターはサーバー機能が無く、ソケットのパスが長すぎても --listen できない。
+ *   `edit` ウィンドウはあるのに応答しない（起動中・固まっている・nvim を抜けてシェルが残っている）、
+ *   または `edit` ウィンドウが無いのにソケットの nvim が応答する（別の場所で動いている）ときも、動いている nvim を止めず、巻き込まない
+ * 退いた先では、同じファイルのウィンドウが既にあれば起動せずそこへ移る。エディターを終えるとウィンドウは閉じる
  */
 export function planEdit(input: EditPlanInput): Step[] {
+  const bin = serverEditorBin(input.editor);
+  const shared = bin && input.socket.length <= SOCKET_PATH_MAX && input.sharedWindowExists === input.serverResponds;
+  if (bin && shared) {
+    const bring = bringClientTo(`${input.session.name}:${SHARED_EDIT_WINDOW}`, input.ctx);
+    if (input.serverResponds) return [{ op: "remoteEdit", bin, socket: input.socket, file: absoluteFile(input.cwd, input.file) }, ...bring];
+    return [...input.session.steps, { op: "openEditWindow", session: input.session.name, window: SHARED_EDIT_WINDOW, cwd: input.cwd, argv: serverLaunch(input.socket, input.file) }, ...bring];
+  }
   const window = editWindowName(input.file);
   const bring = bringClientTo(`${input.session.name}:${window}`, input.ctx);
-  if (input.windowExists) return bring;
+  if (input.fileWindowExists) return bring;
   return [...input.session.steps, { op: "openEditWindow", session: input.session.name, window, cwd: input.cwd, argv: editLaunch(input.file) }, ...bring];
 }

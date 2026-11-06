@@ -1,4 +1,6 @@
+import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
+import { run } from "@herdr-tools/utils/run";
 import { runInteractive } from "@herdr-tools/utils/run-interactive";
 import { looksLikePath, resolveRef, type Resolved, type WsCore } from "@herdr-tools/ws-core";
 import { focusGhostty, openGhosttyWindowRunning } from "./ghostty";
@@ -6,7 +8,7 @@ import { AGENTS_WINDOW, chooseClient, ensureSession, planGo, workingDir, type Pa
 import { continuingRecord, cycleCandidates, decideCurrentPane, inRecordedOrder, MESSAGE_WHEN_NO_CANDIDATE, nextCandidate, prevCandidate } from "./plans/cycle";
 import { planPanes } from "./plans/panes";
 import { HUNK_WINDOW, planHunk, type HunkSource } from "./plans/hunk";
-import { editWindowName, planEdit } from "./plans/edit";
+import { editSocketPath, editWindowName, planEdit, serverEditorBin, SHARED_EDIT_WINDOW } from "./plans/edit";
 import { HunkCli } from "./hunk-cli";
 import { toListJson } from "./list-json";
 import { currentRowId, goRefOf, itemId, sidebarItems, stepFrom, steppableItems } from "./sidebar-order";
@@ -15,6 +17,10 @@ import { readCollapsed, readCycleRecord, readStepRecord, writeCycleRecord, write
 export const MESSAGE_WHEN_NO_ROW = "移る行がありません";
 /** hunk を起動した直後、セッションが daemon に現れるのを待つ試行の回数（300ms 間隔） */
 const HUNK_START_ATTEMPTS = 30;
+/** nvim のソケットを置くフォルダー（tmux のセッションごとに 1 つのソケット） */
+const NVIM_SOCKET_DIR = `${homedir()}/.cache/herdr-tools/nvim`;
+/** `edit` ウィンドウがあるのに nvim が応答しないとき（起動した直後）、応答するのを待つ試行の回数（150ms 間隔） */
+const NVIM_START_ATTEMPTS = 10;
 import { indexTmux, isPaneId, sessionPaths } from "./tmux-index";
 import { TmuxServer } from "./tmux-server";
 
@@ -61,7 +67,17 @@ export class TmuxNavigator {
     return steps;
   }
 
-  /** worktree のファイルを $EDITOR（tmux のグローバルな環境の EDITOR）で開く。そのファイル専用の tmux ウィンドウで起動し、クライアントをそこへ移す */
+  /** その nvim が応答するか（`--remote-expr 1` の答えで確かめる） */
+  private async nvimResponds(bin: string, socket: string) {
+    if (!existsSync(socket)) return false;
+    const r = await run(bin, ["--server", socket, "--remote-expr", "1"]);
+    return r.code === 0 && r.stdout.trim() === "1";
+  }
+
+  /**
+   * worktree のファイルを $EDITOR（tmux のグローバルな環境の EDITOR）で開く。
+   * EDITOR が nvim なら、tmux セッションごとに 1 つの `edit` ウィンドウの nvim を使い回し（--listen / --remote）、そうでなければファイルごとのウィンドウで起動する。クライアントをそのウィンドウへ移す
+   */
   async openInEditor(path: string, opts: { file: string; client?: string; fromApp?: boolean }) {
     const view = await this.view({ alsoShow: [path] });
     const target = resolveRef(view.snap, path);
@@ -74,11 +90,25 @@ export class TmuxNavigator {
       clients: await this.tmux.listClients(),
     });
     const session = ensureSession(target.worktree, view.idx, cwd);
+    const editor = await this.tmux.globalEnv("EDITOR");
+    const bin = serverEditorBin(editor);
+    const socket = editSocketPath(NVIM_SOCKET_DIR, session.name);
+    const sharedWindowExists = await this.tmux.hasWindow(session.name, SHARED_EDIT_WINDOW);
+    let serverResponds = bin ? await this.nvimResponds(bin, socket) : false;
+    // 起動した直後の nvim はまだソケットを作っていない。別のウィンドウを増やさないよう、少し待つ
+    for (let i = 0; bin && sharedWindowExists && !serverResponds && i < NVIM_START_ATTEMPTS; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      serverResponds = await this.nvimResponds(bin, socket);
+    }
     const steps = planEdit({
       cwd,
       file: opts.file,
       session,
-      windowExists: await this.tmux.hasWindow(session.name, editWindowName(opts.file)),
+      editor,
+      socket,
+      sharedWindowExists,
+      serverResponds,
+      fileWindowExists: await this.tmux.hasWindow(session.name, editWindowName(opts.file)),
       ctx: { client, fromApp: !!opts.fromApp, cwdWhenMissing: this.cwdWhenMissing },
     });
     for (const step of steps) await this.run(step);
@@ -148,7 +178,13 @@ export class TmuxNavigator {
       case "respawnHunkWindow":
         return this.tmux.respawnWindowRunning(step.session, HUNK_WINDOW, step.cwd, step.argv);
       case "openEditWindow":
+        mkdirSync(NVIM_SOCKET_DIR, { recursive: true });
         return void (await this.tmux.openWindowRunning(step.session, step.window, step.cwd, step.argv));
+      case "remoteEdit":
+        await run(step.bin, ["--server", step.socket, "--remote", step.file]).then((r) => {
+          if (r.code !== 0) throw new Error(`${step.bin} --remote: ${r.stderr.trim() || r.stdout.trim()}`);
+        });
+        return;
       case "hunkReload":
         return this.hunk.reload(step.cwd, step.args);
       case "hunkNavigate":

@@ -96,6 +96,13 @@ export class TmuxServer {
     return (await this.linesOrNoneWhenServerIsDown(["list-windows", "-t", exact(session), "-F", "#{window_name}"])).includes(window);
   }
 
+  /** tmux のグローバルな環境の値（`set-environment -g NAME ...`）。無ければ空 */
+  async globalEnv(name: string) {
+    const r = await run(this.bin, this.argv(["show-environment", "-g", name]));
+    const line = r.code === 0 ? r.stdout.trim() : "";
+    return line.startsWith(`${name}=`) ? line.slice(name.length + 1) : "";
+  }
+
   /** session に window を作り、その中で argv を起動する（cwd が作業ディレクトリ）。出力は作ったペインの id */
   async openWindowRunning(session: string, window: string, cwd: string, argv: string[]) {
     return (await this.exec(["new-window", "-d", "-t", `${exact(session)}:`, "-n", window, "-c", cwd, "-P", "-F", "#{pane_id}", ...argv])).trim();

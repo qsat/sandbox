@@ -272,5 +272,27 @@ t send-keys -K -c "$CLIENT" C-b 'C-\'
 sleep 0.3
 check "会話中でないペインには送らない（SIGQUIT でプログラムを落とさない）" "$(t display -p -t "$PLAIN_PANE" '#{pane_id} #{pane_current_command}')" "$PLAIN_PANE cat"
 
+echo "edit（セッションごとに 1 つの nvim を使い回す）"
+if command -v nvim >/dev/null 2>&1; then
+  # nvim のソケットを置く ~/.cache を、利用者のものにしない。unix ソケットのパスは短くしないと --listen できないので /tmp の下に作る
+  export HOME="$(mktemp -d /tmp/wse.XXXXXX)"
+  trap 'rm -rf "$HOME"; cleanup' EXIT
+  t set-environment -g EDITOR nvim
+  echo a >"$FEAT/a.txt"; echo b >"$FEAT/b.txt"
+  edit_windows() { t list-windows -t '=api=feat-auth' -F '#{window_name}' 2>/dev/null | grep -c '^edit' || true; }
+  nvim_buffers() { nvim --server "$HOME"/.cache/herdr-tools/nvim/*.sock --remote-expr 'join(map(getbufinfo({"buflisted":1}), "fnamemodify(v:val.name, \":t\")"), ",")' 2>/dev/null || true; }
+  ws edit "$FEAT" --file a.txt --client "$CLIENT"
+  check "初めて開くと edit ウィンドウが 1 つできる" "$(edit_windows)" "1"
+  check "クライアントが移る" "$(client_session)" "api=feat-auth"
+  for _ in $(seq 50); do [ "$(nvim_buffers)" = "a.txt" ] && break; sleep 0.1; done
+  check "nvim --listen でファイルを開いた" "$(nvim_buffers)" "a.txt"
+  ws edit "$FEAT" --file b.txt --client "$CLIENT"
+  check "2 つ目のファイルでもウィンドウは増えない" "$(edit_windows)" "1"
+  check "同じ nvim が 2 つ目のファイルを開いた" "$(nvim_buffers)" "a.txt,b.txt"
+  nvim --server "$HOME"/.cache/herdr-tools/nvim/*.sock --remote-send '<Esc>:qa!<CR>' >/dev/null 2>&1 || true
+else
+  echo "  (nvim が無いので省略)"
+fi
+
 echo
 echo "E2E: $pass checks passed"
