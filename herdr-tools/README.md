@@ -13,12 +13,17 @@ herdr-tools/
 │   ├── domain/
 │   │   ├── agent.ts              AgentRecord → AgentNode、再開できるか、注意が要る順
 │   │   ├── tree.ts               Workspace > Worktree > Agent の木
-│   │   └── locate.ts             パス・id から木の場所を引く
+│   │   ├── locate.ts             パス・id から木の場所を引く
+│   │   ├── change-amount.ts      worktree の変更量（ws changes）の数え方
+│   │   └── pr-worktree.ts        プルリクエストの worktree を作るか・最新にするか（ws pr）の判断
 │   ├── ports.ts                  AgentRuntime / WorkspaceSource（単体テストで偽物に差し替える継ぎ目）
 │   ├── ws-core.ts                WsCore: snapshot / resume / startAgent / stopAgent / recordClaudeSessionFromHook / removeAgents
 │   │   └── usage.ts              Claude の利用上限（5h / 週）の枠、期限切れの扱い
 │   ├── claude-code.ts            会話の再開コマンド、SessionStart hook と statusLine の入力
-│   ├── ghq-workspace-source.ts   WorkspaceSource の実装
+│   ├── ghq-workspace-source.ts   WorkspaceSource の実装（ghq と git worktree list で worktree を見つける）
+│   ├── git-cli.ts                git の呼び出し（-C <worktree>、.git に書かない読み取り、失敗を例外にする）
+│   ├── git-change-amounts.ts     ws changes の実行（worktree の変更量を git で数える）
+│   ├── pr-worktrees.ts           ws pr の実行（gh でブランチを調べ、git で worktree を作る・早送りする）
 │   └── herdr-core/               AgentRuntime の実装（hc-terminal: schema/hc.openrpc.json の Terminal、hc-client: JSON-RPC、herdr-runtime: 翻訳）
 ├── tmux/src/                     クライアント: tmux でエージェントへ移動し、会話する
 │   ├── facts.ts                  tmux のセッション・ペイン・クライアント
@@ -32,9 +37,9 @@ herdr-tools/
 │   └── ui/                       rows（一覧の行）/ popup（ws ui）/ keys
 ├── herdr-app/                    クライアント: Herdr app の mod（ws を exec するだけ）
 │   ├── src/agent-board/          board.ts（行と ws の呼び出し）/ main.ts（Herdr app の API）
-│   ├── src/commit-history/       コミット履歴の mod。git.ts（git の出力の読み取り）/ rows.ts（行の並びと選択）/ main.ts（Herdr app の API）
+│   ├── src/commit-history/       コミット履歴の mod。git.ts（git の出力の読み取り）/ base-ref.ts（ベースブランチを探す）/ rows.ts（行の並びと選択）/ main.ts（Herdr app の API）
 │   ├── src/pull-requests/        プルリクエストの mod。gh.ts（gh の出力の読み取りと失敗の文）/ rows.ts（行の並び）/ main.ts（Herdr app の API）
-│   ├── src/shared/               mod で共通の処理: ws-list.ts（ws list --json の読み取り）/ target.ts（今いるペインの worktree）/ ws-hunk.ts（ws hunk の引数）/ relative-time.ts / selection.ts（j・k の選択）/ row-view.ts（行の見た目）/ tmux-focus.ts（tmux のペインの変化の見張り）/ colors.ts / title-bar.ts
+│   ├── src/shared/               mod で共通の処理: ws-exec.ts（ws の呼び出しと失敗の文）/ current-target.ts（ws list から今いるペインの worktree を読む）/ ws-list.ts（ws list --json の読み取り）/ target.ts（今いるペインの worktree）/ ws-hunk.ts（ws hunk の引数）/ relative-time.ts / selection.ts（j・k の選択）/ row-view.ts（行の見た目・アイコンボタン・worktree の見出し）/ tmux-focus.ts（tmux のペインの変化の見張り）/ colors.ts / title-bar.ts
 │   ├── sync-types.sh, tsconfig.json   Herdr app が生成した型（types/、gitignore）で mod の main.ts を検査する
 │   ├── mod/agent-board/mod.json, mod/commit-history/mod.json, mod/pull-requests/mod.json, layouts/agents.json
 └── ws/                           CLI。cli.ts と compose-from-env.ts で全部をつなぐ
@@ -80,6 +85,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | やりたいこと | tmux から | Herdr app から |
 | --- | --- | --- |
 | worktree を作る | `gwq add -b <branch>`（今までどおり） | — |
+| プルリクエストのブランチの worktree を用意する | `ws pr <番号>`（無ければ作り、あれば最新にして、その tmux セッションへ移る。エージェントは起動しない） | pull-requests の行の worktree のアイコン |
 | その worktree に入る | `C-e`（tm）で選ぶ（今までどおり） | 一覧で worktree をクリック → Ghostty が前に出る |
 | エージェントを起動する | `cc`（`ws new --here`。今のペインで会話）か `ws new --attach`（agents ウィンドウへ移る） | worktree の「＋ claude」ボタン |
 | 待っているエージェントを探す | `prefix a`（blocked が先頭） | 一覧を見る（常時表示） |
@@ -110,8 +116,11 @@ ws next [--prev] [--client <name> | --from-app] [--list]
                                                  blocked → done → idle の順の列（同じ status の中は status になった時刻が新しい順。working と動いていないものは除く）を巡回し、エージェントの会話ペインへ移動。3 秒以内に続けて押すと、前回の列の順のまま前回移った先の次へ進む（--prev で後ろへ）。3 秒以上空くと今いる場所は数えず、列の先頭（--prev なら最後）へ移る。前回の列と移った先は `~/.cache/herdr-tools/next-last.json` に記録する（--list は移動せず、列を「ID・名前・status・status になった時刻・workspace・worktree」で順に出す。--from-app は移動後に Ghostty を前に出し、候補が無いときは標準エラーにも出す）
 ws step [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]
                                                  サイドバー（mod）に並ぶ行の順で、1 つ下（--prev で 1 つ上）の行へ移動。移る先はエージェントとペインの行（workspace の見出し、worktree の行、mod で畳んだ workspace の中の行は数えない）。端では反対の端へ回り、今いる行が無ければ下は先頭・上は最後。--list は移動せず、並びを「今いる行の印（*）・種類・ref・名前」で 1 行ずつ出す。--from-app は移動後に Ghostty を前に出す
-ws hunk [<worktree>] [--commit <hash> | --pr <number> | --gh-commit <sha>] [--file <path>] [--client <name> | --from-app]
+ws hunk [<worktree>] [--commit <hash> | --pr <number> | --gh-commit <sha> | --range <ref>...<ref> | --against <rev>] [--file <path>] [--client <name> | --from-app]
                                                  差分を hunk で開く（下の「ws hunk」を参照）
+ws pr <number> [<worktree>] [--no-go] [--client <name> | --from-app]
+                                                 プルリクエストのブランチの worktree を用意して移る（下の「ws pr」を参照）
+ws changes [--json] <worktree>...               worktree ごとの変更量（下の「worktree の変更量」を参照）
 ws ui [--client <name>]                          tmux popup 用の対話一覧
 ws hook session-start                            Claude Code の SessionStart hook
 ws statusline [--quiet]                          Claude Code の statusLine。5h / 週の利用上限を記録して表示する
@@ -122,6 +131,10 @@ ws prune [--dry-run] [--yes]                     場所が消えた worktree の
 
 `ws hunk <worktree> --commit <hash> --file <path>` は、`hunk show <hash>` でコミット全体を開いてから `<path>` の最初の hunk へ移る。
 `--commit` を省くと未コミットの変更（`hunk diff`）を開く。`--file` を省くとファイルへは移らない。
+`--range <ref>...<ref>`（例: `origin/main...HEAD`、`@{upstream}...HEAD`）はブランチ間の差分（`hunk diff <range>`）を開く。`--commit` と同じく reload で入れ替えられる。
+値は `<ref>..<ref>` か `<ref>...<ref>` の形で、`-` で始まらないものに限る。
+`--against <rev>` は作業ツリーと `<rev>` の差分（`hunk diff <rev>`）を開く。未コミットの変更と追跡されていないファイルも含む（hunk は範囲のときは追跡されていないファイルを入れず、1 つのリビジョンのときは入れる）。
+値は 1 つのリビジョン（`..` を含まず、`-` で始まらない）に限る。`--commit`・`--pr`・`--gh-commit`・`--range`・`--against` はどれか 1 つだけ指定できる。
 hunk の実行ファイルは `HUNK_BIN`（既定は `hunk`）で指定する。
 
 GitHub のものを開く指定（`--commit` と同時には指定できない）:
@@ -142,6 +155,43 @@ GitHub のものを開く指定（`--commit` と同時には指定できない�
 
 hunk を開いた tmux のペインへ、`ws go` と同じ移動の部品（クライアントの選び方、Ghostty を前に出す処理）で移る。
 
+hunk の中で `e` を押すと、選んでいる行をエディターで開く。hunk は `$EDITOR` だけを見る（`$VISUAL` や hunk の設定ファイルは見ない。`vim` / `nvim` / `vi` なら `+<行>` を付け、hunk を止めて同じペインで開く）。
+`ws hunk` は hunk を tmux のウィンドウで起動するので、hunk の環境は tmux サーバーのグローバルな環境になる。`tmux/config/tmux.conf` の `set-environment -g EDITOR nvim` を `~/.tmux.conf` に写す。
+写したあとは `tmux source-file ~/.tmux.conf` で読み直し、開いている hunk は一度終わらせる（`hunk session reload` は hunk を起動し直さないので、前の環境のまま）。
+
+### `ws pr`: プルリクエストのブランチの worktree を用意する
+
+`ws pr <番号> [<worktree>]` は、`<worktree>`（既定は今のディレクトリ）のリポジトリのプルリクエスト `<番号>` のブランチを、レビューや手直しのために手元に用意する。
+エージェントは起動しない（起動は今までどおり `ws new` や agent-board の「＋ claude」）。用意したあと、その worktree の tmux セッションへ `ws go` と同じ仕組みで移る（`--no-go` なら移らない）。
+
+1. `gh pr view <番号> --json number,headRefName,isCrossRepository` でブランチを調べる。フォークからのプルリクエスト（ブランチが origin に無い）は、まだ扱わずに断る
+2. 本体のリポジトリで `git fetch origin +refs/heads/<ブランチ>:refs/remotes/origin/<ブランチ>` を取ってくる
+3. そのブランチを checkout している worktree（`git worktree list --porcelain`）があるか
+
+| 状況 | やること |
+| --- | --- |
+| worktree が無い | 本体の横に `<本体のフォルダー名>=<ブランチ名>` で作る（`/` は `-` にする。gwq で作る worktree と同じ並び。例: `api=feat-auth`）。手元にブランチが無ければ `git worktree add --track -b <ブランチ> <場所> origin/<ブランチ>`、あればそのブランチで作り、下の「最新にする」と同じ判断で進める。作る場所に既にファイルかフォルダーがあれば断る |
+| worktree があり、origin のほうが進んでいる | `git merge --ff-only` で早送りする |
+| origin と同じ | 何もしない（「最新です」） |
+| push 前のコミットがある | 触らない（エージェントや自分の作業を守る。上書きや rebase はしない） |
+| 追跡しているファイルに未コミットの変更があり、origin のほうが進んでいる | 触らない |
+
+- 結果（作った・最新にした・更新しなかった理由）を 1 行で標準出力に出す
+- gwq は使わず git で作る。ws は worktree を `git worktree list` で見つけるので、gwq で作ったものも `ws pr` で作ったものも同じように一覧に並ぶ。`gwq remove` でも片付けられる
+- gh の実行ファイルは `GH_BIN`（既定は `gh`）で指定する
+- Herdr app の mod `pull-requests` では、プルリクエストの行の右端の worktree のアイコン（フォークのものには出さない）で `ws pr <番号> <worktree> --from-app` を呼ぶ。結果の文を一覧の下に出す
+
+### worktree の変更量（`ws changes`）
+
+`ws changes --json <worktree>...` は、worktree ごとに「ベースブランチから分かれた点と作業ツリーの差」を、足した行と消した行の数で出す（`{"<worktree>": {"added": 12, "deleted": 3}}`。出せない worktree は `null`）。
+エージェントの作業がどれだけ溜まっているかを見るためのもので、agent-board の worktree の行に `+12 −3` として出す（変更が無ければ出さない）。
+
+- ベースブランチは `origin/HEAD` が指すブランチ、無ければ手元の `main`、`master` の順（gh には問い合わせない。commit-history のベースのようにプルリクエストの base は見ない）。どれも無ければ `null`
+- 分かれた点は `git merge-base <ベース> HEAD`。そこと作業ツリーを `git diff --numstat` で比べるので、コミット済み・未コミットの変更が入り、ベースブランチに後から入ったコミットは入らない
+- 追跡されていないファイル（`git ls-files --others --exclude-standard`）は、行数を足した行に数える。200 個を超えるとき（ビルドの出力を ignore し忘れたときなど）は数えない。1 MB を超えるファイルとバイナリ（NUL を含む）も数えない
+- git は `.git` に何も書かない引数（`--no-optional-locks` など）で読む
+- agent-board は 10 秒ごとと、並ぶ worktree が変わったときに読み直す（一覧の 2 秒ごとより長い。worktree ごとに git を何度か呼ぶため）。読めなくても一覧は壊れない
+
 ### Herdr app の mod `commit-history`（Diffview の `:DiffviewFileHistory` にあたる）
 
 tmux で今いるペインの worktree のコミット履歴を出す。Herdr app に最初から入っている `changes` mod は Herdr app のフォーカスで
@@ -152,7 +202,7 @@ tmux で今いるペインの worktree のコミット履歴を出す。Herdr ap
 | 行 | 出すもの |
 | --- | --- |
 | ヘッダー | 「Commit history」と、出しているコミットの数。右端に、コミットの範囲を切り替えるボタン（下の表） |
-| 先頭の行 | worktree（workspace 名とブランチ） |
+| 先頭の行 | worktree（workspace 名とブランチ）。範囲が push 前・ベースからのときは、右端にブランチ間の差分を開くボタンを出す（下の「ブランチ間の差分」） |
 | 「未コミットの変更」（変更があるときだけ） | 開くと、`git status` のファイルを A / M / D / R / U / ?（追跡されていない）、パス、+ と − の行数（`git diff HEAD --numstat`）で並べる |
 | コミット（新しい順に 50 件） | 短いハッシュ、件名、ブランチとタグの印、作者、相対的な日時。開くと、そのコミットで変わったファイルを A / M / D / R、パス、+ と − の行数で並べる（`git show --name-status` と `--numstat`） |
 
@@ -163,6 +213,16 @@ tmux で今いるペインの worktree のコミット履歴を出す。Herdr ap
 | すべて（時計に戻りの矢印のアイコン） | HEAD からの履歴（`git log`） | — |
 | push 前（上向きの矢印のアイコン） | 上流のブランチにまだ push していないもの（`git log @{upstream}..HEAD`） | 上流のブランチが無ければ、その旨を出す |
 | ベースブランチの名前（`main` など） | ベースブランチから分かれた後のもの（`git log <ベース>..HEAD`）。ベースは、今のブランチのプルリクエストがあればその base ブランチ（`gh pr view --json baseRefName`。リモートの `origin/<base>` を先に、無ければ手元のブランチ）。プルリクエストが無ければ `origin/HEAD` が指すブランチ、無ければ手元の `main`、`master` の順。このボタンを押すたびに調べ直す | ベースブランチが見つからなければ、その旨を出す |
+
+ブランチ間の差分: 先頭の行の右端のボタンで、比べる相手のブランチ（push 前なら上流のブランチ、ベースからならベースブランチ）との差分を hunk に開く。
+どちらも分かれた点からの差分なので、相手のブランチに後から入ったコミットは混ざらない（GitHub のプルリクエストの差分と同じ）。
+
+| ボタン | 開く差分 | 出すとき |
+| --- | --- | --- |
+| 比べる矢印のアイコン（コミットだけ） | `ws hunk --range <相手>...HEAD`（`hunk diff <相手>...HEAD`） | コミットがあるとき |
+| ファイルに + のアイコン（未コミットも含める） | `git merge-base <相手> HEAD` で分かれた点を求め、`ws hunk --against <そのハッシュ>`（`hunk diff <ハッシュ>`）で作業ツリーと比べる。未コミットの変更と追跡されていないファイルも入る | 未コミットの変更があるとき（無ければコミットだけと同じなので出さない） |
+
+上流のブランチが無いとき・ベースブランチが分からないとき・範囲が「すべて」のときは、どちらのボタンも出さない。
 
 - キー（mod を一度クリックしてフォーカスを渡してから）: `j` / `k`（↓ / ↑）で行を選び、`Enter` でコミット・未コミットの行を開閉する。ファイルの行は `Enter` かクリックで、`ws hunk` を呼んで hunk で差分を開く。コミットの行の短いハッシュをクリックすると、行は開閉せず、そのコミット全体を hunk で開く
 - 読み直し: 今いるペインが変わったとき（agent-board と同じ tmux-focus の見張り）、`.git` の `HEAD` や `refs` が変わったとき（`git rev-parse --absolute-git-dir` と `--git-common-dir` を `watchFolder` で見張る）、5 秒ごと。結果が前と同じなら再描画しない。作業ツリーは見張らないので、未コミットの変更は 5 秒ごとかペインの変化で読み直す
@@ -180,7 +240,7 @@ tmux で今いるペインの worktree のリポジトリについて、開い�
 | --- | --- | --- |
 | 題名の帯 | プルリクエストのアイコン、「Pull requests」、件数の枠（`N PRs`） | — |
 | 先頭の行 | worktree（workspace 名とブランチ） | — |
-| プルリクエスト（`gh pr list --state open --limit 30`。今のブランチのものを先頭に置き `[このブランチ]` の印を付ける） | `#番号`、題名、下書きなら「下書き」の印、`head → base`、作者、相対的な更新日時 | `#番号` を押すと、プルリクエスト全体を hunk で開く（`ws hunk --pr`）。行のほかの部分を押す（または `Enter`）と、コミットの一覧を開閉する |
+| プルリクエスト（`gh pr list --state open --limit 30`。今のブランチのものを先頭に置き `[このブランチ]` の印を付ける） | `#番号`、題名、下書きなら「下書き」の印、`head → base`、作者、相対的な更新日時、右端に worktree のアイコン（フォークのものには出さない） | `#番号` を押すと、プルリクエスト全体を hunk で開く（`ws hunk --pr`）。worktree のアイコンを押すと、そのブランチの worktree を用意して移る（`ws pr`）。行のほかの部分を押す（または `Enter`）と、コミットの一覧を開閉する |
 | プルリクエストの下のコミット（`gh pr view <番号> --json commits`。新しい順） | 短いハッシュ、件名、作者、相対的な日時 | 短いハッシュを押す（または選んで `Enter`）と、そのコミットの差分を hunk で開く。手元にあれば（`git cat-file -e <sha>^{commit}`）`ws hunk --commit`（`hunk show`）、無ければ `ws hunk --gh-commit`（`hunk gh commit`） |
 
 - キー（mod を一度クリックしてフォーカスを渡してから）: `j` / `k`（↓ / ↑）で行を選ぶ
@@ -375,6 +435,6 @@ bun run build:mod   # mod だけ
 E2E は `git worktree` で `repo` と `repo=branch` を横並びに作り、tmux のコントロールモードのクライアントを切り替え対象にして、
 list / new / hook / go（全分岐）/ resume / stop / panes / new --attach / prune / ui / close を確かめる。
 
-環境変数: `HC_BIN`（hc のパス）、`WS_TMUX_SOCKET`（`tmux -L`）、`TMUX_BIN`、`GHQ_ROOT`、`GHQ_BIN`、`GIT_BIN`、`WS_SESSION_LABEL`、`WS_CLAUDE_BIN`、`WS_PANES_MAX`、`WS_DEBUG`。
+環境変数: `HC_BIN`（hc のパス）、`WS_TMUX_SOCKET`（`tmux -L`）、`TMUX_BIN`、`GHQ_ROOT`、`GHQ_BIN`、`GIT_BIN`、`GH_BIN`、`HUNK_BIN`、`WS_SESSION_LABEL`、`WS_CLAUDE_BIN`、`WS_PANES_MAX`、`WS_DEBUG`。
 
 クライアントを足すとき（別の端末マルチプレクサなど）は、ws-core の `WsCore` と木（`Tree` / `Locate`）だけを使って `tmux/` と同じ形で作る。ws-core には手を入れない。

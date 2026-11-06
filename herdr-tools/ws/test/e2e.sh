@@ -195,9 +195,10 @@ check "q で閉じる" "$(grep -o 'exit=[0-9]*' <<<"$UI_OUT" | tail -1)" "exit=0
 echo "close（tmux セッションを閉じる。エージェントは止めない）"
 has_session() { if t has-session -t "=$1" 2>/dev/null; then echo yes; else echo no; fi; }
 check "閉じる前は api のセッションがある" "$(has_session api)" "yes"
-(sleep 2.5; printf 'Gxn'; sleep 1; printf 'q') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'" >/dev/null
+# 最後の行は main の下のペインの行（移動だけで x は効かない）なので、k で 1 つ上の main の worktree の行に移ってから x を押す
+(sleep 2.5; printf 'Gkxn'; sleep 1; printf 'q') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'" >/dev/null
 check "一覧で x のあと y 以外を押すと閉じない" "$(has_session api)" "yes"
-UI_OUT="$( (sleep 2.5; printf 'Gxy'; sleep 1.5; printf 'q') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'" | tr -d '\r')"
+UI_OUT="$( (sleep 2.5; printf 'Gkxy'; sleep 1.5; printf 'q') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'" | tr -d '\r')"
 check "一覧で x → y で閉じる" "$(has_session api)" "no"
 check "閉じたことを一覧に出す" "$(grep -c '閉じました: api' <<<"$UI_OUT" | awk '{print ($1>0)}')" "1"
 check "セッションが無ければ何もしない" "$(ws close "$API")" "skip $API: no-session"

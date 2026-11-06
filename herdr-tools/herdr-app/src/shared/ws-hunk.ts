@@ -25,3 +25,13 @@ export function wsHunkGithubCommitArgs(root: string, sha: string) {
 export function wsHunkPrCommitArgs(root: string, sha: string, existsLocally: boolean) {
   return existsLocally ? wsHunkArgs(root, sha, null) : wsHunkGithubCommitArgs(root, sha);
 }
+
+/** ブランチ間の差分を開く引数（`hunk diff <range>`。例: `origin/main...HEAD`） */
+export function wsHunkRangeArgs(root: string, range: string) {
+  return ["hunk", root, "--range", range, "--from-app"];
+}
+
+/** 作業ツリーと 1 つのリビジョンの差分を開く引数（`hunk diff <rev>`。未コミット・追跡されていないファイルも含む） */
+export function wsHunkAgainstArgs(root: string, rev: string) {
+  return ["hunk", root, "--against", rev, "--from-app"];
+}

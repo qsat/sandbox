@@ -1,17 +1,19 @@
 import { View, div, type AsyncContext, type Context, type Element, type FocusHandle } from "gpui-kit";
 import { exec, theme } from "herdr";
-import { BRANCH_COLOR, REPOSITORY_COLOR } from "../shared/colors";
+import { BRANCH_COLOR } from "../shared/colors";
+import { readCurrentTarget } from "../shared/current-target";
 import { relativeTime } from "../shared/relative-time";
-import { ROW_HEIGHT, hunkLink, label, rowBase, type Theme } from "../shared/row-view";
+import { ROW_HEIGHT, hunkLink, iconButton, label, rowBase, targetHeader, type Theme } from "../shared/row-view";
 import { moveSelection } from "../shared/selection";
-import { resolveTarget, type Target } from "../shared/target";
+import type { Target } from "../shared/target";
 import { TITLE_BAR_HEIGHT } from "../shared/title-bar";
 import { stackTabs } from "../shared/stack-tabs";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import { wsHunkPrArgs, wsHunkPrCommitArgs } from "../shared/ws-hunk";
-import { parseList, WS } from "../shared/ws-list";
+import { execWs } from "../shared/ws-exec";
 import { NO_PULL_REQUESTS_MESSAGE, PR_LIST_ARGS, ghFailureMessage, parsePrCommits, parsePrList, prCommitsArgs, type PrCommit, type PullRequest } from "./gh";
 import { visibleRows, type Row } from "./rows";
+import { wsPrArgs } from "./ws-pr";
 
 /** ws list の読み直しの間隔（今いるペインの worktree に追従するため）。gh は呼ばない */
 const FOLLOW_MS = 5000;
@@ -30,6 +32,8 @@ export default class PullRequests extends View {
   expanded!: number | null;
   selected!: string | null;
   error!: string;
+  /** ws pr の結果（作った・最新にした・更新しなかった理由）。失敗は error に出す */
+  notice!: string;
   fetchingList!: boolean;
   fetchingPrs!: boolean;
   dirty!: boolean;
@@ -45,6 +49,7 @@ export default class PullRequests extends View {
     this.expanded = null;
     this.selected = null;
     this.error = "";
+    this.notice = "";
     this.fetchingList = false;
     this.fetchingPrs = false;
     this.dirty = false;
@@ -58,7 +63,7 @@ export default class PullRequests extends View {
 
   /** 結果が前と同じなら再描画しない */
   repaint(cx: Context) {
-    const snapshot = JSON.stringify([this.target, this.error, this.prs, this.message, this.expanded, [...this.commitsOf]]);
+    const snapshot = JSON.stringify([this.target, this.error, this.notice, this.prs, this.message, this.expanded, [...this.commitsOf]]);
     if (snapshot === this.snapshot) return;
     this.snapshot = snapshot;
     cx.notify();
@@ -74,12 +79,9 @@ export default class PullRequests extends View {
     cx.spawn(
       async (cx) => {
         try {
-          const r = await exec(WS, ["list", "--json"]);
-          if (r.code !== 0) this.error = (r.stderr || `ws list: exit ${r.code}`).trim();
-          else {
-            this.error = "";
-            this.followTarget(resolveTarget(parseList(r.stdout), this.target));
-          }
+          const current = await readCurrentTarget(this.target);
+          this.error = current.error;
+          if (!current.error) this.followTarget(current.target);
         } catch (e) {
           this.error = String((e as Error)?.message ?? e);
         } finally {
@@ -181,11 +183,32 @@ export default class PullRequests extends View {
     cx.spawn(
       async (cx) => {
         try {
-          const r = await exec(WS, await resolveArgs(root));
-          this.error = r.code !== 0 ? (r.stderr.trim() || `ws hunk: exit ${r.code}`) : "";
+          this.error = (await execWs(await resolveArgs(root))).error;
         } catch (e) {
           this.error = String((e as Error)?.message ?? e);
         }
+        cx.notify();
+      },
+      { owner: this },
+    );
+  }
+
+  /**
+   * プルリクエストのブランチの worktree を用意して、その tmux セッションへ移る（ws pr）。
+   * worktree が無ければ作り、あれば早送りできるときだけ最新にする。エージェントは起動しない
+   */
+  preparePrWorktree(row: Extract<Row, { kind: "pr" }>, cx: Context) {
+    const root = this.target?.path;
+    if (!root) return;
+    this.selected = row.id;
+    this.notice = `#${row.pr.number} の worktree を用意しています…`;
+    this.error = "";
+    cx.notify();
+    cx.spawn(
+      async (cx) => {
+        const r = await execWs(wsPrArgs(root, row.pr.number));
+        this.error = r.error;
+        this.notice = r.ok ? r.stdout.trim() : "";
         cx.notify();
       },
       { owner: this },
@@ -241,7 +264,14 @@ export default class PullRequests extends View {
           .when(p.isDraft, (el) => el.child(div().flex_none().px(4).rounded(4).border_1().border_color(t.border).text_size(10).text_color(t.blocked).child("下書き")))
           .child(div().flex_none().text_size(11).text_color(t.muted).child(`${p.headRef} → ${p.baseRef}`))
           .child(div().flex_none().text_size(11).text_color(t.muted).child(p.author || "作者不明"))
-          .child(div().flex_none().text_size(11).text_color(t.dim).child(relativeTime(now, p.updatedAt)));
+          .child(div().flex_none().text_size(11).text_color(t.dim).child(relativeTime(now, p.updatedAt)))
+          .when(!p.crossRepository, (el) =>
+            el.child(
+              iconButton(`${row.id}:worktree`, "mods/pull-requests/worktree.svg", "このブランチの worktree を用意して移る（無ければ作り、あれば最新にする。エージェントは起動しない）", t, (cx) =>
+                this.preparePrWorktree(row, cx),
+              ),
+            ),
+          );
       }
       case "commit": {
         const c = row.commit;
@@ -258,20 +288,6 @@ export default class PullRequests extends View {
       case "note":
         return div().min_h(ROW_HEIGHT).flex().items_center().pl(24).text_color(t.muted).child(row.text);
     }
-  }
-
-  renderHeader(t: Theme) {
-    const target = this.target!;
-    return div()
-      .flex()
-      .items_center()
-      .gap(8)
-      .min_h(ROW_HEIGHT)
-      .px(4)
-      .overflow_hidden()
-      .whitespace_nowrap()
-      .child(div().font_semibold().text_color(REPOSITORY_COLOR).child(target.workspace))
-      .child(div().text_color(BRANCH_COLOR).child(target.label));
   }
 
   renderTitleBar(t: Theme) {
@@ -302,7 +318,7 @@ export default class PullRequests extends View {
       .when(this.target === null, (el) => el.child(label(this.error || NO_TARGET_MESSAGE, this.error ? t.ansi1 : t.muted)))
       .when(this.target !== null, (el) =>
         el
-          .child(this.renderHeader(t))
+          .child(targetHeader(this.target!, t))
           .child(
             div()
               .id("pull-requests:list")
@@ -312,6 +328,7 @@ export default class PullRequests extends View {
               .when(rows.length === 0 && placeholder !== "", (el) => el.child(label(placeholder, t.muted)))
               .children(rows.map((r) => this.renderRow(r, t, now))),
           )
+          .when(this.notice !== "" && this.error === "", (el) => el.child(label(this.notice, t.muted)))
           .when(this.error !== "", (el) => el.child(label(this.error, t.ansi1))),
       );
     return div()

@@ -3,8 +3,7 @@
  * 引数の組み立てと出力の読み取りをここに置き、exec は main.ts だけが呼ぶ。
  */
 
-/** `.git` に何も書かずに読む引数。`.git` を見張っているので、自分の読み取りで読み直しが繰り返されるのを防ぐ */
-export const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false"];
+import { parseNumstat, type NumstatEntry } from "@herdr-tools/utils/parse-numstat";
 
 export const LOG_LIMIT = 50;
 export const LOG_ARGS = ["log", "-n", String(LOG_LIMIT), "--no-color", "--format=%x1e%H%x1f%h%x1f%an%x1f%at%x1f%D%x1f%s"];
@@ -25,8 +24,30 @@ export function logArgs(range: HistoryRange, baseRef: string | null = null) {
   return LOG_ARGS;
 }
 
-/** ベースブランチの候補。上から順に、git rev-parse --verify で在るものを使う */
-export const BASE_REF_CANDIDATES = ["refs/remotes/origin/HEAD", "refs/heads/main", "refs/heads/master"];
+/**
+ * 範囲に合わせた、ブランチ間の差分の範囲（hunk diff に渡す）。分かれた点から HEAD までの差分なので `...` を使う
+ * （相手のブランチに後から入ったコミットは差分に混ざらない。GitHub のプルリクエストの差分と同じ）。
+ * all はブランチ間の比較ではないので null、base はベースブランチが分からなければ null
+ */
+export function diffRange(range: HistoryRange, baseRef: string | null = null) {
+  const ref = compareRef(range, baseRef);
+  return ref ? `${ref}...HEAD` : null;
+}
+
+/** 範囲に合わせた、比べる相手のブランチ（push 前なら上流のブランチ、ベースからならベースブランチ）。all と、ベースが分からないときは null */
+export function compareRef(range: HistoryRange, baseRef: string | null = null) {
+  if (range === "unpushed") return "@{upstream}";
+  if (range === "base") return baseRef;
+  return null;
+}
+
+/**
+ * 未コミットの変更も含めたブランチの差分の起点（分かれた点のコミット）を求める引数。
+ * 出てきたハッシュと作業ツリーを hunk diff <hash> で比べる（git diff --merge-base <ref> と同じ。hunk は - で始まる引数を受け付けないので先に求める）
+ */
+export function mergeBaseArgs(ref: string) {
+  return ["merge-base", ref, "HEAD"];
+}
 
 /** `git symbolic-ref refs/remotes/origin/HEAD` の出力（refs/remotes/origin/main）から、表示と git に渡す名前（origin/main）を作る */
 export function shortRef(ref: string) {
@@ -88,37 +109,6 @@ export function parseLog(stdout: string): Commit[] {
       const [hash = "", short = "", author = "", at = "", refs = "", ...subject] = r.split("\x1f");
       return { hash, short, author, time: Number(at) || 0, refs: parseDecorations(refs), subject: subject.join("\x1f") };
     });
-}
-
-export interface NumstatEntry {
-  path: string;
-  oldPath?: string;
-  add: number;
-  del: number;
-  binary: boolean;
-}
-
-/** `git show/diff --numstat -z` を読む。名前の変更は「行数 TAB 空 NUL 旧 NUL 新 NUL」、バイナリの行数は `-` */
-export function parseNumstat(stdout: string): NumstatEntry[] {
-  const tokens = stdout.split("\0");
-  const out: NumstatEntry[] = [];
-  for (let i = 0; i < tokens.length; ) {
-    const m = /^(\S+)\t(\S+)\t([\s\S]*)$/.exec(tokens[i] ?? "");
-    if (!m) {
-      i += 1;
-      continue;
-    }
-    const binary = m[1] === "-";
-    const stat = { add: Number(m[1]) || 0, del: Number(m[2]) || 0, binary };
-    if (m[3] === "") {
-      out.push({ ...stat, oldPath: tokens[i + 1] ?? "", path: tokens[i + 2] ?? "" });
-      i += 3;
-    } else {
-      out.push({ ...stat, path: m[3]! });
-      i += 1;
-    }
-  }
-  return out;
 }
 
 export interface NameStatusEntry {

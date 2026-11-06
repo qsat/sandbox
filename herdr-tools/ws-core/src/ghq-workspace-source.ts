@@ -4,12 +4,17 @@ import { join } from "node:path";
 import { expandHome } from "@herdr-tools/utils/expand-home";
 import { mapLimit } from "@herdr-tools/utils/map-limit";
 import { run } from "@herdr-tools/utils/run";
+import { GitCli } from "./git-cli";
 import type { WorkspaceSource } from "./ports";
 
 export class GhqWorkspaceSource implements WorkspaceSource {
   private rootOnce?: Promise<string>;
 
-  constructor(private readonly bins: { git?: string; ghq?: string; ghqRoot?: string } = {}) {}
+  private readonly git: GitCli;
+
+  constructor(private readonly bins: { git?: string; ghq?: string; ghqRoot?: string } = {}) {
+    this.git = new GitCli(bins.git);
+  }
 
   root() {
     return (this.rootOnce ??= this.findRoot());
@@ -35,13 +40,13 @@ export class GhqWorkspaceSource implements WorkspaceSource {
   }
 
   async worktrees(repo: string) {
-    const r = await run(this.bins.git ?? "git", ["-C", repo, "worktree", "list", "--porcelain"]);
+    const r = await this.git.run(repo, ["worktree", "list", "--porcelain"]);
     return r.code === 0 ? checkedOutWorktreePaths(r.stdout) : [];
   }
 
   private async inspectOne(path: string) {
     if (!isDir(path)) return { path, exists: false };
-    const r = await run(this.bins.git ?? "git", ["-C", path, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir", "--abbrev-ref", "HEAD"]);
+    const r = await this.git.run(path, ["rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir", "--abbrev-ref", "HEAD"]);
     if (r.code !== 0) return { path, exists: true, toplevel: realpathSync(path) };
     const [toplevel = path, commonDir = "", branch = ""] = r.stdout.trim().split("\n");
     return { path, exists: true, toplevel, commonDir: commonDir || undefined, branch: branch && branch !== "HEAD" ? branch : null };

@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { LOG_ARGS, branchLabel, commitFiles, localFiles, logArgs, prBaseRef, parseDecorations, parseLog, parseNameStatus, parseNumstat, parseStatus, shortRef, sumNumstat } from "../src/commit-history/git";
+import { LOG_ARGS, branchLabel, commitFiles, compareRef, diffRange, mergeBaseArgs, localFiles, logArgs, prBaseRef, parseDecorations, parseLog, parseNameStatus, parseStatus, shortRef, sumNumstat } from "../src/commit-history/git";
+import { parseNumstat } from "@herdr-tools/utils/parse-numstat";
 import { relativeTime } from "../src/shared/relative-time";
 import { moveSelection } from "../src/shared/selection";
-import { wsHunkArgs } from "../src/shared/ws-hunk";
+import { wsHunkAgainstArgs, wsHunkArgs, wsHunkRangeArgs } from "../src/shared/ws-hunk";
 
 describe("一覧に出すコミットの範囲", () => {
   test("すべては HEAD からの履歴", () => expect(logArgs("all")).toEqual(LOG_ARGS));
@@ -11,6 +12,21 @@ describe("一覧に出すコミットの範囲", () => {
   test("ベースからはベースブランチから HEAD まで。ベースブランチが分からなければ git を呼ばない", () => {
     expect(logArgs("base", "origin/main")).toEqual([...LOG_ARGS, "origin/main..HEAD"]);
     expect(logArgs("base", null)).toBeNull();
+  });
+  test("ブランチ間の差分は、push 前なら上流のブランチ、ベースからならベースブランチと HEAD を ... で比べる", () => {
+    expect(diffRange("unpushed")).toBe("@{upstream}...HEAD");
+    expect(diffRange("base", "origin/main")).toBe("origin/main...HEAD");
+    expect(diffRange("base", null)).toBeNull();
+    expect(diffRange("all", "origin/main")).toBeNull();
+    expect(wsHunkRangeArgs("/w", "origin/main...HEAD")).toEqual(["hunk", "/w", "--range", "origin/main...HEAD", "--from-app"]);
+  });
+  test("未コミットも含めるときは、比べる相手から分かれた点を求めて、作業ツリーと比べる", () => {
+    expect(compareRef("unpushed")).toBe("@{upstream}");
+    expect(compareRef("base", "origin/main")).toBe("origin/main");
+    expect(compareRef("base", null)).toBeNull();
+    expect(compareRef("all", "origin/main")).toBeNull();
+    expect(mergeBaseArgs("origin/main")).toEqual(["merge-base", "origin/main", "HEAD"]);
+    expect(wsHunkAgainstArgs("/w", "abc1234")).toEqual(["hunk", "/w", "--against", "abc1234", "--from-app"]);
   });
   test("ref の名前から refs/remotes/ と refs/heads/ を外す", () => {
     expect(shortRef("refs/remotes/origin/main\n")).toBe("origin/main");
@@ -27,6 +43,7 @@ describe("一覧に出すコミットの範囲", () => {
     expect(prBaseRef("", () => true)).toBeNull();
   });
 });
+import { findBaseRef } from "../src/commit-history/base-ref";
 import { LOCAL_ID, visibleRows } from "../src/commit-history/rows";
 import { resolveTarget, type Target } from "../src/shared/target";
 
@@ -173,5 +190,29 @@ describe("ws hunk へ渡す引数", () => {
   });
   test("コミットのハッシュから開くときはファイルを指定せず、コミット全体を開く", () => {
     expect(wsHunkArgs("/r", "abc", null)).toEqual(["hunk", "/r", "--commit", "abc", "--from-app"]);
+  });
+});
+
+describe("ベースブランチを探す", () => {
+  const runner = (answers: Record<string, string | null>) => async (args: string[]) => {
+    const out = answers[args.join(" ")];
+    return out === undefined || out === null ? { code: 1, stdout: "" } : { code: 0, stdout: out };
+  };
+  const noGh = runner({});
+  test("プルリクエストがあれば、その base ブランチ（リモートを先に）", async () => {
+    const gh = runner({ "pr view --json baseRefName --jq .baseRefName": "develop\n" });
+    const git = runner({ "rev-parse --verify --quiet refs/remotes/origin/develop": "x", "rev-parse --verify --quiet refs/heads/develop": "x" });
+    expect(await findBaseRef(git, gh)).toBe("origin/develop");
+  });
+  test("プルリクエストが無ければ origin/HEAD が指すブランチ、無ければ main、master", async () => {
+    expect(await findBaseRef(runner({ "symbolic-ref --quiet refs/remotes/origin/HEAD": "refs/remotes/origin/trunk\n" }), noGh)).toBe("origin/trunk");
+    expect(await findBaseRef(runner({ "rev-parse --verify --quiet refs/heads/master": "x" }), noGh)).toBe("master");
+    expect(await findBaseRef(runner({}), noGh)).toBeNull();
+  });
+  test("gh が起動できなくても探し続ける", async () => {
+    const broken = async () => {
+      throw new Error("gh not found");
+    };
+    expect(await findBaseRef(runner({ "rev-parse --verify --quiet refs/heads/main": "x" }), broken)).toBe("main");
   });
 });

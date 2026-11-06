@@ -5,7 +5,7 @@ import { focusGhostty, openGhosttyWindowRunning } from "./ghostty";
 import { AGENTS_WINDOW, chooseClient, ensureSession, planGo, workingDir, type PaneTarget, type Step } from "./plans/go";
 import { continuingRecord, cycleCandidates, decideCurrentPane, inRecordedOrder, MESSAGE_WHEN_NO_CANDIDATE, nextCandidate, prevCandidate } from "./plans/cycle";
 import { planPanes } from "./plans/panes";
-import { HUNK_WINDOW, planHunk } from "./plans/hunk";
+import { HUNK_WINDOW, planHunk, type HunkSource } from "./plans/hunk";
 import { HunkCli } from "./hunk-cli";
 import { toListJson } from "./list-json";
 import { currentRowId, goRefOf, itemId, sidebarItems, stepFrom, steppableItems } from "./sidebar-order";
@@ -33,11 +33,8 @@ export class TmuxNavigator {
     private readonly hunk = new HunkCli(),
   ) {}
 
-  /**
-   * worktree の差分を hunk で開く（commit があれば `hunk show <commit>`、pr / ghCommit なら `hunk gh pr` / `hunk gh commit`、無ければ未コミットの変更）。
-   * hunk のセッションがあれば中身を入れ替え、無ければ tmux セッションの hunk ウィンドウで起動し、file があればそこへ移る
-   */
-  async openInHunk(path: string, opts: { commit?: string; pr?: string; ghCommit?: string; file?: string; client?: string; fromApp?: boolean }) {
+  /** worktree の差分を hunk で開く。hunk のセッションがあれば中身を入れ替え、無ければ tmux セッションの hunk ウィンドウで起動し、file があればそこへ移る */
+  async openInHunk(path: string, opts: { source: HunkSource; file?: string; client?: string; fromApp?: boolean }) {
     const view = await this.view({ alsoShow: [path] });
     const target = resolveRef(view.snap, path);
     if (!target) throw new Error(`見つかりません: ${path}`);
@@ -52,9 +49,7 @@ export class TmuxNavigator {
     const steps = planHunk({
       cwd,
       hunkBin: this.hunk.bin,
-      commit: opts.commit,
-      pr: opts.pr,
-      ghCommit: opts.ghCommit,
+      source: opts.source,
       file: opts.file,
       session,
       windowExists: await this.tmux.hasWindow(session.name, HUNK_WINDOW),

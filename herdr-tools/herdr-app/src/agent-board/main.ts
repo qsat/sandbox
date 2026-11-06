@@ -1,27 +1,27 @@
 import { View, div, svg, type AsyncContext, type Color, type Context, type Element, type FocusHandle } from "gpui-kit";
-import { closeOverlay, exec, nextCommand, openOverlay, props, setShared, shared, terminals, theme } from "herdr";
+import { closeOverlay, nextCommand, openOverlay, props, setShared, shared, terminals, theme } from "herdr";
+import { ROW_HEIGHT, label, type Theme as RowTheme } from "../shared/row-view";
+import { execWs } from "../shared/ws-exec";
 import { BRANCH_COLOR, REPOSITORY_COLOR, SELECTED_BG } from "../shared/colors";
 import { TITLE_BAR_HEIGHT } from "../shared/title-bar";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import type { Tag } from "@herdr-tools/utils/tag";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
 import { usageSegments } from "@herdr-tools/utils/usage-segments";
-import { boardRows, EMPTY_LIST, keyActionFor, moveSelection, parseList, rowId, toggleCollapsed, WS, wsCommandFor, type BoardAction, type BoardRow, type LiveTerminal, wsArgsForModCommand } from "./board";
+import { boardRows, changeTargets, EMPTY_LIST, parseChanges, type ChangeAmount, keyActionFor, moveSelection, parseList, rowId, toggleCollapsed, wsArgsFor, type BoardAction, type BoardRow, type LiveTerminal, wsArgsForModCommand } from "./board";
 
 const MOD_NAME = "agent-board";
 const LIST_REFRESH_MS = 2000;
+/** 変更量（ws changes）の読み直しの間隔。worktree ごとに git を何度か呼ぶので、一覧（2 秒）より長くする */
+const CHANGES_REFRESH_MS = 10000;
 const CONFIRM_DIALOG_WIDTH = 360;
 const CONFIRM_DIALOG_HEIGHT = 160;
 const COLLAPSED_KEY = "agent-board.collapsed";
-const ROW_HEIGHT = 22;
 const REPOSITORY_SPACING = ROW_HEIGHT * 0.5;
 const CURRENT_PANE_BG: Color = "#e6ff0014";
 const PIE_SIZE = 12;
 
-type Theme = Record<
-  "foreground" | "muted" | "dim" | "accent" | "raised" | "hover" | "solid" | "solid_foreground" | "background" | "popover" | "border" | "blocked" | "unknown" | "ansi1",
-  Color
->;
+type Theme = RowTheme & Record<"solid" | "solid_foreground" | "popover" | "unknown", Color>;
 
 type AgentRow = Extract<BoardRow, { kind: "agent" }>;
 type WorktreeRow = Extract<BoardRow, { kind: "worktree" }>;
@@ -34,7 +34,8 @@ interface ConfirmRequest {
   busy: string;
   icon: ButtonSpec["icon"];
   action: string;
-  command: [string, string[]];
+  /** ws の引数 */
+  args: string[];
 }
 
 interface ButtonSpec {
@@ -62,10 +63,6 @@ function statusColor(t: Theme, status: string) {
 
 function toneColor(t: Theme, tone: Tag["tone"]) {
   return { strong: t.accent, muted: t.muted, danger: t.ansi1 }[tone];
-}
-
-function label(text: string, color: Color) {
-  return div().text_color(color).child(text);
 }
 
 function pieColor(t: Theme, tone: Tag["tone"]) {
@@ -129,6 +126,9 @@ export default class AgentBoard extends View {
   confirming!: boolean;
   focus!: FocusHandle;
   selected!: string | null;
+  changes!: Record<string, ChangeAmount>;
+  changeTargets!: string;
+  fetchingChanges!: boolean;
 
   init(_props: unknown, cx: AsyncContext) {
     this.list = EMPTY_LIST;
@@ -137,12 +137,16 @@ export default class AgentBoard extends View {
     this.confirmRequest = (props()?.confirm as ConfirmRequest | undefined) ?? null;
     this.confirming = false;
     this.selected = null;
+    this.changes = {};
+    this.changeTargets = "";
+    this.fetchingChanges = false;
     this.focus = cx.focus_handle();
     if (this.confirmRequest) {
       this.focus.focus();
       return;
     }
     cx.timer.every(LIST_REFRESH_MS, (cx) => this.refresh(cx));
+    cx.timer.every(CHANGES_REFRESH_MS, (cx) => this.refreshChanges(cx));
     this.refresh(cx);
     this.listenForKeyCommands(cx);
     // tmux の hook が今いるペインの変化を知らせたら、2 秒を待たずに読み直す（見張れなくても 2 秒ごとの読み直しで動く）
@@ -154,12 +158,9 @@ export default class AgentBoard extends View {
       for (;;) {
         const args = wsArgsForModCommand(await nextCommand());
         if (!args) continue;
-        try {
-          const r = await exec(WS, args);
-          this.error = r.code !== 0 || r.stderr.trim() ? (r.stderr.trim() || `ws ${args.join(" ")}: exit ${r.code}`) : "";
-        } catch (e) {
-          this.error = String((e as Error)?.message ?? e);
-        }
+        // 候補が無いとき、ws next --from-app は終了コード 0 で理由を標準エラーに出す
+        const r = await execWs(args);
+        this.error = r.error || r.stderr.trim();
         this.refresh(cx);
       }
     }, { owner: this });
@@ -169,29 +170,59 @@ export default class AgentBoard extends View {
     if (this.fetching) return;
     this.fetching = true;
     cx.spawn(async (cx) => {
-      try {
-        const r = await exec(WS, ["list", "--json"]);
-        this.list = parseList(r.stdout);
-        this.error = r.code !== 0 ? (r.stderr || `ws list: exit ${r.code}`).trim() : "";
-      } catch (e) {
-        this.error = String((e as Error)?.message ?? e);
-      } finally {
-        this.fetching = false;
-      }
+      const r = await execWs(["list", "--json"]);
+      this.list = parseList(r.stdout);
+      this.error = r.error;
+      this.fetching = false;
+      cx.notify();
+      // 並ぶ worktree が変わったら、10 秒を待たずに変更量を読む
+      if (changeTargets(this.list).join("\n") !== this.changeTargets) this.refreshChanges(cx);
+    }, { owner: this });
+  }
+
+  /** worktree ごとの変更量を ws changes --json で読む。失敗しても一覧は壊さない（前の値のまま） */
+  refreshChanges(cx: Context) {
+    if (this.fetchingChanges) return;
+    const targets = changeTargets(this.list);
+    this.changeTargets = targets.join("\n");
+    if (targets.length === 0) {
+      this.changes = {};
+      return;
+    }
+    this.fetchingChanges = true;
+    cx.spawn(async (cx) => {
+      const r = await execWs(["changes", "--json", ...targets]);
+      this.fetchingChanges = false;
+      if (!r.ok) return;
+      const next = parseChanges(r.stdout);
+      if (JSON.stringify(next) === JSON.stringify(this.changes)) return;
+      this.changes = next;
       cx.notify();
     }, { owner: this });
   }
 
+  /** worktree の行の変更量（+足した行 −消した行）。変更が無ければ出さない */
+  changeAmount(row: WorktreeRow, t: Theme) {
+    const a = this.changes[row.key];
+    if (!a) return [];
+    return [
+      div()
+        .id(`changes:${row.key}`)
+        .flex()
+        .flex_none()
+        .gap(4)
+        .text_size(11)
+        .tooltip("ベースブランチから分かれた点と作業ツリーの差（未コミット・新しいファイルも含む）")
+        .when(a.added > 0, (el) => el.child(label(`+${a.added}`, t.ansi2)))
+        .when(a.deleted > 0, (el) => el.child(label(`−${a.deleted}`, t.ansi1))),
+    ];
+  }
+
   runRow(row: BoardRow, action: BoardAction, cx: Context) {
-    const command = wsCommandFor(row, action);
-    if (!command) return;
+    const args = wsArgsFor(row, action);
+    if (!args) return;
     cx.spawn(async (cx) => {
-      try {
-        const r = await exec(command[0], command[1]);
-        this.error = r.code !== 0 ? r.stderr.trim() : "";
-      } catch (e) {
-        this.error = String((e as Error)?.message ?? e);
-      }
+      this.error = (await execWs(args)).error;
       this.refresh(cx);
     }, { owner: this });
   }
@@ -201,10 +232,10 @@ export default class AgentBoard extends View {
   }
 
   stopRequest(row: AgentRow): ConfirmRequest {
-    const command = wsCommandFor(row, "stop")!;
+    const args = wsArgsFor(row, "stop")!;
     return row.alive
-      ? { title: `${row.label} を停止しますか？`, body: "claude を終了し、一覧から消します。", busy: "止めています…", icon: "square", action: "停止する", command }
-      : { title: `${row.label} を削除しますか？`, body: "終了したエージェントを herdr-core の一覧から削除します。", busy: "削除しています…", icon: "x", action: "削除する", command };
+      ? { title: `${row.label} を停止しますか？`, body: "claude を終了し、一覧から消します。", busy: "止めています…", icon: "square", action: "停止する", args }
+      : { title: `${row.label} を削除しますか？`, body: "終了したエージェントを herdr-core の一覧から削除します。", busy: "削除しています…", icon: "x", action: "削除する", args };
   }
 
   closeSessionRequest(row: WorktreeRow): ConfirmRequest {
@@ -214,7 +245,7 @@ export default class AgentBoard extends View {
       busy: "閉じています…",
       icon: "x",
       action: "閉じる",
-      command: wsCommandFor(row, "close")!,
+      args: wsArgsFor(row, "close")!,
     };
   }
 
@@ -269,7 +300,13 @@ export default class AgentBoard extends View {
         return base
           .pl(16)
           .on_click((_e, cx) => this.runRow(row, "go", cx))
-          .child(this.info([div().text_color(row.hasSession ? BRANCH_COLOR : t.dim).when(row.isMain, (el) => el.font_semibold()).child(row.label), this.tags(row.tags, t)]))
+          .child(
+            this.info([
+              div().text_color(row.hasSession ? BRANCH_COLOR : t.dim).when(row.isMain, (el) => el.font_semibold()).child(row.label),
+              this.tags(row.tags, t),
+              ...this.changeAmount(row, t),
+            ]),
+          )
           .when(row.hasSession, (el) => el.child(this.closeSessionButton(row, t)))
           .when(row.exists, (el) =>
             el.child(
@@ -308,10 +345,10 @@ export default class AgentBoard extends View {
     cx.notify();
     cx.spawn(
       async (cx) => {
-        const r = await exec(...request.command).catch((e: Error) => ({ code: 1, stdout: "", stderr: String(e?.message ?? e) }));
-        if (r.code === 0) return closeOverlay(props().overlay);
+        const r = await execWs(request.args);
+        if (r.ok) return closeOverlay(props().overlay);
         this.confirming = false;
-        this.error = r.stderr.trim() || r.stdout.trim();
+        this.error = r.error;
         cx.notify();
       },
       { owner: this },

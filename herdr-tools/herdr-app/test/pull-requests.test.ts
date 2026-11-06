@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { PR_LIST_ARGS, ghFailureMessage, parsePrCommits, parsePrList, prCommitsArgs, type PrCommit, type PullRequest } from "../src/pull-requests/gh";
 import { visibleRows } from "../src/pull-requests/rows";
+import { wsPrArgs } from "../src/pull-requests/ws-pr";
 import { wsHunkArgs, wsHunkGithubCommitArgs, wsHunkPrArgs, wsHunkPrCommitArgs } from "../src/shared/ws-hunk";
 
 describe("gh pr list の読み取り", () => {
   test("引数に取るフィールドと件数を指定する", () => {
     expect(PR_LIST_ARGS.slice(0, 6)).toEqual(["pr", "list", "--state", "open", "--limit", "30"]);
-    expect(PR_LIST_ARGS.at(-1)).toBe("number,title,author,headRefName,baseRefName,isDraft,updatedAt,url");
+    expect(PR_LIST_ARGS.at(-1)).toBe("number,title,author,headRefName,baseRefName,isDraft,isCrossRepository,updatedAt,url");
   });
   test("空の一覧は 0 件。壊れた出力も 0 件", () => {
     expect(parsePrList("[]")).toEqual([]);
@@ -15,13 +16,13 @@ describe("gh pr list の読み取り", () => {
   });
   test("下書き・作者・更新日時（unix 秒）を読む", () => {
     const out = JSON.stringify([
-      { number: 2, title: "B", author: { login: "bob", is_bot: false }, headRefName: "feat", baseRefName: "main", isDraft: true, updatedAt: "2026-11-05T09:49:34Z", url: "https://x/2" },
+      { number: 2, title: "B", author: { login: "bob", is_bot: false }, headRefName: "feat", baseRefName: "main", isDraft: true, isCrossRepository: true, updatedAt: "2026-11-05T09:49:34Z", url: "https://x/2" },
     ]);
-    expect(parsePrList(out)).toEqual([{ number: 2, title: "B", author: "bob", headRef: "feat", baseRef: "main", isDraft: true, updatedAt: 1793872174, url: "https://x/2" }]);
+    expect(parsePrList(out)).toEqual([{ number: 2, title: "B", author: "bob", headRef: "feat", baseRef: "main", isDraft: true, crossRepository: true, updatedAt: 1793872174, url: "https://x/2" }]);
   });
   test("作者が無い（null）ときは空の文字列。下書きの項目が無ければ false", () => {
     const [pr] = parsePrList(JSON.stringify([{ number: 3, title: "C", author: null, headRefName: "h", baseRefName: "b", updatedAt: "bad", url: "" }]));
-    expect(pr).toMatchObject({ author: "", isDraft: false, updatedAt: 0 });
+    expect(pr).toMatchObject({ author: "", isDraft: false, crossRepository: false, updatedAt: 0 });
   });
   test("番号の無い項目は読み飛ばす", () => {
     expect(parsePrList(JSON.stringify([{ title: "x" }, { number: 1 }])).map((p) => p.number)).toEqual([1]);
@@ -64,7 +65,7 @@ describe("gh が失敗したときの文", () => {
 });
 
 describe("プルリクエストの行の並び", () => {
-  const pr = (number: number, headRef: string): PullRequest => ({ number, title: `t${number}`, author: "a", headRef, baseRef: "main", isDraft: false, updatedAt: 0, url: "" });
+  const pr = (number: number, headRef: string): PullRequest => ({ number, title: `t${number}`, author: "a", headRef, baseRef: "main", isDraft: false, crossRepository: false, updatedAt: 0, url: "" });
   const commit = (hash: string): PrCommit => ({ hash, short: hash.slice(0, 7), author: "a", time: 0, subject: hash });
   test("今のブランチのプルリクエストを先頭に置く", () => {
     const rows = visibleRows([pr(1, "x"), pr(2, "mine"), pr(3, "y")], "mine", null, new Map());
@@ -87,4 +88,8 @@ describe("ws hunk へ渡す引数（GitHub）", () => {
     expect(wsHunkPrCommitArgs("/w", "abc1234", true)).toEqual(wsHunkArgs("/w", "abc1234", null));
     expect(wsHunkPrCommitArgs("/w", "abc1234", false)).toEqual(["hunk", "/w", "--gh-commit", "abc1234", "--from-app"]);
   });
+});
+
+describe("ws pr の引数", () => {
+  test("プルリクエストの番号と worktree を渡し、Herdr app から呼んだ印を付ける", () => expect(wsPrArgs("/w", 55)).toEqual(["pr", "55", "/w", "--from-app"]));
 });

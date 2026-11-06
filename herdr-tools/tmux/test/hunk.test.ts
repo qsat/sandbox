@@ -3,12 +3,30 @@ import { parseHunkSource, planHunk, type HunkPlanInput } from "../src/plans/hunk
 
 describe("ws hunk の引数", () => {
   test("--commit、--pr、--gh-commit はどれか 1 つ", () => {
-    expect(parseHunkSource({ pr: "55" })).toEqual({ commit: undefined, pr: "55", ghCommit: undefined });
-    expect(parseHunkSource({ ghCommit: "abc1234" }).ghCommit).toBe("abc1234");
-    expect(parseHunkSource({ commit: "main~1" }).commit).toBe("main~1");
-    expect(parseHunkSource({}).pr).toBeUndefined();
+    expect(parseHunkSource({ pr: "55" })).toEqual({ kind: "gh-pr", number: "55" });
+    expect(parseHunkSource({ ghCommit: "abc1234" })).toEqual({ kind: "gh-commit", sha: "abc1234" });
+    expect(parseHunkSource({ commit: "main~1" })).toEqual({ kind: "commit", rev: "main~1" });
+    expect(() => parseHunkSource({ commit: "--output=x" })).toThrow("--commit");
+    expect(parseHunkSource({})).toEqual({ kind: "worktree" });
     expect(() => parseHunkSource({ pr: "1", commit: "abc" })).toThrow("同時");
     expect(() => parseHunkSource({ pr: "1", ghCommit: "abc1234" })).toThrow("同時");
+    expect(() => parseHunkSource({ range: "main...HEAD", commit: "abc" })).toThrow("同時");
+  });
+  test("--range は <ref>...<ref> の形だけ受け付ける", () => {
+    expect(parseHunkSource({ range: "origin/main...HEAD" })).toEqual({ kind: "range", range: "origin/main...HEAD" });
+    expect(parseHunkSource({ range: "@{upstream}...HEAD" })).toMatchObject({ range: "@{upstream}...HEAD" });
+    expect(parseHunkSource({ range: "main..feat/x" })).toMatchObject({ range: "main..feat/x" });
+    expect(() => parseHunkSource({ range: "main" })).toThrow("--range");
+    expect(() => parseHunkSource({ range: "--output=x...HEAD" })).toThrow("--range");
+    expect(() => parseHunkSource({ range: "main...HEAD; rm" })).toThrow("--range");
+  });
+  test("--against は 1 つのリビジョンだけ受け付ける", () => {
+    expect(parseHunkSource({ against: "0123456789abcdef0123456789abcdef01234567" })).toEqual({ kind: "against", rev: "0123456789abcdef0123456789abcdef01234567" });
+    expect(parseHunkSource({ against: "origin/main" })).toMatchObject({ rev: "origin/main" });
+    expect(() => parseHunkSource({ against: "main...HEAD" })).toThrow("--against");
+    expect(() => parseHunkSource({ against: "--cached" })).toThrow("--against");
+    expect(() => parseHunkSource({ against: "main; rm" })).toThrow("--against");
+    expect(() => parseHunkSource({ against: "main", range: "a...b" })).toThrow("同時");
   });
   test("--pr は数字、--gh-commit は 16 進数の sha だけ受け付ける", () => {
     expect(() => parseHunkSource({ pr: "5x" })).toThrow("--pr");
@@ -21,7 +39,7 @@ describe("ws hunk の引数", () => {
 const base: HunkPlanInput = {
   cwd: "/w/api",
   hunkBin: "/opt/homebrew/bin/hunk",
-  commit: "abc123",
+  source: { kind: "commit", rev: "abc123" },
   file: "src/a.ts",
   session: { name: "api", steps: [] },
   windowExists: false,
@@ -43,8 +61,18 @@ describe("planHunk", () => {
     expect(ops({ hunkSessionExists: true, windowExists: false })).toEqual(["hunkReload", "hunkNavigate"]);
   });
 
+  test("ブランチ間の差分は hunk diff <range>（reload で入れ替えられる）", () => {
+    const steps = planHunk({ ...base, source: { kind: "range", range: "origin/main...HEAD" }, hunkSessionExists: true, windowExists: true });
+    expect(steps[0]).toMatchObject({ op: "hunkReload", args: ["diff", "origin/main...HEAD"] });
+  });
+
+  test("作業ツリーとリビジョンの差分は hunk diff <rev>", () => {
+    const steps = planHunk({ ...base, source: { kind: "against", rev: "abc1234" }, hunkSessionExists: true, windowExists: true });
+    expect(steps[0]).toMatchObject({ op: "hunkReload", args: ["diff", "abc1234"] });
+  });
+
   test("未コミットの変更は hunk diff", () => {
-    const steps = planHunk({ ...base, commit: undefined, hunkSessionExists: true, windowExists: true });
+    const steps = planHunk({ ...base, source: { kind: "worktree" }, hunkSessionExists: true, windowExists: true });
     expect(steps[0]).toMatchObject({ op: "hunkReload", args: ["diff"] });
   });
 
@@ -65,7 +93,7 @@ describe("planHunk", () => {
   const SCRIPT = (s: { argv: string[] }) => s.argv[2] ?? "";
 
   test("プルリクエスト: セッションがあっても reload せず、ウィンドウがあれば respawn-pane -k で hunk gh pr を起動し直す", () => {
-    const steps = planHunk({ ...base, commit: undefined, file: undefined, pr: "55", hunkSessionExists: true, windowExists: true });
+    const steps = planHunk({ ...base, source: { kind: "gh-pr", number: "55" }, file: undefined, hunkSessionExists: true, windowExists: true });
     expect(steps.map((s) => s.op)).toEqual(["respawnHunkWindow", "switchClient", "focusGhostty"]);
     expect(steps[0]).toMatchObject({ op: "respawnHunkWindow", session: "api", cwd: "/w/api" });
     expect((steps[0] as { argv: string[] }).argv.slice(0, 2)).toEqual(["sh", "-c"]);
@@ -73,18 +101,18 @@ describe("planHunk", () => {
   });
 
   test("プルリクエスト: ウィンドウが無ければ tmux セッションを作って hunk ウィンドウで起動する", () => {
-    const steps = planHunk({ ...base, commit: undefined, file: undefined, pr: "55", session: { name: "api", steps: [{ op: "newSession", name: "api", cwd: "/w/api" }] } });
+    const steps = planHunk({ ...base, source: { kind: "gh-pr", number: "55" }, file: undefined, session: { name: "api", steps: [{ op: "newSession", name: "api", cwd: "/w/api" }] } });
     expect(steps.map((s) => s.op)).toEqual(["newSession", "openHunkWindow", "switchClient", "focusGhostty"]);
     expect((steps[1] as { argv: string[] }).argv.slice(3)).toEqual(["/opt/homebrew/bin/hunk", "gh", "pr", "55"]);
   });
 
   test("GitHub のコミットは hunk gh commit <sha>", () => {
-    const steps = planHunk({ ...base, commit: undefined, file: undefined, ghCommit: "abc1234", windowExists: true });
+    const steps = planHunk({ ...base, source: { kind: "gh-commit", sha: "abc1234" }, file: undefined, windowExists: true });
     expect((steps[0] as { argv: string[] }).argv.slice(3)).toEqual(["/opt/homebrew/bin/hunk", "gh", "commit", "abc1234"]);
   });
 
   test("GH_TOKEN はシェルが gh auth token から入れ、トークンの値もコマンドラインの引数にも出ない（hunk の引数は $0 と $@ で渡す）", () => {
-    const step = planHunk({ ...base, commit: undefined, file: undefined, pr: "55", windowExists: true })[0] as { argv: string[] };
+    const step = planHunk({ ...base, source: { kind: "gh-pr", number: "55" }, file: undefined, windowExists: true })[0] as { argv: string[] };
     const script = SCRIPT(step);
     expect(script).toContain("gh auth token");
     expect(script).toContain("export GH_TOKEN");

@@ -1,9 +1,14 @@
 export * from "./domain/agent";
 export * from "./domain/tree";
 export * from "./domain/locate";
+export * from "./domain/change-amount";
+export * from "./domain/pr-worktree";
 export * from "./ports";
 export * from "./ws-core";
 export { GhqWorkspaceSource } from "./ghq-workspace-source";
+export { GitChangeAmounts } from "./git-change-amounts";
+export { GitCli } from "./git-cli";
+export { PrWorktrees } from "./pr-worktrees";
 export * from "./domain/usage";
 export { HcClient } from "./herdr-core/hc-client";
 export { HerdrRuntime } from "./herdr-core/herdr-runtime";

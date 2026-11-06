@@ -1,5 +1,6 @@
-import { div, type Color, type Context } from "gpui-kit";
-import { SELECTED_BG } from "./colors";
+import { div, svg, type Color, type Context } from "gpui-kit";
+import { BRANCH_COLOR, REPOSITORY_COLOR, SELECTED_BG } from "./colors";
+import type { Target } from "./target";
 
 /** 行の高さ。commit-history と pull-requests で同じにする */
 export const ROW_HEIGHT = 22;
@@ -42,4 +43,40 @@ export function hunkLink(id: string, text: string, tooltip: string, t: Theme, on
       onClick(cx);
     })
     .child(text);
+}
+
+/** 行の右端などに置く、アイコンだけのボタン。icon は mod の中の svg のパス（mods/<mod>/<name>.svg） */
+export function iconButton(id: string, icon: string, tooltip: string, t: Theme, onClick: (cx: Context) => void) {
+  return div()
+    .id(id)
+    .flex()
+    .flex_none()
+    .items_center()
+    .h(18)
+    .px(4)
+    .rounded(4)
+    .text_color(t.muted)
+    .cursor_pointer()
+    .hover((s) => s.bg(t.hover).text_color(t.foreground))
+    .tooltip(tooltip)
+    .on_click((_e, cx) => {
+      cx.stop_propagation();
+      onClick(cx);
+    })
+    .child(svg(icon).size(12));
+}
+
+/** 一覧の上の、今見ている worktree の見出し（workspace 名とブランチ）。右に足すものは呼ぶ側が child で続ける */
+export function targetHeader(target: Target, t: Theme) {
+  return div()
+    .flex()
+    .items_center()
+    .gap(8)
+    .min_h(ROW_HEIGHT)
+    .px(4)
+    .overflow_hidden()
+    .whitespace_nowrap()
+    .child(div().font_semibold().text_color(REPOSITORY_COLOR).child(target.workspace))
+    .child(div().text_color(BRANCH_COLOR).child(target.label))
+    .when(target.branch !== null && target.branch !== target.label, (el) => el.child(label(target.branch!, t.muted)));
 }

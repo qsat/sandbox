@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { boardRows, keyActionFor, moveSelection, rowId, wsCommandFor, wsArgsForModCommand, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
+import { boardRows, changeTargets, keyActionFor, parseChanges, moveSelection, rowId, wsArgsFor, wsArgsForModCommand, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
 
 const agent = (p: { id: string; name: string; status: "working" | "idle"; resumable: boolean; attached: boolean; current?: boolean; contextUsedPercentage?: number }) => ({
   contextUsedPercentage: p.contextUsedPercentage,
@@ -120,8 +120,8 @@ describe("ペインの行", () => {
     ]);
   });
   test("クリック → ws go %12 --from-app。停止・閉じる・新規・再開は何もしない", () => {
-    expect(wsCommandFor(pane, "go")).toEqual(["ws", ["go", "%12", "--from-app"]]);
-    for (const action of ["stop", "close", "new", "resume"] as const) expect(wsCommandFor(pane, action)).toBeNull();
+    expect(wsArgsFor(pane, "go")).toEqual(["go", "%12", "--from-app"]);
+    for (const action of ["stop", "close", "new", "resume"] as const) expect(wsArgsFor(pane, action)).toBeNull();
   });
   test("j / k で選べて、Enter で移動し、s / x / n では何も起きない", () => {
     expect(moveSelection(rows, "worktree:/g/o/api", 1)).toBe("pane:%12");
@@ -130,36 +130,36 @@ describe("ペインの行", () => {
   });
 });
 
-describe("wsCommandFor", () => {
+describe("wsArgsFor", () => {
   const rows = boardRows(tree, [], []);
   const wt = rows[2]!;
   test("クリック → ws go <ref> --from-app", () => {
-    expect(wsCommandFor(wt, "go")).toEqual(["ws", ["go", "/g/o/api=feat", "--from-app"]]);
-    expect(wsCommandFor(find(rows, "t1"), "go")).toEqual(["ws", ["go", "t1", "--from-app"]]);
+    expect(wsArgsFor(wt, "go")).toEqual(["go", "/g/o/api=feat", "--from-app"]);
+    expect(wsArgsFor(find(rows, "t1"), "go")).toEqual(["go", "t1", "--from-app"]);
   });
   test("新規 → ws new <worktree> --attach --from-app", () => {
-    expect(wsCommandFor(wt, "new")).toEqual(["ws", ["new", "/g/o/api=feat", "--attach", "--from-app"]]);
+    expect(wsArgsFor(wt, "new")).toEqual(["new", "/g/o/api=feat", "--attach", "--from-app"]);
   });
   test("再開は再開できるときだけ", () => {
-    expect(wsCommandFor(find(rows, "t2"), "resume")).toEqual(["ws", ["resume", "t2"]]);
-    expect(wsCommandFor(find(rows, "t1"), "resume")).toBeNull();
+    expect(wsArgsFor(find(rows, "t2"), "resume")).toEqual(["resume", "t2"]);
+    expect(wsArgsFor(find(rows, "t1"), "resume")).toBeNull();
   });
   test("停止 → ws stop <agent>（エージェントの行だけ）", () => {
-    expect(wsCommandFor(find(rows, "t1"), "stop")).toEqual(["ws", ["stop", "t1"]]);
-    expect(wsCommandFor(wt, "stop")).toBeNull();
+    expect(wsArgsFor(find(rows, "t1"), "stop")).toEqual(["stop", "t1"]);
+    expect(wsArgsFor(wt, "stop")).toBeNull();
   });
   test("tmux セッションを閉じる → ws close <worktree>（セッションのある worktree の行だけ）", () => {
     const main = rows[1]!;
     expect(main).toMatchObject({ hasSession: true });
-    expect(wsCommandFor(main, "close")).toEqual(["ws", ["close", "/g/o/api"]]);
+    expect(wsArgsFor(main, "close")).toEqual(["close", "/g/o/api"]);
     expect(wt).toMatchObject({ hasSession: false });
-    expect(wsCommandFor(wt, "close")).toBeNull();
-    expect(wsCommandFor(find(rows, "t1"), "close")).toBeNull();
+    expect(wsArgsFor(wt, "close")).toBeNull();
+    expect(wsArgsFor(find(rows, "t1"), "close")).toBeNull();
   });
   test("エージェントの行は、動いているかどうかを持つ（停止と、終了済みを消すの出し分け）", () => {
     expect(find(rows, "t1")).toMatchObject({ alive: true });
   });
-  test("workspace 行は何もしない", () => expect(wsCommandFor(rows[0]!, "go")).toBeNull());
+  test("workspace 行は何もしない", () => expect(wsArgsFor(rows[0]!, "go")).toBeNull());
 });
 
 describe("エージェントの行の名前", () => {
@@ -246,4 +246,16 @@ describe("wsArgsForModCommand", () => {
   });
   test("廃止した next-blocked などは何もしない", () => expect(wsArgsForModCommand("next-blocked")).toBeNull());
   test("知らないコマンド名は何もしない", () => expect(wsArgsForModCommand("other")).toBeNull());
+});
+
+describe("worktree の変更量", () => {
+  test("ws changes --json を読み、変更が無いもの・読めない値は入れない", () => {
+    const out = JSON.stringify({ "/w/a": { added: 3, deleted: 1 }, "/w/b": { added: 0, deleted: 0 }, "/w/c": null, "/w/d": { added: "x" } });
+    expect(parseChanges(out)).toEqual({ "/w/a": { added: 3, deleted: 1 } });
+    expect(parseChanges("not json")).toEqual({});
+  });
+  test("読むのは場所が在る worktree だけ", () => {
+    const list = { usage: {}, workspaces: [{ path: "/w", name: "w", worktrees: [{ path: "/w/a", exists: true }, { path: "/w/gone", exists: false }] }] } as unknown as ListedTree;
+    expect(changeTargets(list)).toEqual(["/w/a"]);
+  });
 });
