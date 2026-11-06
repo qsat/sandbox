@@ -1,6 +1,7 @@
 import { run } from "@herdr-tools/utils/run";
 import { runInteractive } from "@herdr-tools/utils/run-interactive";
 import { runOk } from "@herdr-tools/utils/run-ok";
+import { markCurrentPanes } from "./current-pane";
 
 export const AGENT_PANE_OPTION = "@ws_agent";
 
@@ -46,18 +47,22 @@ export class TmuxServer {
   }
 
   async listPanes() {
-    const lines = await this.linesOrNoneWhenServerIsDown(["list-panes", "-a", "-F", format("#{pane_id}", `#{${AGENT_PANE_OPTION}}`, "#{pane_dead}", "#{session_name}", "#{window_name}", "#{pane_current_command}", "#{session_attached}", "#{window_active}", "#{pane_active}")]);
-    return lines.map((l) => {
-      const [paneId = "", agentId = "", dead = "0", session = "", window = "", command = "", attached = "0", windowActive = "0", paneActive = "0"] = fields(l);
-      return { paneId, agentId: agentId || null, dead: dead === "1", session, window, command, current: Number(attached) > 0 && windowActive === "1" && paneActive === "1" };
+    const [lines, clients] = await Promise.all([
+      this.linesOrNoneWhenServerIsDown(["list-panes", "-a", "-F", format("#{pane_id}", `#{${AGENT_PANE_OPTION}}`, "#{pane_dead}", "#{session_name}", "#{window_name}", "#{pane_current_command}", "#{window_active}", "#{pane_active}")]),
+      this.listClients(),
+    ]);
+    const panes = lines.map((l) => {
+      const [paneId = "", agentId = "", dead = "0", session = "", window = "", command = "", windowActive = "0", paneActive = "0"] = fields(l);
+      return { paneId, agentId: agentId || null, dead: dead === "1", session, window, command, active: windowActive === "1" && paneActive === "1" };
     });
+    return markCurrentPanes(panes, clients);
   }
 
   async listClients() {
-    const lines = await this.linesOrNoneWhenServerIsDown(["list-clients", "-F", format("#{client_activity}", "#{client_name}")]);
+    const lines = await this.linesOrNoneWhenServerIsDown(["list-clients", "-F", format("#{client_activity}", "#{client_name}", "#{client_session}")]);
     return lines.map((l) => {
-      const [activity = "0", name = ""] = fields(l);
-      return { activity: Number(activity), name };
+      const [activity = "0", name = "", session = ""] = fields(l);
+      return { activity: Number(activity), name, session };
     });
   }
 
