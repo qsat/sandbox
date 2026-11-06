@@ -1,5 +1,5 @@
 import { View, div, svg, type AsyncContext, type Color, type Context, type Element, type FocusHandle } from "gpui-kit";
-import { closeOverlay, nextCommand, openOverlay, props, setShared, shared, terminals, theme } from "herdr";
+import { closeOverlay, nextCommand, openOverlay, props, setShared, shared, terminals, theme, window } from "herdr";
 import { ROW_HEIGHT, label, type Theme as RowTheme } from "../shared/row-view";
 import { execWs } from "../shared/ws-exec";
 import { BRANCH_COLOR, REPOSITORY_COLOR, SELECTED_BG } from "../shared/colors";
@@ -229,6 +229,12 @@ export default class AgentBoard extends View {
     }, { owner: this });
   }
 
+  /** 行をクリックして移る。クリックで操作したので、j / k の選択（カーソル）は消す */
+  clickRow(row: BoardRow, cx: Context) {
+    this.selected = null;
+    this.runRow(row, "go", cx);
+  }
+
   askConfirm(request: ConfirmRequest) {
     openOverlay({ mod: MOD_NAME, kind: "dialog", width: CONFIRM_DIALOG_WIDTH, height: CONFIRM_DIALOG_HEIGHT, props: { confirm: request } });
   }
@@ -301,7 +307,7 @@ export default class AgentBoard extends View {
       case "worktree":
         return base
           .pl(16)
-          .on_click((_e, cx) => this.runRow(row, "go", cx))
+          .on_click((_e, cx) => this.clickRow(row, cx))
           .child(
             this.info([
               div().text_color(row.hasSession ? BRANCH_COLOR : t.dim).when(row.isMain, (el) => el.font_semibold()).child(row.label),
@@ -320,13 +326,13 @@ export default class AgentBoard extends View {
       case "pane":
         return base
           .pl(28)
-          .on_click((_e, cx) => this.runRow(row, "go", cx))
+          .on_click((_e, cx) => this.clickRow(row, cx))
           .child(this.info([div().text_color(t.muted).child(row.label)]));
       case "agent": {
         const color = statusColor(t, row.rawStatus);
         return base
           .pl(28)
-          .on_click((_e, cx) => this.runRow(row, "go", cx))
+          .on_click((_e, cx) => this.clickRow(row, cx))
           .child(this.info([div().child(row.label), label(row.icon, color), ...(row.status ? [label(row.status, color)] : []), ...this.contextPie(row, t), this.tags(row.tags, t)]))
           .when(row.canResume, (el) =>
             el.child(
@@ -445,6 +451,9 @@ export default class AgentBoard extends View {
     const t = theme() as unknown as Theme;
     if (this.confirmRequest) return this.renderConfirmDialog(this.confirmRequest, t);
     const rows = boardRows(this.list, liveTerminals(), collapsedState());
+    // キーボードがボードに無い（ほかのペインへ移った、Herdr app が後ろに回った）なら、j / k の選択（カーソル）を消す。
+    // gpui-kit にはフォーカスが外れたイベントが無いので、描くたびに確かめる（2 秒ごとの読み直しでも描き直される）
+    if (this.selected !== null && !(this.focus.is_focused() && window().active)) this.selected = null;
     return div()
       .id("agent-board")
       .track_focus(this.focus)
