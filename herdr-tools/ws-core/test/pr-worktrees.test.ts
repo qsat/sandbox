@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PrWorktrees } from "../src/pr-worktrees";
@@ -32,7 +32,8 @@ function pushToOrigin(file: string) {
 }
 
 beforeAll(() => {
-  dir = mkdtempSync(join(tmpdir(), "ws-pr-"));
+  // macOS の tmpdir() は /var/...（/private/var へのシンボリックリンク）を返すが、git は実パスで答えるので、実パスにそろえる
+  dir = realpathSync(mkdtempSync(join(tmpdir(), "ws-pr-")));
   origin = join(dir, "origin.git");
   main = join(dir, "api");
   pusher = join(dir, "pusher");
