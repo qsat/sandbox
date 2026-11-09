@@ -81,7 +81,8 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
    - （任意）手順 6・7 の代わりに skhd でキーを取ると、Herdr app と Ghostty のどちらが前にあっても同じ経路（`ws next --from-app` と `ws next --prev --from-app`）で巡回する。設定例は `tmux/config/skhdrc`（`ctrl + alt + shift - j` で次へ、`ctrl + alt + shift - k` で後ろへ）。skhd に寄せるなら、手順 6・7 と `tmux.conf` の `bind -n M-B` / `M-W` は要らない（`prefix b` / `prefix B` は残してよい）。skhd は PATH が短いので、`ws` と、`ws` が呼ぶ `tmux` / `hc` / `ghq` / `git` が見つかる PATH を設定例のように書く。tmux のクライアントが複数あるときは、最後に使ったクライアントが移動する
    - skhd にはサイドバーの並び順で移るキーも書いてある（`shift + alt - j` で 1 つ下、`shift + alt - k` で 1 つ上。`ws step --from-app` と `ws step --prev --from-app`）。`tmux/config/skhdrc` の該当の 2 行も写す
 8. tmux の hook で、今いるペイン・ウィンドウ・セッションが変わったらすぐ mod に一覧を読み直させる。`tmux/config/tmux.conf` の `set-hook -g window-pane-changed[50]`、`session-window-changed[50]`、`client-session-changed[50]` の 3 行を `~/.tmux.conf` に写す（`[50]` は配列の番号なので、ほかの hook を上書きしない）。hook は `~/.cache/herdr-tools/tmux-focus/event` に `touch` するだけで、mod がそのフォルダーを見張り、変わったらすぐ読み直す。見張りが失敗しても mod は動き、2 秒ごとの読み直しが予備として残る。`./install.sh` で mod を入れ直したあと、Herdr app を再読み込みする
-9. 一覧だけの画面にしたければ `mod.json` を `{"place": "none"}` にし、`ctrl-shift-l` か `herdr-app do layout.switch '{"name":"agents"}'` で切り替える
+9. Ghostty のウインドウが複数あるとき、Herdr app から移る先を最後に選んだウインドウにする。`tmux/config/tmux.conf` の `set -g focus-events on` を `~/.tmux.conf` に写し、`tmux source-file ~/.tmux.conf` のあと、開いている Ghostty のウインドウの tmux をつなぎ直す。off のままだと、tmux はキーを打ったクライアントしか「最後に使われた」と見なさないので、クリックで選んだだけのウインドウではなく前にキーを打ったウインドウの tmux が切り替わり、前に出るウインドウ（macOS が最後に選ばれたものを前に出す）と食い違う
+10. 一覧だけの画面にしたければ `mod.json` を `{"place": "none"}` にし、`ctrl-shift-l` か `herdr-app do layout.switch '{"name":"agents"}'` で切り替える
 
 ## 使い方
 
@@ -297,7 +298,7 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 
 1. セッションを用意（無ければ tm 規則 = basename、`.`→`_` で作る。同名があればそれを使う）
 2. agent なら（移動では再開しない。再開は `ws resume`・ボタン・`R` だけで行う）: `@ws_agent` が一致する生きたペインがあればそれを選ぶ／無ければ `agents` ウィンドウに `hc attach` ペインを作る（無ければウィンドウごと）
-3. tmux クライアントを切り替える: `--client` 指定 > `--from-app` なら最後に使われたクライアント > tmux 内なら呼び出し元 > tmux の外ならその場で `tmux attach`
+3. tmux クライアントを切り替える: `--client` 指定 > `--from-app` なら最後に使われたクライアント（`client_activity` が最も新しいもの。`focus-events on` ならフォーカスの出入りでも更新されるので、最後に選んだ Ghostty のウインドウになる）> tmux 内なら呼び出し元 > tmux の外ならその場で `tmux attach`
 4. app からなら Ghostty を前面へ（クライアントが1つも無ければ Ghostty の新しいウィンドウで attach）
 
 ### `cc`: herdr-core で起動して、今の端末で会話する
