@@ -214,6 +214,25 @@ export default class PullRequests extends View {
     );
   }
 
+  /** プルリクエストの GitHub のページを既定のブラウザで開く（macOS の open） */
+  openPrInBrowser(row: Extract<Row, { kind: "pr" }>, cx: Context) {
+    const url = row.pr.url;
+    this.selected = row.id;
+    cx.notify();
+    if (!url) {
+      this.error = `#${row.pr.number} の URL を gh が返していません`;
+      return;
+    }
+    cx.spawn(
+      async (cx) => {
+        const r = await exec("open", [url]).catch(() => null);
+        this.error = r && r.code === 0 ? "" : `ブラウザで開けませんでした: ${r?.stderr.trim() || url}`;
+        cx.notify();
+      },
+      { owner: this },
+    );
+  }
+
   /** プルリクエスト全体の差分を hunk で開く（hunk gh pr） */
   openPrInHunk(row: Extract<Row, { kind: "pr" }>, cx: Context) {
     this.runHunk(row.id, async (root) => wsHunkPrArgs(root, row.pr.number), cx);
@@ -270,7 +289,8 @@ export default class PullRequests extends View {
                 this.preparePrWorktree(row, cx),
               ),
             ),
-          );
+          )
+          .child(iconButton(`${row.id}:browser`, "mods/pull-requests/external-link.svg", "GitHub のプルリクエストをブラウザで開く", t, (cx) => this.openPrInBrowser(row, cx)));
       }
       case "commit": {
         const c = row.commit;
