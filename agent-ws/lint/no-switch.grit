@@ -1,0 +1,5 @@
+language js
+
+JsSwitchStatement() as $switch where {
+  register_diagnostic(span=$switch, message="switch ではなく、対応表（Record）か lib/match のパターンマッチで書く")
+}

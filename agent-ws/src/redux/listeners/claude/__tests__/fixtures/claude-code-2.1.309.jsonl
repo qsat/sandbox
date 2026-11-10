@@ -1,0 +1,17 @@
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "SessionStart", "source": "startup"}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "UserPromptSubmit", "prompt": "Agent ツールで general-purpose サブエージェントを1つ起動し、そのサブエージェントに Bash で `echo hi > b.txt` を"}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "PreToolUse", "tool_name": "Agent", "tool_input": {"description": "Write hi to b.txt"}}
+{"session_id": "s1", "cwd": "/w/proj", "agent_id": "a2c907ddb5662238b", "agent_type": "general-purpose", "hook_event_name": "SubagentStart"}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "PostToolUse", "tool_name": "Agent", "tool_input": {"description": "Write hi to b.txt"}}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "Stop", "last_assistant_message": "サブエージェントを起動しました。終わったら結果をお知らせします。", "background_tasks": [{"id": "a2c907ddb5662238b", "type": "subagent", "status": "running"}]}
+{"session_id": "s1", "cwd": "/w/proj", "agent_id": "a2c907ddb5662238b", "agent_type": "general-purpose", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "echo hi > b.txt", "description": "Write \"hi\" to b.txt"}}
+{"session_id": "s1", "cwd": "/w/proj", "agent_id": "a2c907ddb5662238b", "agent_type": "general-purpose", "hook_event_name": "PermissionRequest", "tool_name": "Bash", "tool_input": {"command": "echo hi > b.txt", "description": "Write \"hi\" to b.txt"}}
+{"session_id": "s1", "cwd": "/w/proj", "agent_id": "ae35f3efc83d47fdd", "agent_type": "", "hook_event_name": "SubagentStop", "background_tasks": [{"id": "a2c907ddb5662238b", "type": "subagent", "status": "running"}]}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "Notification", "message": "Claude needs your permission", "notification_type": "permission_prompt"}
+{"session_id": "s1", "cwd": "/w/proj", "agent_id": "a2c907ddb5662238b", "agent_type": "general-purpose", "hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_input": {"command": "echo hi > b.txt", "description": "Write \"hi\" to b.txt"}}
+{"session_id": "s1", "cwd": "/w/proj", "agent_id": "a2c907ddb5662238b", "agent_type": "general-purpose", "hook_event_name": "SubagentStop", "last_assistant_message": "The command worked. `echo hi > b.txt` ran in `/w/proj`.", "background_tasks": [{"id": "a2c907ddb5662238b", "type": "subagent", "status": "running"}]}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "UserPromptSubmit", "prompt": "<task-notification>"}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "Stop", "last_assistant_message": "完了しました。`echo hi > b.txt` はエラーなしで実行されました（ファイルの中身は開いて確認していません）。", "background_tasks": []}
+{"session_id": "s1", "cwd": "/w/proj", "agent_id": "a6318f54bbe5b7838", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "cat b.txt"}}
+{"session_id": "s1", "cwd": "/w/proj", "agent_id": "a6318f54bbe5b7838", "agent_type": "", "hook_event_name": "SubagentStop", "last_assistant_message": "b.txt の中身を確認して", "background_tasks": []}
+{"session_id": "s1", "cwd": "/w/proj", "hook_event_name": "SessionEnd", "reason": "prompt_input_exit"}
