@@ -2,17 +2,17 @@ package com.example.idp;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.formLogin;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,20 +32,20 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.jackson.SecurityJacksonModules;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
+import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
+import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService.JsonMapperOAuth2AuthorizationParametersMapper;
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService.JsonMapperOAuth2AuthorizationRowMapper;
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsent;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsentService;
-import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.util.UriComponentsBuilder;
 
 import com.jayway.jsonpath.JsonPath;
 
@@ -58,7 +58,6 @@ import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 @AutoConfigureMockMvc
 class PersistenceTests {
 
-    private static final String REDIRECT_URI = "http://127.0.0.1:8080/login/oauth2/code/idp";
     private static final String DB_URL = "jdbc:h2:mem:ch07-test;DB_CLOSE_DELAY=-1";
 
     @Autowired MockMvc mvc;
@@ -248,42 +247,103 @@ class PersistenceTests {
         assertThat(tenant.getTenantId()).isEqualTo("t-001");
     }
 
-    // ---- ヘルパー ----
+    /** final なクラス。 */
+    public static final class FinalTenant {
+        public String tenantId = "t-003";
+    }
 
-    /** ログイン → 認可リクエスト → トークンリクエストを MockMvc で通し、トークンレスポンスの JSON を返す。 */
-    private String runAuthorizationCodeFlow() throws Exception {
-        String verifier = "a-very-long-random-string-used-as-pkce-code-verifier-0123456789";
-        MockHttpSession session = (MockHttpSession) mvc.perform(formLogin().user("user").password("password"))
-            .andReturn().getRequest().getSession(false);
+    /** record (暗黙に final)。 */
+    public record TenantRecord(String tenantId) {
+    }
 
-        String location = mvc.perform(get("/oauth2/authorize")
+    @Test
+    void finalなクラスやrecordも型名つきで保存され_許可リストになければ読み戻せない() {
+        RegisteredClient client = clients.findByClientId("web-client");
+        JdbcOAuth2AuthorizationService service = new JdbcOAuth2AuthorizationService(jdbc, clients);
+
+        for (Object value : List.of(new FinalTenant(), new TenantRecord("t-002"))) {
+            OAuth2Authorization authorization = OAuth2Authorization.withRegisteredClient(client)
+                .principalName("user")
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .attribute("tenant", value)
+                .build();
+            service.save(authorization);
+
+            // 値の宣言上の型が Object なので、final でも型名 (@class) が付く
+            String json = jdbc.queryForObject("SELECT UTF8TOSTRING(attributes) FROM oauth2_authorization WHERE id = ?",
+                String.class, authorization.getId());
+            assertThat(json).contains("\"@class\":\"" + value.getClass().getName() + "\"");
+            // 読み戻しは許可リストで拒否される
+            assertThatThrownBy(() -> service.findById(authorization.getId()))
+                .hasMessageContaining(value.getClass().getName());
+        }
+    }
+
+    @Test
+    void 同意ありのフローでは_stateカラムに認可サーバー発行のstateが入り_同意後は消える() throws Exception {
+        if (clients.findByClientId("consent-client") == null) {
+            clients.save(RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId("consent-client")
+                .clientSecret(passwordEncoder.encode("consent-secret"))
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .redirectUri(AuthorizationFlow.REDIRECT_URI)
+                .scope("openid")
+                .scope("profile")
+                .clientSettings(ClientSettings.builder().requireProofKey(true).requireAuthorizationConsent(true).build())
+                .build());
+        }
+        MockHttpSession session = AuthorizationFlow.login(mvc);
+
+        // 1. 認可リクエスト。同意が必要なので、コードではなく同意画面 (HTML) が返る
+        String consentPage = mvc.perform(get("/oauth2/authorize")
                 .session(session)
                 .queryParam("response_type", "code")
-                .queryParam("client_id", "web-client")
-                .queryParam("redirect_uri", REDIRECT_URI)
+                .queryParam("client_id", "consent-client")
+                .queryParam("redirect_uri", AuthorizationFlow.REDIRECT_URI)
                 .queryParam("scope", "openid profile")
-                .queryParam("state", "xyz")
-                .queryParam("code_challenge", challenge(verifier))
+                .queryParam("state", "client-state-xyz")
+                .queryParam("code_challenge", AuthorizationFlow.challenge(AuthorizationFlow.VERIFIER))
                 .queryParam("code_challenge_method", "S256"))
-            .andReturn().getResponse().getRedirectedUrl();
-        String code = UriComponentsBuilder.fromUriString(location).build().getQueryParams().getFirst("code");
-
-        return mvc.perform(post("/oauth2/token")
-                .with(httpBasic("web-client", "web-client-secret"))
-                .param("grant_type", "authorization_code")
-                .param("code", code)
-                .param("redirect_uri", REDIRECT_URI)
-                .param("code_verifier", verifier))
             .andReturn().getResponse().getContentAsString();
+        Matcher m = Pattern.compile("name=\"state\" value=\"([^\"]+)\"").matcher(consentPage);
+        assertThat(m.find()).as("同意画面に state の hidden フィールドがある").isTrue();
+        String serverState = m.group(1);
+
+        // state 列には「認可サーバーが発行した」値が入る。クライアントが渡した state ではない
+        String stateColumn = jdbc.queryForObject(
+            "SELECT state FROM oauth2_authorization WHERE state = ?", String.class, serverState);
+        assertThat(stateColumn).isEqualTo(serverState).isNotEqualTo("client-state-xyz");
+        // クライアントの state は attributes 内の認可リクエストに入っている
+        String attributes = jdbc.queryForObject(
+            "SELECT UTF8TOSTRING(attributes) FROM oauth2_authorization WHERE state = ?", String.class, serverState);
+        assertThat(attributes).contains("\"state\":\"client-state-xyz\"");
+        // この時点ではまだコードは発行されていない
+        assertThat(jdbc.queryForObject(
+            "SELECT authorization_code_value FROM oauth2_authorization WHERE state = ?", byte[].class, serverState))
+            .isNull();
+
+        // 2. 同意を送信する。コードが発行され、state 列は空になる
+        String location = mvc.perform(post("/oauth2/authorize")
+                .session(session).with(csrf())
+                .param("client_id", "consent-client")
+                .param("state", serverState)
+                .param("scope", "openid")
+                .param("scope", "profile"))
+            .andReturn().getResponse().getRedirectedUrl();
+        assertThat(location).contains("code=").contains("state=client-state-xyz");
+        assertThat(jdbc.queryForObject(
+            "SELECT COUNT(*) FROM oauth2_authorization WHERE state = ?", Integer.class, serverState)).isZero();
+    }
+
+    // ---- ヘルパー ----
+
+    private String runAuthorizationCodeFlow() throws Exception {
+        return AuthorizationFlow.run(mvc);
     }
 
     private static String kidOf(String jwt) {
         String header = new String(Base64.getUrlDecoder().decode(jwt.split("\\.")[0]), StandardCharsets.UTF_8);
         return JsonPath.read(header, "$.kid");
-    }
-
-    private static String challenge(String verifier) throws Exception {
-        byte[] digest = MessageDigest.getInstance("SHA-256").digest(verifier.getBytes(StandardCharsets.US_ASCII));
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
     }
 }
