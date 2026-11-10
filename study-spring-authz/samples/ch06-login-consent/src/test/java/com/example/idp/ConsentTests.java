@@ -162,6 +162,25 @@ class ConsentTests {
     }
 
     @Test
+    void 同意済みのscopeがある状態で拒否してもエラーにならず済みの範囲でコードが出る() throws Exception {
+        MockHttpSession session = flow.login("alice", "password");
+        String first = FlowSupport.stateOf(flow.authorize(session, "openid profile", "s1"));
+        flow.submitConsent(session, first, "profile");
+
+        // email を追加で求められて「拒否」する。profile は前回すでに同意済み
+        String second = FlowSupport.stateOf(flow.authorize(session, "openid profile email", "s2"));
+        MvcResult denied = flow.submitConsent(session, second);
+
+        // 認可サーバーは「前回の同意 + 今回の選択」が空でなければ拒否扱いにしない
+        String location = denied.getResponse().getRedirectedUrl();
+        assertThat(FlowSupport.queryParam(location, "error")).isNull();
+        String tokenResponse = flow.exchange(FlowSupport.queryParam(location, "code"));
+        assertThat(tokenResponse).contains("\"scope\":\"openid profile\"");
+        assertThat(consentService.findById(clientRegistrationId, "alice").getScopes())
+            .containsExactlyInAnyOrder("openid", "profile");
+    }
+
+    @Test
     void 要求していないscopeを同意として送るとinvalid_scopeになる() throws Exception {
         MockHttpSession session = flow.login("alice", "password");
         String state = FlowSupport.stateOf(flow.authorize(session, "openid profile", "s1"));
