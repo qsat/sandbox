@@ -55,6 +55,8 @@
 - 認可サーバーの設定は `http.oauth2AuthorizationServer(as -> { http.securityMatcher(as.getEndpointsMatcher()); as.oidc(withDefaults()); })` と書く (`samples/ch02-minimal-idp` の `SecurityConfig` を参照)。
 - 未ログインで `/oauth2/authorize` に来たときのリダイレクト先は相対パスの `/login`。
 - MockMvc のテストで `user("user")` を使って認証を差し込むと、ID トークン生成が `authenticationTime cannot be null` で失敗する。`formLogin()` で実際にログインしてセッションを引き回す (`IdpApplicationTests` を参照)。
+- ID トークンには最小構成でも `sid` と `auth_time` が入る。ID トークンの寿命は `TokenSettings` では変えられず、`JwtGenerator` が 30 分に固定している。
+- `InMemoryRegisteredClientRepository` は、複数のクライアントが同じ `clientSecret` の値 (ハッシュ文字列) を持つと `Registered client must be unique` で起動に失敗する。`RegisteredClient.from(...)` で複製するときは secret も設定し直す。
 - 既定のエンドポイント: `/oauth2/authorize`、`/oauth2/token`、`/oauth2/jwks`、`/oauth2/revoke`、`/oauth2/introspect`、`/userinfo`、`/connect/logout`、`/.well-known/openid-configuration`。
 
 ここに無い API は、記憶ではなく実物で確かめます。
