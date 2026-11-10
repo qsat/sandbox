@@ -2,6 +2,7 @@ import { View, div, type AsyncContext, type Context, type Element, type FocusHan
 import { exec, theme, watchFolder } from "herdr";
 import { BRANCH_COLOR } from "../shared/colors";
 import { readCurrentTarget } from "../shared/current-target";
+import { shownError } from "../shared/errors";
 import { relativeTime } from "../shared/relative-time";
 import { hunkLink, iconButton, label, rowBase, statusColor, targetHeader, type Theme } from "../shared/row-view";
 import { moveSelection } from "../shared/selection";
@@ -35,7 +36,10 @@ export default class CommitHistory extends View {
   filesOf!: Map<string, FileChange[]>;
   expanded!: string | null;
   selected!: string | null;
+  /** 読み直し（ws list・git）の失敗。読み直すたびに入れ替わる */
   error!: string;
+  /** 操作（コミットを開く・hunk で開く）の失敗。読み直しでは消さず、次の操作まで残す */
+  actionError!: string;
   fetching!: boolean;
   dirty!: boolean;
   snapshot!: string;
@@ -55,6 +59,7 @@ export default class CommitHistory extends View {
     this.expanded = null;
     this.selected = null;
     this.error = "";
+    this.actionError = "";
     this.fetching = false;
     this.dirty = false;
     this.snapshot = "";
@@ -202,10 +207,10 @@ export default class CommitHistory extends View {
         try {
           const [names, stats] = await Promise.all([this.git(root, showFilesArgs(hash, "name-status")), this.git(root, showFilesArgs(hash, "numstat"))]);
           if (this.target?.path !== root) return;
-          if (names.code !== 0) this.error = names.stderr.trim();
-          else this.filesOf.set(hash, commitFiles(names.stdout, stats.stdout));
+          this.actionError = names.code !== 0 ? names.stderr.trim() || `git show: exit ${names.code}` : "";
+          if (names.code === 0) this.filesOf.set(hash, commitFiles(names.stdout, stats.stdout));
         } catch (e) {
-          this.error = String((e as Error)?.message ?? e);
+          this.actionError = String((e as Error)?.message ?? e);
         }
         cx.notify();
       },
@@ -265,13 +270,13 @@ export default class CommitHistory extends View {
           const base = await this.git(root, mergeBaseArgs(ref));
           const hash = base.stdout.trim();
           if (base.code !== 0 || !hash) {
-            this.error = (base.stderr.trim() || `git merge-base: exit ${base.code}`);
+            this.actionError = base.stderr.trim() || `git merge-base: exit ${base.code}`;
             cx.notify();
             return;
           }
           if (this.target?.path === root) this.execHunk(wsHunkAgainstArgs(root, hash), cx);
         } catch (e) {
-          this.error = String((e as Error)?.message ?? e);
+          this.actionError = String((e as Error)?.message ?? e);
           cx.notify();
         }
       },
@@ -283,7 +288,7 @@ export default class CommitHistory extends View {
     cx.notify();
     cx.spawn(
       async (cx) => {
-        this.error = (await execWs(args)).error;
+        this.actionError = (await execWs(args)).error;
         cx.notify();
       },
       { owner: this },
@@ -407,6 +412,7 @@ export default class CommitHistory extends View {
     const t = theme() as unknown as Theme;
     const rows = visibleRows(this.commits, this.local, this.expanded, this.filesOf);
     const now = Math.floor(Date.now() / 1000);
+    const error = shownError(this.error, this.actionError);
     const body = div()
       .flex()
       .flex_col()
@@ -426,7 +432,7 @@ export default class CommitHistory extends View {
               .when(this.commits.length === 0 && this.error === "", (el) => el.child(label(this.emptyMessage(), t.muted)))
               .children(rows.map((r) => this.renderRow(r, t, now))),
           )
-          .when(this.error !== "", (el) => el.child(label(this.error, t.ansi1))),
+          .when(error !== "", (el) => el.child(label(error, t.ansi1))),
       );
     return div()
       .id("commit-history")

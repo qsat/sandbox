@@ -27,7 +27,7 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
                                                    差分を hunk で開く。--commit なら hunk show <hash>、--pr なら GitHub のプルリクエスト全体（hunk gh pr）、--gh-commit なら GitHub のコミット（hunk gh commit）、--range ならブランチ間の差分（hunk diff <range>）、--against なら作業ツリーと <rev> の差分（hunk diff <rev>。未コミットも含む）、無ければ未コミットの変更（hunk diff）。--file のファイルへ移る。
                                                    hunk のセッションがあれば中身を入れ替え、無ければ tmux セッションの hunk ウィンドウで起動する（HUNK_BIN で実行ファイルを指定）
   ws edit <worktree> --file <path> [--client <name> | --from-app]
-                                                   ファイルを $EDITOR で開く。EDITOR は tmux のグローバルな環境（set-environment -g EDITOR）のもの。そのファイル専用の tmux ウィンドウで起動し、クライアントをそこへ移す（既にあれば移るだけ）
+                                                   ファイルを $EDITOR で開く。EDITOR は tmux のグローバルな環境（set-environment -g EDITOR）のもの。nvim なら tmux セッションごとに 1 つの edit ウィンドウの nvim に開かせ、そうでなければそのファイル専用のウィンドウで起動して、クライアントをそこへ移す
   ws pr <number> [<worktree>] [--no-go] [--client <name> | --from-app]
                                                    プルリクエストのブランチの worktree を用意する（無ければ本体の横に作り、あれば早送りできるときだけ最新にする。エージェントは起動しない）。そのあと tmux セッションへ移る（--no-go で移らない）
   ws changes [--json] <worktree>...               worktree ごとの変更量（ベースブランチから分かれた点と作業ツリーの差の +/− 行数。未コミット・追跡されていないファイルも含む）

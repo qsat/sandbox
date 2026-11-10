@@ -39,10 +39,10 @@ herdr-tools/
 ├── herdr-app/                    クライアント: Herdr app の mod（ws を exec するだけ）
 │   ├── src/agent-board/          board.ts（行と ws の呼び出し）/ main.ts（Herdr app の API）/ notify/（エージェントが blocked・done に変わったときの macOS の通知。attention.ts（通知するかの判断）/ transcript.ts（Claude Code の会話の記録の場所と解析）/ message.ts（通知の文面）/ commands.ts（terminal-notifier と osascript の引数）/ notifier.ts（記録を読み、コマンドを順に試し、ログを書く。I/O は引数で受ける））
 │   ├── src/workspace-picker/     ghq の worktree を絞り込んで選ぶ popup の mod。candidates.ts（候補・絞り込み・選んだときにすること。I/O なし）/ main.ts（Herdr app の API）
-│   ├── src/commit-history/       コミット履歴の mod。git.ts（git の出力の読み取り）/ base-ref.ts（ベースブランチを探す）/ rows.ts（行の並びと選択）/ main.ts（Herdr app の API）
+│   ├── src/commit-history/       コミット履歴の mod。git.ts（git の出力の読み取り）/ rows.ts（行の並びと選択）/ main.ts（Herdr app の API）
 │   ├── src/worktree-changes/     変更ファイルの mod。rows.ts（ツリー・フラットの行の並び、範囲の型、空のときの文言）/ main.ts（Herdr app の API）
 │   ├── src/pull-requests/        プルリクエストの mod。gh.ts（gh の出力の読み取りと失敗の文）/ rows.ts（行の並び）/ main.ts（Herdr app の API）
-│   ├── src/shared/               mod で共通の処理: ws-exec.ts（ws の呼び出しと失敗の文）/ current-target.ts（ws list から今いるペインの worktree を読む）/ ws-list.ts（ws list --json の読み取り）/ target.ts（今いるペインの worktree）/ ws-hunk.ts（ws hunk の引数）/ ws-edit.ts（ws edit の引数）/ local-changes.ts（未コミットの変更の読み取り）/ footer-bar.ts（下端のフッターと切り替えのボタン）/ ws-new.ts（ws new の引数）/ board-reveal.ts（agent-board と workspace-picker が共有値でやりとりする名前と形）/ relative-time.ts / selection.ts（j・k の選択）/ row-view.ts（行の見た目・アイコンボタン・worktree の見出し）/ tmux-focus.ts（tmux のペインの変化の見張り）/ colors.ts / title-bar.ts
+│   ├── src/shared/               mod で共通の処理: ws-exec.ts（ws の呼び出しと失敗の文）/ errors.ts（読み直しの失敗と操作の失敗の出し方）/ base-ref.ts（ベースブランチを探す）/ current-target.ts（ws list から今いるペインの worktree を読む）/ ws-list.ts（ws list --json の読み取り）/ target.ts（今いるペインの worktree）/ ws-hunk.ts（ws hunk の引数）/ ws-edit.ts（ws edit の引数）/ local-changes.ts（未コミットの変更の読み取り）/ footer-bar.ts（下端のフッターと切り替えのボタン）/ ws-new.ts（ws new の引数）/ board-reveal.ts（agent-board と workspace-picker が共有値でやりとりする名前と形）/ relative-time.ts / selection.ts（j・k の選択）/ row-view.ts（行の見た目・アイコンボタン・worktree の見出し）/ tmux-focus.ts（tmux のペインの変化の見張り）/ colors.ts / title-bar.ts
 │   ├── sync-types.sh, tsconfig.json   Herdr app が生成した型（types/、gitignore）で mod の main.ts を検査する
 │   ├── mod/agent-board/mod.json, mod/commit-history/mod.json, mod/pull-requests/mod.json, mod/workspace-picker/mod.json, mod/worktree-changes/mod.json, layouts/agents.json
 └── ws/                           CLI。cli.ts と compose-from-env.ts で全部をつなぐ
@@ -80,7 +80,8 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
    ```
    - （任意）手順 6・7 の代わりに skhd でキーを取ると、Herdr app と Ghostty のどちらが前にあっても同じ経路（`ws next --from-app` と `ws next --prev --from-app`）で巡回する。設定例は `tmux/config/skhdrc`（`ctrl + alt + shift - j` で次へ、`ctrl + alt + shift - k` で後ろへ）。skhd に寄せるなら、手順 6・7 と `tmux.conf` の `bind -n M-B` / `M-W` は要らない（`prefix b` / `prefix B` は残してよい）。skhd は PATH が短いので、`ws` と、`ws` が呼ぶ `tmux` / `hc` / `ghq` / `git` が見つかる PATH を設定例のように書く。tmux のクライアントが複数あるときは、最後に使ったクライアントが移動する
    - skhd にはサイドバーの並び順で移るキーも書いてある（`shift + alt - j` で 1 つ下、`shift + alt - k` で 1 つ上。`ws step --from-app` と `ws step --prev --from-app`）。`tmux/config/skhdrc` の該当の 2 行も写す
-8. tmux の hook で、今いるペイン・ウィンドウ・セッションが変わったらすぐ mod に一覧を読み直させる。`tmux/config/tmux.conf` の `set-hook -g window-pane-changed[50]`、`session-window-changed[50]`、`client-session-changed[50]` の 3 行を `~/.tmux.conf` に写す（`[50]` は配列の番号なので、ほかの hook を上書きしない）。hook は `~/.cache/herdr-tools/tmux-focus/event` に `touch` するだけで、mod がそのフォルダーを見張り、変わったらすぐ読み直す。見張りが失敗しても mod は動き、2 秒ごとの読み直しが予備として残る。`ws list` が読めなかったとき（herdr-core に一時的につながらないなど）は、一覧を空にせず前の一覧のまま、理由を一覧の下に出す。`./install.sh` で mod を入れ直したあと、Herdr app を再読み込みする
+8. tmux の hook で、今いるペイン・ウィンドウ・セッションが変わったらすぐ mod に一覧を読み直させる。`tmux/config/tmux.conf` の `set-hook -g window-pane-changed[50]`、`session-window-changed[50]`、`client-session-changed[50]` の 3 行を `~/.tmux.conf` に写す（`[50]` は配列の番号なので、ほかの hook を上書きしない）。hook は `~/.cache/herdr-tools/tmux-focus/event` に `touch` するだけで、mod がそのフォルダーを見張り、変わったらすぐ読み直す。見張りが失敗しても mod は動き、2 秒ごとの読み直しが予備として残る。`ws list` が読めなかったとき（herdr-core に一時的につながらないなど）は、一覧を空にせず前の一覧のまま、理由を一覧の下に出す。
+   - mod の下に出す失敗の文は 2 種類ある。読み直しの失敗（`ws list`・git が読めない）は、読み直すたびに入れ替わり、読めたら消える。操作の失敗（行のクリックやボタンで呼んだ `ws go`・`ws new`・`ws hunk`・`ws edit`・`ws pr` の失敗、`ws next` の「巡回するエージェントはありません」）は、読み直しでは消さず、次の操作まで残す（`shared/errors.ts`。agent-board・commit-history・pull-requests・worktree-changes で同じ）`./install.sh` で mod を入れ直したあと、Herdr app を再読み込みする
 9. 一覧だけの画面にしたければ `mod.json` を `{"place": "none"}` にし、`ctrl-shift-l` か `herdr-app do layout.switch '{"name":"agents"}'` で切り替える
 
 ## 使い方
@@ -257,6 +258,7 @@ tmux で今いるペインの worktree のコミット履歴を出す。Herdr ap
 
 下半分の stack の最初のタブ「Changes」。tmux で今いるペインの worktree の変更ファイル（各ファイルの +/−）を、選んだ範囲で出す。読み取りは `shared/local-changes.ts`、ベースブランチの決定は `shared/base-ref.ts` を `commit-history` と共有する。
 
+- ベースブランチは、範囲でベースブランチのボタンを選んだときに worktree ごとに 1 回調べる（見つからなくても、読み直しのたびには `gh pr view` を呼ばない。ボタンを押し直すと調べ直す）
 - 題名の帯: 左端にタブ、右端に選んでいる範囲のファイルの数（`12 files`）
 - 本文の一番上の行: Tree / Flat の切り替え（ツリーはフォルダーごとにまとめ、フォルダーの行で開閉する）。その下のリポジトリ名の行の右端に、ツリー表示でファイルがあるとき「すべて開く」「すべて閉じる」のアイコンボタン
 - 下端のフッター: 範囲のボタン 3 つ

@@ -3,6 +3,7 @@ import { closeOverlay, exec, home, nextCommand, openOverlay, props, readTextFile
 import { attentionChanges } from "./notify/attention";
 import { notifyAgent } from "./notify/notifier";
 import { COLLAPSED_KEY, readReveal, REVEAL_KEY } from "../shared/board-reveal";
+import { shownError } from "../shared/errors";
 import { ROW_HEIGHT, label, type Theme as RowTheme } from "../shared/row-view";
 import { execWs } from "../shared/ws-exec";
 import { BRANCH_COLOR, REPOSITORY_COLOR, SELECTED_BG } from "../shared/colors";
@@ -124,7 +125,10 @@ function button(spec: ButtonSpec, t: Theme, onClick: (cx: Context) => void) {
 
 export default class AgentBoard extends View {
   list!: ListedTree;
+  /** ws list の読み直しの失敗（確認のダイアログでは、その操作の失敗）。読み直すたびに入れ替わる */
   error!: string;
+  /** 行やキーの操作（ws go・ws new・ws next など）の失敗。読み直しでは消さず、次の操作まで残す */
+  actionError!: string;
   fetching!: boolean;
   confirmRequest!: ConfirmRequest | null;
   confirming!: boolean;
@@ -144,6 +148,7 @@ export default class AgentBoard extends View {
     this.revealedAt = readReveal(shared(REVEAL_KEY))?.at ?? 0;
     this.list = EMPTY_LIST;
     this.error = "";
+    this.actionError = "";
     this.fetching = false;
     this.confirmRequest = (props()?.confirm as ConfirmRequest | undefined) ?? null;
     this.confirming = false;
@@ -171,7 +176,7 @@ export default class AgentBoard extends View {
         if (!args) continue;
         // 候補が無いとき、ws next --from-app は終了コード 0 で理由を標準エラーに出す
         const r = await execWs(args);
-        this.error = r.error || r.stderr.trim();
+        this.actionError = r.error || r.stderr.trim();
         this.refresh(cx);
       }
     }, { owner: this });
@@ -249,7 +254,7 @@ export default class AgentBoard extends View {
     const args = wsArgsFor(row, action);
     if (!args) return;
     cx.spawn(async (cx) => {
-      this.error = (await execWs(args)).error;
+      this.actionError = (await execWs(args)).error;
       this.refresh(cx);
     }, { owner: this });
   }
@@ -500,6 +505,7 @@ export default class AgentBoard extends View {
     const t = theme() as unknown as Theme;
     if (this.confirmRequest) return this.renderConfirmDialog(this.confirmRequest, t);
     const rows = boardRows(this.list, liveTerminals(), collapsedState());
+    const error = shownError(this.error, this.actionError);
     this.syncSelection();
     return div()
       .id("agent-board")
@@ -526,7 +532,7 @@ export default class AgentBoard extends View {
           .overflow_y_scrollbar()
           .when(rows.length === 0, (el) => el.child(label("エージェントもセッションもありません", t.muted)))
           .children(rows.map((r, i) => this.renderRow(r, t, i === 0, rowId(r) === this.selected)))
-          .when(this.error !== "", (el) => el.child(label(this.error, t.ansi1))),
+          .when(error !== "", (el) => el.child(label(error, t.ansi1))),
       );
   }
 }

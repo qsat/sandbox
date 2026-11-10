@@ -2,6 +2,7 @@ import { View, div, type AsyncContext, type Context, type Element, type FocusHan
 import { exec, theme } from "herdr";
 import { BRANCH_COLOR } from "../shared/colors";
 import { readCurrentTarget } from "../shared/current-target";
+import { shownError } from "../shared/errors";
 import { relativeTime } from "../shared/relative-time";
 import { ROW_HEIGHT, hunkLink, iconButton, label, rowBase, targetHeader, type Theme } from "../shared/row-view";
 import { moveSelection } from "../shared/selection";
@@ -30,7 +31,10 @@ export default class PullRequests extends View {
   commitsOf!: Map<number, PrCommit[]>;
   expanded!: number | null;
   selected!: string | null;
+  /** 読み直し（ws list・gh pr list）の失敗。読み直すたびに入れ替わる */
   error!: string;
+  /** 操作（コミットを開く・hunk で開く・ws pr）の失敗。読み直しでは消さず、次の操作まで残す */
+  actionError!: string;
   /** ws pr の結果（作った・最新にした・更新しなかった理由）。失敗は error に出す */
   notice!: string;
   fetchingList!: boolean;
@@ -48,6 +52,7 @@ export default class PullRequests extends View {
     this.expanded = null;
     this.selected = null;
     this.error = "";
+    this.actionError = "";
     this.notice = "";
     this.fetchingList = false;
     this.fetchingPrs = false;
@@ -62,7 +67,7 @@ export default class PullRequests extends View {
 
   /** 結果が前と同じなら再描画しない */
   repaint(cx: Context) {
-    const snapshot = JSON.stringify([this.target, this.error, this.notice, this.prs, this.message, this.expanded, [...this.commitsOf]]);
+    const snapshot = JSON.stringify([this.target, this.error, this.actionError, this.notice, this.prs, this.message, this.expanded, [...this.commitsOf]]);
     if (snapshot === this.snapshot) return;
     this.snapshot = snapshot;
     cx.notify();
@@ -163,7 +168,7 @@ export default class PullRequests extends View {
           try {
             await this.readCommits(root, number);
           } catch (e) {
-            this.error = String((e as Error)?.message ?? e);
+            this.actionError = String((e as Error)?.message ?? e);
           }
           this.repaint(cx);
         },
@@ -182,9 +187,9 @@ export default class PullRequests extends View {
     cx.spawn(
       async (cx) => {
         try {
-          this.error = (await execWs(await resolveArgs(root))).error;
+          this.actionError = (await execWs(await resolveArgs(root))).error;
         } catch (e) {
-          this.error = String((e as Error)?.message ?? e);
+          this.actionError = String((e as Error)?.message ?? e);
         }
         cx.notify();
       },
@@ -201,12 +206,12 @@ export default class PullRequests extends View {
     if (!root) return;
     this.selected = row.id;
     this.notice = `#${row.pr.number} の worktree を用意しています…`;
-    this.error = "";
+    this.actionError = "";
     cx.notify();
     cx.spawn(
       async (cx) => {
         const r = await execWs(wsPrArgs(root, row.pr.number));
-        this.error = r.error;
+        this.actionError = r.error;
         this.notice = r.ok ? r.stdout.trim() : "";
         cx.notify();
       },
@@ -294,6 +299,7 @@ export default class PullRequests extends View {
     const rows = visibleRows(this.prs ?? [], this.target?.branch ?? null, this.expanded, this.commitsOf);
     const now = Math.floor(Date.now() / 1000);
     const placeholder = this.prs === null ? "Loading pull requests…" : this.message;
+    const error = shownError(this.error, this.actionError);
     const body = div()
       .flex()
       .flex_col()
@@ -313,8 +319,8 @@ export default class PullRequests extends View {
               .when(rows.length === 0 && placeholder !== "", (el) => el.child(label(placeholder, t.muted)))
               .children(rows.map((r) => this.renderRow(r, t, now))),
           )
-          .when(this.notice !== "" && this.error === "", (el) => el.child(label(this.notice, t.muted)))
-          .when(this.error !== "", (el) => el.child(label(this.error, t.ansi1))),
+          .when(this.notice !== "" && error === "", (el) => el.child(label(this.notice, t.muted)))
+          .when(error !== "", (el) => el.child(label(error, t.ansi1))),
       );
     return div()
       .id("pull-requests")
