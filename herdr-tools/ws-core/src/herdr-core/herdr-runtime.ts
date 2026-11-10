@@ -1,12 +1,11 @@
 import { basename } from "@herdr-tools/utils/basename";
-import type { AgentRecord, AgentStatus } from "../domain/agent";
+import { toAgentStatus, type AgentRecord } from "../domain/agent";
 import type { AgentRuntime, AgentStartSpec } from "../ports";
 import type { HcClient } from "./hc-client";
 import type { HcTerminal } from "./hc-terminal";
 
 export const LABEL = { workspace: "ws", worktree: "wt", claudeSession: "claude.session", contextUsed: "claude.context" };
 
-const STATUSES = new Set(["working", "blocked", "idle", "done", "error"]);
 const SHELLS = new Set(["bash", "zsh", "fish", "sh", "dash", "ksh", "mksh", "tcsh", "csh", "nu", "pwsh", "elvish", "xonsh"]);
 const TERMINAL_NAME_MAX = 32;
 
@@ -44,12 +43,11 @@ function percentageLabel(value: string | undefined) {
 }
 
 export function toAgentRecord(t: HcTerminal, claudeSessionLabel: string): AgentRecord {
-  const state = t.status?.state;
   return {
     id: t.address,
     name: t.name ?? t.address,
     cwd: t.cwd,
-    status: state && STATUSES.has(state) ? (state as AgentStatus) : "unknown",
+    status: toAgentStatus(t.status?.state),
     blockedReason: t.status?.kind ?? undefined,
     statusMs: t.status_ms ?? undefined,
     message: t.status?.msg || undefined,

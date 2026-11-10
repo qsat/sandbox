@@ -125,8 +125,10 @@ export class WsCore {
     return { recorded: true } as const;
   }
 
-  async stopAgent(id: string) {
-    const agent = (await this.runtime.list()).find((a) => a.id === id);
+  /** ref は id か名前（ws go と同じく id を先に引く）。エージェントでない端末は一覧に無いので触らない */
+  async stopAgent(ref: string) {
+    const agents = await this.runtime.list();
+    const agent = agents.find((a) => a.id === ref) ?? agents.find((a) => a.name === ref);
     if (!agent) return { stopped: false, reason: "not-found" } as const;
     await this.stopAndRemove(agent);
     return { stopped: true } as const;

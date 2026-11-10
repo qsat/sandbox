@@ -177,6 +177,20 @@ describe("WsCore.stopAgent（ws stop: エージェントを止めて一覧から
     expect(rt.agents).toEqual([]);
   });
 
+  test("名前でも止められる（ws go・ws resume と同じ指し方）。id と同じ名前があれば id を先に引く", async () => {
+    const rt = new InMemoryRuntime();
+    const core = new WsCore(rt, source());
+    await core.startAgent(WT);
+    await core.startAgent(WT);
+    rt.agents[0]!.name = "a2";
+    rt.agents[1]!.name = "api-feat";
+    expect(await core.stopAgent("api-feat")).toEqual({ stopped: true });
+    expect(rt.agents.map((a) => a.id)).toEqual(["a1"]);
+    await core.startAgent(WT);
+    expect(await core.stopAgent(rt.agents[1]!.id)).toEqual({ stopped: true });
+    expect(rt.agents.map((a) => a.name)).toEqual(["a2"]);
+  });
+
   test("エージェントの一覧に無いもの（手で開いたシェルなど）は触らない", async () => {
     const core = new WsCore(new InMemoryRuntime(), source());
     expect(await core.stopAgent("t1")).toEqual({ stopped: false, reason: "not-found" });
