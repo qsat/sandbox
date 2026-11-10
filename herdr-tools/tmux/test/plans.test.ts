@@ -106,8 +106,8 @@ describe("ペイン", () => {
 
 describe("chooseClient", () => {
   const clients = [
-    { name: "/dev/ttys001", activity: 100 },
-    { name: "/dev/ttys002", activity: 200 },
+    { name: "/dev/ttys001", activity: 100, session: "api" },
+    { name: "/dev/ttys002", activity: 200, session: "web" },
   ];
   test("明示が最優先", () => expect(chooseClient({ explicit: "c", fromApp: true, clients })).toEqual({ kind: "switch", name: "c" }));
   test("app からは最後に使われたもの", () => expect(chooseClient({ fromApp: true, clients })).toEqual({ kind: "switch", name: "/dev/ttys002" }));

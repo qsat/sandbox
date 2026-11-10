@@ -6,8 +6,7 @@ import { relativeTime } from "../shared/relative-time";
 import { ROW_HEIGHT, hunkLink, iconButton, label, rowBase, targetHeader, type Theme } from "../shared/row-view";
 import { moveSelection } from "../shared/selection";
 import type { Target } from "../shared/target";
-import { TITLE_BAR_HEIGHT } from "../shared/title-bar";
-import { stackTabs } from "../shared/stack-tabs";
+import { stackTitleBar } from "../shared/stack-tabs";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import { wsHunkPrArgs, wsHunkPrCommitArgs } from "../shared/ws-hunk";
 import { execWs } from "../shared/ws-exec";
@@ -290,20 +289,6 @@ export default class PullRequests extends View {
     }
   }
 
-  renderTitleBar(t: Theme) {
-    return div()
-      .flex()
-      .flex_none()
-      .items_center()
-      .gap(8)
-      .h(TITLE_BAR_HEIGHT)
-      .px(14)
-      .border_b(1)
-      .border_color(t.border)
-      .children(stackTabs("pull-requests", t))
-      .child(div().px(5).py(1).rounded(4).border_1().border_color(t.border).text_size(10).text_color(t.muted).child(`${this.prs?.length ?? 0} PRs`));
-  }
-
   render() {
     const t = theme() as unknown as Theme;
     const rows = visibleRows(this.prs ?? [], this.target?.branch ?? null, this.expanded, this.commitsOf);
@@ -344,7 +329,7 @@ export default class PullRequests extends View {
       .line_height(1.25)
       .text_size(13)
       .text_color(t.foreground)
-      .child(this.renderTitleBar(t))
+      .child(stackTitleBar("pull-requests", `${this.prs?.length ?? 0} PRs`, t))
       .child(body);
   }
 }

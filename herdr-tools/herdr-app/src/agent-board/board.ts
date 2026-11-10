@@ -10,6 +10,7 @@ import { sidebarItems, type LiveTerminal, type SidebarItem } from "@herdr-tools/
 
 import { moveSelection as moveSelectionIn } from "../shared/selection";
 import { parseList } from "../shared/ws-list";
+import { wsNewArgs } from "../shared/ws-new";
 
 export { WS, EMPTY_LIST, parseList } from "../shared/ws-list";
 
@@ -88,7 +89,7 @@ export function wsArgsFor(row: BoardRow, action: BoardAction): string[] | null {
     case "go":
       return ["go", row.key, "--from-app"];
     case "new":
-      return ["new", row.kind === "worktree" ? row.key : row.worktree, "--attach", "--from-app"];
+      return wsNewArgs(row.kind === "worktree" ? row.key : row.worktree);
     case "resume":
       return row.kind === "agent" && row.canResume ? ["resume", row.key] : null;
     case "stop":

@@ -18,7 +18,8 @@ export HERDR_APP_HOME="$TMP/herdr-app"
 unset TMUX TMUX_PANE
 
 ws() { bun "$ROOT/cli.ts" "$@"; }
-t() { tmux -L "$SOCK" "$@"; }
+# -f /dev/null: 利用者の ~/.tmux.conf（prefix が C-Space、hook あり）を読まない。設定は後で tmux/config/tmux.conf だけを source-file する
+t() { tmux -f /dev/null -L "$SOCK" "$@"; }
 state() { jq -r "$1" "$FAKE_HC_STATE"; }
 edit_state() { jq "$1" "$FAKE_HC_STATE" >"$TMP/s" && mv "$TMP/s" "$FAKE_HC_STATE"; }
 pass=0
@@ -32,6 +33,28 @@ if script -qec true /dev/null >/dev/null 2>&1; then
 else
   in_pty() { script -q /dev/null sh -c "$1"; }
 fi
+
+# ws ui は pty の出力に一覧が出てからキーを送る（固定の sleep だと、起動が遅いとき一覧が出る前のキーが捨てられる）。
+# 使い方: ui_drive <出力ファイル> <キー | wait:<出力に現れるのを待つ文字列> | sleep:<秒>>...
+# 一覧が出ない・待つ文字列が現れないときは 15 秒で待つのをやめて残りのキー（最後の q）を送るので、止まらず、後続の check が失敗として出る
+without_cr() { tr -d '\r' <"$1"; }
+out_has() { [ "$(without_cr "$1" | grep -cF -- "$2")" -gt 0 ]; }
+wait_out() { for _ in $(seq 150); do out_has "$1" "$2" && return 0; sleep 0.1; done; return 0; }
+ui_drive() {
+  local out="$1"; shift
+  : >"$out"
+  {
+    trap '' PIPE # ui が先に閉じたあとに送るキーは捨てる
+    wait_out "$out" 'api-feat-auth'
+    for item in "$@"; do
+      case "$item" in
+        wait:*) wait_out "$out" "${item#wait:}" ;;
+        sleep:*) sleep "${item#sleep:}" ;;
+        *) printf '%s' "$item" 2>/dev/null || true ;;
+      esac
+    done
+  } | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'" >"$out"
+}
 
 cleanup() {
   t kill-server 2>/dev/null || true
@@ -230,21 +253,24 @@ set_status t3 working
 
 echo "ui（pty で開いてキー操作）"
 ws go "$API" --client "$CLIENT"
-UI_OUT="$( (sleep 2.5; printf '\r') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'" | tr -d '\r')"
-check "一覧に worktree とエージェントが出る" "$(grep -c 'api-feat-auth' <<<"$UI_OUT" | awk '{print ($1>0)}')" "1"
+UI="$TMP/ui.out"
+# Enter のあとに q も送る: Enter が効かなくても ui が閉じ、止まらずに次の check の失敗として出る
+ui_drive "$UI" $'\r' sleep:1 q
+check "一覧に worktree とエージェントが出る" "$(out_has "$UI" 'api-feat-auth' && echo 1 || echo 0)" "1"
 check "先頭の行（エージェントが動いている api=feat-auth）で Enter → そこへ移動して閉じる" "$(client_session)" "api=feat-auth"
-UI_OUT="$( (sleep 2.5; printf 'jjq') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'"; echo "exit=$?")"
-check "q で閉じる" "$(grep -o 'exit=[0-9]*' <<<"$UI_OUT" | tail -1)" "exit=0"
+UI_EXIT=0
+ui_drive "$UI" jjq || UI_EXIT=$?
+check "q で閉じる" "exit=$UI_EXIT" "exit=0"
 
 echo "close（tmux セッションを閉じる。エージェントは止めない）"
 has_session() { if t has-session -t "=$1" 2>/dev/null; then echo yes; else echo no; fi; }
 check "閉じる前は api のセッションがある" "$(has_session api)" "yes"
 # 最後の行は main の下のペインの行（移動だけで x は効かない）なので、k で 1 つ上の main の worktree の行に移ってから x を押す
-(sleep 2.5; printf 'Gkxn'; sleep 1; printf 'q') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'" >/dev/null
+ui_drive "$UI" Gkxn sleep:1 q
 check "一覧で x のあと y 以外を押すと閉じない" "$(has_session api)" "yes"
-UI_OUT="$( (sleep 2.5; printf 'Gkxy'; sleep 1.5; printf 'q') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'" | tr -d '\r')"
+ui_drive "$UI" Gkxy 'wait:閉じました: api' q
 check "一覧で x → y で閉じる" "$(has_session api)" "no"
-check "閉じたことを一覧に出す" "$(grep -c '閉じました: api' <<<"$UI_OUT" | awk '{print ($1>0)}')" "1"
+check "閉じたことを一覧に出す" "$(out_has "$UI" '閉じました: api' && echo 1 || echo 0)" "1"
 check "セッションが無ければ何もしない" "$(ws close "$API")" "skip $API: no-session"
 ws go "$API" --client "$CLIENT"
 check "ws close で worktree のセッションを閉じる" "$(ws close "$FEAT")" "closed api=feat-auth"
@@ -254,11 +280,11 @@ check "エージェントは herdr-core に残る" "$(state '[.terminals[] | sel
 echo "ui の s（エージェントを止めて一覧から消す）"
 terminal_count() { state '[.terminals[]] | length'; }
 BEFORE="$(terminal_count)"
-(sleep 2.5; printf 'jsn'; sleep 1; printf 'q') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'" >/dev/null
+ui_drive "$UI" jsn sleep:1 q
 check "一覧で s のあと y 以外を押すと止めない" "$(terminal_count)" "$BEFORE"
-UI_OUT="$( (sleep 2.5; printf 'jsy'; sleep 3; printf 'q') | in_pty "bun $ROOT/cli.ts ui --client '$CLIENT'" | tr -d '\r')"
+ui_drive "$UI" jsy 'wait:停止しました' q
 check "一覧で s → y で止めて herdr-core から消す" "$(terminal_count)" "$((BEFORE - 1))"
-check "止めたことを一覧に出す" "$(grep -c '停止しました' <<<"$UI_OUT" | awk '{print ($1>0)}')" "1"
+check "止めたことを一覧に出す" "$(out_has "$UI" '停止しました' && echo 1 || echo 0)" "1"
 
 echo "new --here（今のペインで会話する）"
 HERE_PANE="$(t new-window -d -P -F '#{pane_id}' -t '=api:' -c "$FEAT")"
@@ -289,6 +315,28 @@ focus_pane "$PLAIN_PANE"
 t send-keys -K -c "$CLIENT" C-b 'C-\'
 sleep 0.3
 check "会話中でないペインには送らない（SIGQUIT でプログラムを落とさない）" "$(t display -p -t "$PLAIN_PANE" '#{pane_id} #{pane_current_command}')" "$PLAIN_PANE cat"
+
+echo "edit（セッションごとに 1 つの nvim を使い回す）"
+if command -v nvim >/dev/null 2>&1; then
+  # nvim のソケットを置く ~/.cache を、利用者のものにしない。unix ソケットのパスは短くしないと --listen できないので /tmp の下に作る
+  export HOME="$(mktemp -d /tmp/wse.XXXXXX)"
+  trap 'rm -rf "$HOME"; cleanup' EXIT
+  t set-environment -g EDITOR nvim
+  echo a >"$FEAT/a.txt"; echo b >"$FEAT/b.txt"
+  edit_windows() { t list-windows -t '=api=feat-auth' -F '#{window_name}' 2>/dev/null | grep -c '^edit' || true; }
+  nvim_buffers() { nvim --server "$HOME"/.cache/herdr-tools/nvim/*.sock --remote-expr 'join(map(getbufinfo({"buflisted":1}), "fnamemodify(v:val.name, \":t\")"), ",")' 2>/dev/null || true; }
+  ws edit "$FEAT" --file a.txt --client "$CLIENT"
+  check "初めて開くと edit ウィンドウが 1 つできる" "$(edit_windows)" "1"
+  check "クライアントが移る" "$(client_session)" "api=feat-auth"
+  for _ in $(seq 50); do [ "$(nvim_buffers)" = "a.txt" ] && break; sleep 0.1; done
+  check "nvim --listen でファイルを開いた" "$(nvim_buffers)" "a.txt"
+  ws edit "$FEAT" --file b.txt --client "$CLIENT"
+  check "2 つ目のファイルでもウィンドウは増えない" "$(edit_windows)" "1"
+  check "同じ nvim が 2 つ目のファイルを開いた" "$(nvim_buffers)" "a.txt,b.txt"
+  nvim --server "$HOME"/.cache/herdr-tools/nvim/*.sock --remote-send '<Esc>:qa!<CR>' >/dev/null 2>&1 || true
+else
+  echo "  (nvim が無いので省略)"
+fi
 
 echo
 echo "E2E: $pass checks passed"

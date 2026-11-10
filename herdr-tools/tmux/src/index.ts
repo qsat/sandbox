@@ -2,6 +2,7 @@ export { TmuxNavigator } from "./navigator";
 export { TmuxServer } from "./tmux-server";
 export { HunkCli } from "./hunk-cli";
 export { toListJson } from "./list-json";
+export { parseEditFile } from "./plans/edit";
 export { parseHunkSource } from "./plans/hunk";
 export { sessionsOfMissingWorktrees } from "./plans/prune";
 export { renderText, usageLine } from "./ui/rows";

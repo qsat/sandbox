@@ -59,7 +59,7 @@ describe("依存の向き（ws → ws-core / tmux、tmux → ws-core、herdr-app
   test("tmux は ws-core と utils だけ", () => expect(check("tmux", ["@herdr-tools/ws-core", "@herdr-tools/ws-core/domain/agent", "@herdr-tools/ws-core/domain/tree", "@herdr-tools/ws-core/domain/usage", UTILS])).toEqual([]));
   test("herdr-app は I/O の無いモジュール（ws-core のモデル・Terminal の型、ws list --json の型）と utils、Herdr app の API だけ", () =>
     expect(
-      check("herdr-app", ["@herdr-tools/ws-core/domain/agent", "@herdr-tools/ws-core/herdr-core/hc-terminal", "@herdr-tools/tmux/list-json", "@herdr-tools/tmux/sidebar-order", UTILS, "herdr", "gpui-kit"]),
+      check("herdr-app", ["@herdr-tools/ws-core/domain/agent", "@herdr-tools/ws-core/herdr-core/hc-terminal", "@herdr-tools/tmux/list-json", "@herdr-tools/tmux/sidebar-order", UTILS, "herdr", "gpui-kit", "gpui-base"]),
     ).toEqual([]));
 
   test("ws-core のコードにクライアント（tmux / Herdr app）が出てこない", () => {
@@ -79,17 +79,24 @@ describe("依存の向き（ws → ws-core / tmux、tmux → ws-core、herdr-app
     expect(bad).toEqual([]);
   });
 
-  for (const mod of ["agent-board", "commit-history", "pull-requests"]) {
+  // workspace-picker は入力欄（Input / InputState）のために gpui-base も使う
+  for (const [mod, apis] of [
+    ["agent-board", ["gpui-kit", "herdr"]],
+    ["commit-history", ["gpui-kit", "herdr"]],
+    ["pull-requests", ["gpui-kit", "herdr"]],
+    ["workspace-picker", ["gpui-base", "gpui-kit", "herdr"]],
+    ["worktree-changes", ["gpui-kit", "herdr"]],
+  ] as const) {
     test(`mod ${mod} のバンドルは Herdr app の API だけを import し、Node / Bun の API を含まない`, async () => {
       const out = await Bun.build({
         entrypoints: [join(ROOT, "herdr-app", "src", mod, "main.ts")],
         format: "esm",
         target: "browser",
-        external: ["herdr", "gpui-kit"],
+        external: ["herdr", "gpui-kit", "gpui-base"],
       });
       expect(out.success).toBe(true);
       const code = await out.outputs[0]!.text();
-      expect([...new Set(imports(code))].sort()).toEqual(["gpui-kit", "herdr"]);
+      expect([...new Set(imports(code))].sort()).toEqual([...apis]);
       expect(code).not.toMatch(/\bBun\.|process\.|require\(|node:/);
     });
   }

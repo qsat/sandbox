@@ -1,6 +1,7 @@
 import { run } from "@herdr-tools/utils/run";
 import { runInteractive } from "@herdr-tools/utils/run-interactive";
 import { runOk } from "@herdr-tools/utils/run-ok";
+import { markCurrentPanes } from "./current-pane";
 
 export const AGENT_PANE_OPTION = "@ws_agent";
 
@@ -46,18 +47,22 @@ export class TmuxServer {
   }
 
   async listPanes() {
-    const lines = await this.linesOrNoneWhenServerIsDown(["list-panes", "-a", "-F", format("#{pane_id}", `#{${AGENT_PANE_OPTION}}`, "#{pane_dead}", "#{session_name}", "#{window_name}", "#{pane_current_command}", "#{session_attached}", "#{window_active}", "#{pane_active}")]);
-    return lines.map((l) => {
-      const [paneId = "", agentId = "", dead = "0", session = "", window = "", command = "", attached = "0", windowActive = "0", paneActive = "0"] = fields(l);
-      return { paneId, agentId: agentId || null, dead: dead === "1", session, window, command, current: Number(attached) > 0 && windowActive === "1" && paneActive === "1" };
+    const [lines, clients] = await Promise.all([
+      this.linesOrNoneWhenServerIsDown(["list-panes", "-a", "-F", format("#{pane_id}", `#{${AGENT_PANE_OPTION}}`, "#{pane_dead}", "#{session_name}", "#{window_name}", "#{pane_current_command}", "#{window_active}", "#{pane_active}")]),
+      this.listClients(),
+    ]);
+    const panes = lines.map((l) => {
+      const [paneId = "", agentId = "", dead = "0", session = "", window = "", command = "", windowActive = "0", paneActive = "0"] = fields(l);
+      return { paneId, agentId: agentId || null, dead: dead === "1", session, window, command, active: windowActive === "1" && paneActive === "1" };
     });
+    return markCurrentPanes(panes, clients);
   }
 
   async listClients() {
-    const lines = await this.linesOrNoneWhenServerIsDown(["list-clients", "-F", format("#{client_activity}", "#{client_name}")]);
+    const lines = await this.linesOrNoneWhenServerIsDown(["list-clients", "-F", format("#{client_activity}", "#{client_name}", "#{client_session}")]);
     return lines.map((l) => {
-      const [activity = "0", name = ""] = fields(l);
-      return { activity: Number(activity), name };
+      const [activity = "0", name = "", session = ""] = fields(l);
+      return { activity: Number(activity), name, session };
     });
   }
 
@@ -89,6 +94,13 @@ export class TmuxServer {
 
   async hasWindow(session: string, window: string) {
     return (await this.linesOrNoneWhenServerIsDown(["list-windows", "-t", exact(session), "-F", "#{window_name}"])).includes(window);
+  }
+
+  /** tmux のグローバルな環境の値（`set-environment -g NAME ...`）。無ければ空 */
+  async globalEnv(name: string) {
+    const r = await run(this.bin, this.argv(["show-environment", "-g", name]));
+    const line = r.code === 0 ? r.stdout.trim() : "";
+    return line.startsWith(`${name}=`) ? line.slice(name.length + 1) : "";
   }
 
   /** session に window を作り、その中で argv を起動する（cwd が作業ディレクトリ）。出力は作ったペインの id */

@@ -1,28 +1,25 @@
-import { View, div, svg, type AsyncContext, type Context, type Element, type FocusHandle } from "gpui-kit";
+import { View, div, type AsyncContext, type Context, type Element, type FocusHandle } from "gpui-kit";
 import { exec, theme, watchFolder } from "herdr";
 import { BRANCH_COLOR } from "../shared/colors";
 import { readCurrentTarget } from "../shared/current-target";
 import { relativeTime } from "../shared/relative-time";
-import { hunkLink, iconButton, label, rowBase, targetHeader, type Theme } from "../shared/row-view";
+import { hunkLink, iconButton, label, rowBase, statusColor, targetHeader, type Theme } from "../shared/row-view";
 import { moveSelection } from "../shared/selection";
 import type { Target } from "../shared/target";
-import { TITLE_BAR_HEIGHT } from "../shared/title-bar";
-import { stackTabs } from "../shared/stack-tabs";
+import { stackTitleBar } from "../shared/stack-tabs";
+import { footerBar, footerButton } from "../shared/footer-bar";
+import { HEAD_ARGS, commitFiles, readLocalFiles, type FileChange } from "../shared/local-changes";
+import { branchLabel, compareRef, findBaseRef, mergeBaseArgs } from "../shared/base-ref";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import { wsHunkAgainstArgs, wsHunkArgs, wsHunkRangeArgs } from "../shared/ws-hunk";
 import { execWs } from "../shared/ws-exec";
 import { GIT_READ_ARGS } from "@herdr-tools/utils/git-read-args";
-import { branchLabel, commitFiles, compareRef, diffRange, logArgs, mergeBaseArgs, type HistoryRange, localFiles, parseLog, showFilesArgs, sumNumstat, type Commit, type FileChange } from "./git";
-import { findBaseRef } from "./base-ref";
+import { diffRange, logArgs, type HistoryRange, parseLog, showFilesArgs, type Commit } from "./git";
 import { LOCAL_ID, visibleRows, type Row } from "./rows";
 
 /** 予備の読み直しの間隔（ws list と git log・git status）。結果が前と同じなら再描画しない */
 const REFRESH_MS = 5000;
 const NO_TARGET_MESSAGE = "Select a tmux pane in a worktree";
-
-function statusColor(t: Theme, status: string) {
-  return status === "A" || status === "?" ? t.ansi2 : status === "D" || status === "U" ? t.ansi1 : status === "R" ? t.accent : t.blocked;
-}
 
 export default class CommitHistory extends View {
   target!: Target | null;
@@ -140,19 +137,16 @@ export default class CommitHistory extends View {
     const lookup = this.baseKnown ? null : this.lookUpBase(root);
     if (range === "base") await lookup;
     const args = logArgs(range, this.baseRef);
-    const [log, head, status] = await Promise.all([
-      args ? this.git(root, args) : Promise.resolve({ code: 1, stdout: "", stderr: "" }),
-      this.git(root, ["rev-parse", "--verify", "HEAD"]),
-      this.git(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]),
-    ]);
+    const head = await this.git(root, HEAD_ARGS);
     const hasHead = head.code === 0;
-    const numstats = hasHead
-      ? [await this.git(root, ["diff", "HEAD", "--numstat", "-z", "--no-renames"])]
-      : [await this.git(root, ["diff", "--cached", "--numstat", "-z", "--no-renames"]), await this.git(root, ["diff", "--numstat", "-z", "--no-renames"])];
+    const [log, local] = await Promise.all([
+      args ? this.git(root, args) : Promise.resolve({ code: 1, stdout: "", stderr: "" }),
+      readLocalFiles((a) => this.git(root, a), hasHead),
+    ]);
     if (this.target?.path === root && this.range === range) {
       this.commits = hasHead && log.code === 0 ? parseLog(log.stdout) : [];
       this.noUpstream = range === "unpushed" && hasHead && log.code !== 0;
-      this.local = status.code === 0 ? localFiles(status.stdout, sumNumstat(...numstats.map((n) => n.stdout))) : [];
+      this.local = local;
       if (this.expanded === LOCAL_ID && this.local.length === 0) this.expanded = null;
       // ベースブランチをまだ調べているなら、読めたコミットを先に出す
       if (lookup && range !== "base") cx.notify();
@@ -375,46 +369,16 @@ export default class CommitHistory extends View {
     return this.range === "base" && this.baseRef ? branchLabel(this.baseRef) : "上流のブランチ";
   }
 
-  renderTitleBar(t: Theme) {
-    return div()
-      .flex()
-      .flex_none()
-      .items_center()
-      .gap(8)
-      .h(TITLE_BAR_HEIGHT)
-      .px(14)
-      .border_b(1)
-      .border_color(t.border)
-      .children(stackTabs("commit-history", t))
-      .child(div().px(5).py(1).rounded(4).border_1().border_color(t.border).text_size(10).text_color(t.muted).child(`${this.commits.length} commits`))
-      .child(div().flex_1())
-      .child(this.rangeButton("all", { icon: "history", tooltip: "すべてのコミット（HEAD からの履歴）" }, t))
-      .child(this.rangeButton("unpushed", { icon: "push", tooltip: "push 前のコミット（上流のブランチにまだ無いもの）" }, t))
+  /** 下端のフッター。コミットの範囲（すべて・push 前・ベースブランチ）を切り替えるボタンを置く */
+  renderFooter(t: Theme) {
+    return footerBar(t)
+      .child(this.rangeButton("all", { icon: "mods/commit-history/history.svg", tooltip: "すべてのコミット（HEAD からの履歴）" }, t))
+      .child(this.rangeButton("unpushed", { icon: "mods/commit-history/push.svg", tooltip: "push 前のコミット（上流のブランチにまだ無いもの）" }, t))
       .child(this.rangeButton("base", { text: this.baseRef ? branchLabel(this.baseRef) : "base" }, t));
   }
 
   rangeButton(range: HistoryRange, face: { text: string } | { icon: string; tooltip: string }, t: Theme) {
-    const active = this.range === range;
-    const tooltip = "icon" in face ? face.tooltip : null;
-    return div()
-      .id(`commit-history:range:${range}`)
-      .flex()
-      .items_center()
-      .h(18)
-      .px(tooltip !== null ? 4 : 8)
-      .rounded(4)
-      .border_1()
-      .border_color(active ? t.border : "#00000000")
-      .text_size(11)
-      .cursor_pointer()
-      .when(active, (el) => el.bg(t.raised).text_color(t.foreground))
-      .when(!active, (el) => el.text_color(t.muted).hover((s) => s.bg(t.hover)))
-      .on_click((_e, cx) => {
-        cx.stop_propagation();
-        this.switchRange(range, cx);
-      })
-      .when(tooltip !== null, (el) => el.tooltip(tooltip!))
-      .child("icon" in face ? svg(`mods/commit-history/${face.icon}.svg`).size(12) : face.text);
+    return footerButton(`commit-history:range:${range}`, face, this.range === range, t, (cx) => this.switchRange(range, cx));
   }
 
   /** 範囲を切り替えたら、開いていたコミットを閉じてすぐ読み直す */
@@ -477,7 +441,8 @@ export default class CommitHistory extends View {
       .line_height(1.25)
       .text_size(13)
       .text_color(t.foreground)
-      .child(this.renderTitleBar(t))
-      .child(body);
+      .child(stackTitleBar("commit-history", `${this.commits.length} commits`, t))
+      .child(body)
+      .child(this.renderFooter(t));
   }
 }

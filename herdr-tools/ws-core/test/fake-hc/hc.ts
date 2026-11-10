@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 
 interface FakeTerminal {
   address: string;
@@ -25,7 +25,33 @@ if (!file) {
   process.exit(2);
 }
 const load = (): State => (existsSync(file!) ? JSON.parse(readFileSync(file!, "utf8")) : { next: 1, terminals: [], log: [] });
-const save = (s: State) => writeFileSync(file!, JSON.stringify(s, null, 2));
+// 書きかけのファイルを別の hc connect が読まないよう、一時ファイルに書いてから置き換える（rename は同じフォルダー内で不可分）
+const save = (s: State) => {
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify(s, null, 2));
+  renameSync(tmp, file!);
+};
+
+// ws ui は hc connect を 2 本つなぐ。load → 処理 → save の間に別の接続が書くと、後勝ちで更新（log や terminals）が消えるので、mkdir を排他の鍵にして 1 リクエストぶんを直列にする
+const lockDir = `${file}.lock`;
+function withLock<T>(fn: () => T): T {
+  const started = Date.now();
+  for (;;) {
+    try {
+      mkdirSync(lockDir);
+      break;
+    } catch {
+      // 落ちた接続が残した鍵は 5 秒で捨てる
+      if (Date.now() - started > 5000) rmSync(lockDir, { recursive: true, force: true });
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    rmSync(lockDir, { recursive: true, force: true });
+  }
+}
 const find = (s: State, ref: string) => s.terminals.find((t) => t.address === ref) ?? s.terminals.find((t) => t.name === ref && t.state === "live");
 
 class RpcError extends Error {
@@ -113,9 +139,11 @@ if (cmd === "attach") {
   process.stdin.on("data", (bytes: Buffer) => bytes.includes(DETACH) && process.exit(0));
   await new Promise(() => {});
 } else if (cmd === "connect") {
-  const s0 = load();
-  s0.log.push(["connect", null]);
-  save(s0);
+  withLock(() => {
+    const s0 = load();
+    s0.log.push(["connect", null]);
+    save(s0);
+  });
   const decoder = new TextDecoder();
   let buf = "";
   for await (const chunk of Bun.stdin.stream()) {
@@ -125,17 +153,20 @@ if (cmd === "attach") {
       buf = buf.slice(nl + 1);
       if (!line) continue;
       const req = JSON.parse(line);
-      const s = load();
-      s.log.push([req.method, req.params]);
-      try {
-        const result = handle(s, req.method, req.params ?? {});
-        save(s);
-        console.log(JSON.stringify({ jsonrpc: "2.0", id: req.id, result }));
-      } catch (e) {
-        save(s);
-        const err = e as RpcError;
-        console.log(JSON.stringify({ jsonrpc: "2.0", id: req.id, error: { code: -32000, message: err.message, data: { kind: err.kind ?? "internal" } } }));
-      }
+      const response = withLock(() => {
+        const s = load();
+        s.log.push([req.method, req.params]);
+        try {
+          const result = handle(s, req.method, req.params ?? {});
+          save(s);
+          return { jsonrpc: "2.0", id: req.id, result };
+        } catch (e) {
+          save(s);
+          const err = e as RpcError;
+          return { jsonrpc: "2.0", id: req.id, error: { code: -32000, message: err.message, data: { kind: err.kind ?? "internal" } } };
+        }
+      });
+      console.log(JSON.stringify(response));
     }
   }
 } else {

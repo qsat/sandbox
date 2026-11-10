@@ -1,5 +1,8 @@
 import { View, div, svg, type AsyncContext, type Color, type Context, type Element, type FocusHandle } from "gpui-kit";
-import { closeOverlay, nextCommand, openOverlay, props, setShared, shared, terminals, theme } from "herdr";
+import { closeOverlay, exec, home, nextCommand, openOverlay, props, readTextFile, run, setShared, shared, terminals, theme, window, writeTextFile } from "herdr";
+import { attentionChanges } from "./notify/attention";
+import { notifyAgent } from "./notify/notifier";
+import { COLLAPSED_KEY, readReveal, REVEAL_KEY } from "../shared/board-reveal";
 import { ROW_HEIGHT, label, type Theme as RowTheme } from "../shared/row-view";
 import { execWs } from "../shared/ws-exec";
 import { BRANCH_COLOR, REPOSITORY_COLOR, SELECTED_BG } from "../shared/colors";
@@ -26,7 +29,7 @@ type Theme = RowTheme & Record<"solid" | "solid_foreground" | "popover" | "unkno
 type AgentRow = Extract<BoardRow, { kind: "agent" }>;
 type WorktreeRow = Extract<BoardRow, { kind: "worktree" }>;
 
-type ButtonLook = "secondary" | "outline" | "primary" | "quiet" | "alert" | "danger";
+type ButtonLook = "secondary" | "outline" | "primary" | "quiet" | "plain" | "alert" | "danger";
 
 interface ConfirmRequest {
   title: string;
@@ -87,6 +90,8 @@ function styled(el: Element, look: ButtonLook, t: Theme) {
       return el.bg(t.raised).text_color(t.foreground).hover((s) => s.bg(t.hover));
     case "quiet":
       return el.text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.ansi1));
+    case "plain":
+      return el.text_color(t.foreground).hover((s) => s.bg(t.hover));
     case "outline":
       return el.h(ROW_HEIGHT - 4).text_size(11).border_1().border_color(t.dim).text_color(t.foreground).hover((s) => s.bg(t.hover));
     case "alert":
@@ -129,8 +134,15 @@ export default class AgentBoard extends View {
   changes!: Record<string, ChangeAmount>;
   changeTargets!: string;
   fetchingChanges!: boolean;
+  /** エージェントごとの前回の status（macOS の通知を出すかの判断に使う）。null は、まだ一度も見ていない */
+  lastStatuses!: Map<string, string> | null;
+  /** workspace-picker からの「この worktree の行を選んで」をこなした印（頼みの時刻） */
+  revealedAt!: number;
 
   init(_props: unknown, cx: AsyncContext) {
+    this.lastStatuses = null;
+    // 読み込む前に出ていた頼みは、もうこなしたものとみなす（入れ直すたびに選び直さない）
+    this.revealedAt = readReveal(shared(REVEAL_KEY))?.at ?? 0;
     this.list = EMPTY_LIST;
     this.error = "";
     this.fetching = false;
@@ -174,10 +186,25 @@ export default class AgentBoard extends View {
       this.list = next.list;
       this.error = next.error;
       this.fetching = false;
+      if (r.ok) this.notifyAttention();
       cx.notify();
       // 並ぶ worktree が変わったら、10 秒を待たずに変更量を読む
       if (changeTargets(this.list).join("\n") !== this.changeTargets) this.refreshChanges(cx);
     }, { owner: this });
+  }
+
+  /**
+   * エージェントが blocked（ユーザーを待っている）か done（見ていない間に終わった）に変わったら、macOS の通知を出す。
+   * terminal-notifier があれば、通知のクリックでその会話（tmux のペイン）へ移る。無ければ osascript で出す（クリックしても移らない）。
+   * Herdr app のウィンドウが前にあるときは、Herdr app が自分で出すトーストに任せて出さない。
+   * 畳んだ workspace のエージェントも対象にするため、畳んだ状態は渡さない。通知の失敗は一覧に出さない
+   */
+  notifyAttention() {
+    const { changed, next } = attentionChanges(this.lastStatuses, boardRows(this.list, liveTerminals(), []));
+    this.lastStatuses = next;
+    if (window().active) return;
+    const io = { home: home(), exec, readTextFile, writeTextFile };
+    for (const change of changed) void notifyAgent(change, this.list, io);
   }
 
   /** worktree ごとの変更量を ws changes --json で読む。失敗しても一覧は壊さない（前の値のまま） */
@@ -225,6 +252,12 @@ export default class AgentBoard extends View {
       this.error = (await execWs(args)).error;
       this.refresh(cx);
     }, { owner: this });
+  }
+
+  /** 行をクリックして移る。クリックで操作したので、j / k の選択（カーソル）は消す */
+  clickRow(row: BoardRow, cx: Context) {
+    this.selected = null;
+    this.runRow(row, "go", cx);
   }
 
   askConfirm(request: ConfirmRequest) {
@@ -299,7 +332,7 @@ export default class AgentBoard extends View {
       case "worktree":
         return base
           .pl(16)
-          .on_click((_e, cx) => this.runRow(row, "go", cx))
+          .on_click((_e, cx) => this.clickRow(row, cx))
           .child(
             this.info([
               div().text_color(row.hasSession ? BRANCH_COLOR : t.dim).when(row.isMain, (el) => el.font_semibold()).child(row.label),
@@ -318,17 +351,17 @@ export default class AgentBoard extends View {
       case "pane":
         return base
           .pl(28)
-          .on_click((_e, cx) => this.runRow(row, "go", cx))
+          .on_click((_e, cx) => this.clickRow(row, cx))
           .child(this.info([div().text_color(t.muted).child(row.label)]));
       case "agent": {
         const color = statusColor(t, row.rawStatus);
         return base
           .pl(28)
-          .on_click((_e, cx) => this.runRow(row, "go", cx))
+          .on_click((_e, cx) => this.clickRow(row, cx))
           .child(this.info([div().child(row.label), label(row.icon, color), ...(row.status ? [label(row.status, color)] : []), ...this.contextPie(row, t), this.tags(row.tags, t)]))
           .when(row.canResume, (el) =>
             el.child(
-              button({ id: `resume:${row.key}`, icon: "play", text: "再開", tooltip: "claude --resume で会話を再開する（R）", look: "primary" }, t, (cx) =>
+              button({ id: `resume:${row.key}`, icon: "play", tooltip: "再開: claude --resume で会話を再開する（R）", look: "plain" }, t, (cx) =>
                 this.runRow(row, "resume", cx),
               ),
             ),
@@ -414,6 +447,11 @@ export default class AgentBoard extends View {
       .border_b(1)
       .border_color(t.border)
       .child(div().font_semibold().child("Worktrees"))
+      .child(
+        button({ id: "open-workspace-picker", icon: "plus", tooltip: "workspace を選んで claude を起動する（ctrl-e）", look: "plain" }, t, () =>
+          run("mod.open", { name: "workspace-picker" }),
+        ),
+      )
       .child(div().flex_1())
       .child(this.renderUsage(t));
   }
@@ -439,10 +477,30 @@ export default class AgentBoard extends View {
       );
   }
 
+  /**
+   * 描く前に、選択（カーソル）を今の状況に合わせる。gpui-kit にはフォーカスが外れたイベントも共有値が変わったイベントも無いので、
+   * 描くたびに確かめる（2 秒ごとの読み直しと、setShared による全 mod の描き直しで呼ばれる）
+   */
+  syncSelection() {
+    // キーボードがボードに無い（ほかのペインへ移った、Herdr app が後ろに回った）なら、j / k の選択を消す
+    if (this.selected !== null && !(this.focus.is_focused() && window().active)) this.selected = null;
+    this.consumeReveal();
+  }
+
+  /** workspace-picker が「この worktree の行を選んで」と頼んでいたら、その行を選び、キーボードをボードに移す。同じ頼みは一度だけこなす */
+  consumeReveal() {
+    const reveal = readReveal(shared(REVEAL_KEY));
+    if (!reveal || reveal.at === this.revealedAt) return;
+    this.revealedAt = reveal.at;
+    this.selected = rowId({ kind: "worktree", key: reveal.path } as BoardRow);
+    this.focus.focus();
+  }
+
   render() {
     const t = theme() as unknown as Theme;
     if (this.confirmRequest) return this.renderConfirmDialog(this.confirmRequest, t);
     const rows = boardRows(this.list, liveTerminals(), collapsedState());
+    this.syncSelection();
     return div()
       .id("agent-board")
       .track_focus(this.focus)

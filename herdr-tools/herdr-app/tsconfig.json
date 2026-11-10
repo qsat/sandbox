@@ -10,5 +10,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "files": ["types/gpui-kit.d.ts", "src/agent-board/main.ts", "src/commit-history/main.ts", "src/pull-requests/main.ts"]
+  "files": ["types/gpui-kit.d.ts", "src/agent-board/main.ts", "src/commit-history/main.ts", "src/pull-requests/main.ts", "src/workspace-picker/main.ts", "src/worktree-changes/main.ts"]
 }

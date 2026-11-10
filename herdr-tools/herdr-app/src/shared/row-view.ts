@@ -80,3 +80,8 @@ export function targetHeader(target: Target, t: Theme) {
     .child(div().text_color(BRANCH_COLOR).child(target.label))
     .when(target.branch !== null && target.branch !== target.label, (el) => el.child(label(target.branch!, t.muted)));
 }
+
+/** 変更の状態の記号（A・M・D・R・U・?）の色。commit-history と worktree-changes で同じにする */
+export function statusColor(t: Theme, status: string) {
+  return status === "A" || status === "?" ? t.ansi2 : status === "D" || status === "U" ? t.ansi1 : status === "R" ? t.accent : t.blocked;
+}
