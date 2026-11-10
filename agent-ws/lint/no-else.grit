@@ -1,0 +1,5 @@
+language js
+
+JsElseClause() as $else where {
+  register_diagnostic(span=$else, message="else を使わず、早期 return（ガード節）で書く")
+}

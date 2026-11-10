@@ -1,0 +1,9 @@
+{"type": "user", "timestamp": "2026-10-24T14:04:47.136Z", "message": {"content": "ツールは使わずに、日本の47都道府県それぞれについて3文ずつ説明して"}}
+{"type": "attachment", "timestamp": "2026-10-24T14:04:47.135Z"}
+{"type": "assistant", "timestamp": "2026-10-24T14:04:48.808Z", "message": {"content": [{"type": "thinking"}]}}
+{"type": "assistant", "timestamp": "2026-10-24T14:04:52.210Z", "message": {"content": [{"type": "text", "text": "# 日本の47都道府県\n\n## 北海道地方\n\n**北海道**\n日本最北にある都道府県で、面積は全国で最も広いです。酪農や"}]}}
+{"type": "user", "timestamp": "2026-10-24T14:04:52.215Z", "message": {"content": [{"type": "text", "text": "[Request interrupted by user]"}]}}
+{"type": "cost-state"}
+{"type": "file-history-snapshot"}
+{"type": "last-prompt"}
+{"type": "cost-state"}
