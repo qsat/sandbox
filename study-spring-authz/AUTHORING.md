@@ -22,7 +22,7 @@
 7. `## まとめ` — 箇条書き 3〜6 項目。
 8. `## 次の章へ` — 2〜3 文。
 
-長さは Markdown で 300〜500 行が目安です。
+長さは Markdown で 300〜500 行が目安です。実行出力を多く載せる章は超えてかまいませんが、同じコードや出力を 2 回載せないようにします。
 
 ## 文章
 
@@ -53,7 +53,12 @@
 - テスト用スターターは機能ごとに分かれている: `spring-boot-starter-webmvc-test`、`spring-boot-starter-security-oauth2-authorization-server-test`、`spring-boot-starter-jdbc-test` など。
 - `@AutoConfigureMockMvc` のパッケージは `org.springframework.boot.webmvc.test.autoconfigure`。
 - 認可サーバーの設定は `http.oauth2AuthorizationServer(as -> { http.securityMatcher(as.getEndpointsMatcher()); as.oidc(withDefaults()); })` と書く (`samples/ch02-minimal-idp` の `SecurityConfig` を参照)。
-- 未ログインで `/oauth2/authorize` に来たときのリダイレクト先は相対パスの `/login`。
+- 未ログインで `/oauth2/authorize` に来たときのリダイレクト先は、MockMvc では相対パスの `/login`、実サーバー (組み込み Tomcat) では絶対 URL の `http://localhost:9000/login`。
+- ログイン画面へ誘導されるのは `Accept` が `text/html` を受け付けるとき (`*/*` を含む)。`Accept: application/json` だと 401。
+- 登録外の `redirect_uri` は、ログイン済みなら 400 のエラーページ、未ログインなら `/login` へのリダイレクトになる (`/error` が認証必須のため)。
+- `oidc()` を呼ばないと `scope=openid` は `invalid_scope` で拒否され、ディスカバリは `/.well-known/oauth-authorization-server` だけになる。
+- 署名鍵を定義しないと、Boot の自動構成が起動ごとに RSA 鍵を生成する (`kid` は毎回変わる)。
+- `spring.security.oauth2.authorizationserver.client.<名前>.registration.*` だけでもクライアントを登録できる。`require-proof-key` などは `registration` の兄弟に書く。
 - MockMvc のテストで `user("user")` を使って認証を差し込むと、ID トークン生成が `authenticationTime cannot be null` で失敗する。`formLogin()` で実際にログインしてセッションを引き回す (`IdpApplicationTests` を参照)。
 - ID トークンには最小構成でも `sid` と `auth_time` が入る。ID トークンの寿命は `TokenSettings` では変えられず、`JwtGenerator` が 30 分に固定している。
 - `InMemoryRegisteredClientRepository` は、複数のクライアントが同じ `clientSecret` の値 (ハッシュ文字列) を持つと `Registered client must be unique` で起動に失敗する。`RegisteredClient.from(...)` で複製するときは secret も設定し直す。

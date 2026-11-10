@@ -127,8 +127,6 @@ Spring Boot 3 までは、テストに必要なものはほぼ `spring-boot-star
 - `@AutoConfigureMockMvc` のパッケージも変わり、`org.springframework.boot.webmvc.test.autoconfigure` になった。
 - OAuth 2.0 / OIDC 関係のスターターは、`security-oauth2-authorization-server` / `security-oauth2-client` / `security-oauth2-resource-server` と役割ごとに分かれている。
 
-テスト用スターターを入れ忘れると、`MockMvc` や `@AutoConfigureMockMvc` が見つからずコンパイルエラーになります (「つまずきポイント」参照)。
-
 また、Spring Authorization Server は以前は Spring Security とは別プロジェクトでしたが、Spring Security 7 から本体に統合されました。Java のパッケージ名 (`org.springframework.security.oauth2.server.authorization.*`) は従来どおりです。
 
 ## SecurityConfig の解説
@@ -183,7 +181,7 @@ SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) th
 
 **`oidc(withDefaults())`**
 
-OpenID Connect 1.0 の機能を有効にします。`withDefaults()` は「既定の設定のまま有効化する」という意味の `Customizer` です。有効になるのは、ディスカバリ (`/.well-known/openid-configuration`)、UserInfo (`/userinfo`)、ログアウト (`/connect/logout`)、そして ID トークンの発行です。これを呼ばないと、純粋な OAuth 2.0 の認可サーバーになります (`openid` スコープで ID トークンは出ません。この点は未検証)。
+OpenID Connect 1.0 の機能を有効にします。`withDefaults()` は「既定の設定のまま有効化する」という意味の `Customizer` です。有効になるのは、ディスカバリ (`/.well-known/openid-configuration`)、UserInfo (`/userinfo`)、ログアウト (`/connect/logout`)、そして ID トークンの発行です。これを呼ばないと、純粋な OAuth 2.0 の認可サーバーになります。その状態で `scope=openid` の認可リクエストを送ると、`error=invalid_scope` (`OpenID Connect 1.0 authentication requests are restricted.`) で拒否されました。ディスカバリも `/.well-known/openid-configuration` ではなく、OAuth 2.0 用の `/.well-known/oauth-authorization-server` (RFC 8414) だけになります。
 
 **`authorizeHttpRequests(... anyRequest().authenticated())`**
 
@@ -191,7 +189,7 @@ OpenID Connect 1.0 の機能を有効にします。`withDefaults()` は「既�
 
 **ログイン画面への誘導**
 
-未ログインのブラウザが `/oauth2/authorize` に来たとき、ログイン画面へ送るのが `defaultAuthenticationEntryPointFor` です。`Accept` が `text/html` のリクエスト (= ブラウザ) のときだけ `LoginUrlAuthenticationEntryPoint("/login")` を使います。API クライアントが誤って叩いたときに HTML のリダイレクトを返さないための条件です。リダイレクト先は相対パスの `/login` です (実行結果は後述)。
+未ログインのブラウザが `/oauth2/authorize` に来たとき、ログイン画面へ送るのが `defaultAuthenticationEntryPointFor` です。`Accept` が `text/html` を受け付けるリクエスト (= ブラウザ) のときだけ `LoginUrlAuthenticationEntryPoint("/login")` を使います。API クライアントが誤って叩いたときに HTML のリダイレクトを返さないための条件です。`Accept: application/json` で呼ぶと、リダイレクトではなく 401 (`WWW-Authenticate: Bearer ...`) が返りました。
 
 ### (2) ログイン画面用のチェーン
 
@@ -494,7 +492,9 @@ HTTP/1.1 302
 Location: http://localhost:9000/login
 ```
 
-`Accept: text/html` を付けているのが大事です (ブラウザ役なので)。付けないと、先ほどの `MediaTypeRequestMatcher(TEXT_HTML)` に一致せず、ログイン画面への誘導になりません (未検証。curl は既定で `Accept: */*` を送ります)。`state` は、クライアントが CSRF 対策のために付ける任意の値で、IdP はそのまま戻してくれます。
+ブラウザ役なので `Accept: text/html` を付けています。curl の既定の `Accept: */*` でも `text/html` を受け付ける扱いになり、同じく `/login` へ送られました。`Accept: application/json` のように HTML を受け付けない指定にすると 401 になります。
+
+`Location` は絶対 URL です。Spring Security が指定するのは相対パスの `/login` で、組み込み Tomcat が絶対 URL に直して返します。MockMvc のテストでは Tomcat を通らないので、`/login` のまま見えます (後述のテストはこちらを検証しています)。`state` は、クライアントが CSRF 対策のために付ける任意の値で、IdP はそのまま戻してくれます。
 
 ### 2. ログイン画面から CSRF トークンを取得
 
@@ -650,7 +650,7 @@ ID トークンも同じ関数で読みます。
 観察できたことをいくつか挙げます。
 
 - アクセストークンの寿命は `exp - iat = 300` 秒、ID トークンは `1800` 秒 (30 分) でした。
-- `profile` スコープを要求しましたが、ID トークンに `name` などのクレームは入っていません。UserInfo も `{"sub":"user"}` だけを返しました。ユーザー属性をクレームにするのは 9 章の課題です。
+- `profile` スコープを要求しましたが、ID トークンに `name` などのクレームは入っていません。UserInfo も `{"sub":"user"}` だけを返しました。scope に応じてユーザー属性をクレームに載せるのは 6 章で扱います。
 - `auth_time` はログインした時刻 (`...422`) で、トークン発行時刻 (`...423`) より前です。IdP のセッションがいつ作られたかを表します。
 - アクセストークンに `roles` などの権限情報はありません。
 
@@ -685,7 +685,7 @@ curl -s -H "Authorization: Bearer $AT" $B/userinfo
 
 `kid` が別の値になり、鍵そのものが入れ替わっています。起動前に取得したアクセストークンを、再起動後の IdP の `/userinfo` に送ると 401 になりました。トークンの署名に使った鍵が、もう IdP に存在しないためです。
 
-これは学習用の割り切りです。本番では、IdP を再起動するたびに全ユーザーのトークンが無効になり、複数台構成なら台ごとに鍵が違って検証できません。鍵を固定して管理し、ローテーション (古い鍵と新しい鍵を併存させて入れ替える) する方法は 5 章で扱います。
+これは学習用の割り切りです。本番では、IdP を再起動するたびに全ユーザーのトークンが無効になり、複数台構成なら台ごとに鍵が違って検証できません。鍵を固定する方法は 5 章、ローテーション (古い鍵と新しい鍵を併存させて入れ替える) は 17 章で扱います。
 
 ## テストで動作を固定する: IdpApplicationTests
 
@@ -719,18 +719,6 @@ class IdpApplicationTests {
 
 `@SpringBootTest` はアプリ全体を起動し、`@AutoConfigureMockMvc` が `MockMvc` を用意します。`MockMvc` は実際のポートを開かずに、サーブレットの処理を呼び出すテスト道具です。そのため、ディスカバリのテストでは `issuer` が `http://localhost` (ポートなし) になります。
 
-```java
-@Test
-void ディスカバリエンドポイントが公開されている() throws Exception {
-    mvc.perform(get("/.well-known/openid-configuration"))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.issuer").value("http://localhost"))
-        .andExpect(jsonPath("$.authorization_endpoint").value("http://localhost/oauth2/authorize"))
-        .andExpect(jsonPath("$.token_endpoint").value("http://localhost/oauth2/token"))
-        .andExpect(jsonPath("$.jwks_uri").value("http://localhost/oauth2/jwks"));
-}
-```
-
 3 つ目のテストの前半 (ログイン) が、この章でいちばん読んでほしい箇所です。
 
 ```java
@@ -743,30 +731,7 @@ MockHttpSession session = (MockHttpSession) mvc.perform(formLogin().user("user")
 
 テストでログイン済みの状態を作る近道に `user("user")` があります。これは認証済みの `Authentication` を直接差し込むもので、手軽ですが、認可サーバーのテストでは使えません。「いつ認証したか」が残らず、ID トークンの `auth_time` が作れないため、`authenticationTime cannot be null` で失敗します。`formLogin()` で実際にログインして、セッションを引き回します。curl で `jar` を引き回したのと同じ考え方です。
 
-後半は、手動確認の手順 4 と 5 そのものです。
-
-```java
-String location = authorize.getResponse().getRedirectedUrl();
-assertThat(location).startsWith(REDIRECT_URI);
-var params = UriComponentsBuilder.fromUriString(location).build().getQueryParams();
-assertThat(params.getFirst("state")).isEqualTo("xyz");
-String code = params.getFirst("code");
-
-// 2. トークンリクエスト (クライアントとして)
-mvc.perform(post("/oauth2/token")
-        .with(httpBasic("web-client", "web-client-secret"))
-        .param("grant_type", "authorization_code")
-        .param("code", code)
-        .param("redirect_uri", REDIRECT_URI)
-        .param("code_verifier", verifier))
-    .andExpect(status().isOk())
-    .andExpect(jsonPath("$.access_token").isNotEmpty())
-    .andExpect(jsonPath("$.refresh_token").isNotEmpty())
-    .andExpect(jsonPath("$.id_token").isNotEmpty())
-    .andExpect(jsonPath("$.token_type").value("Bearer"));
-```
-
-`challenge(verifier)` というヘルパーが、`openssl` の代わりに Java で `code_challenge` を計算しています (`MessageDigest` で SHA-256、`Base64.getUrlEncoder().withoutPadding()` で Base64URL)。
+後半は、手動確認の手順 4 と 5 そのものです。`Location` から `code` を取り出し、`httpBasic(...)` でクライアント認証をして `/oauth2/token` に送ります。`challenge(verifier)` というヘルパーが、`openssl` の代わりに Java で `code_challenge` を計算しています (`MessageDigest` で SHA-256、`Base64.getUrlEncoder().withoutPadding()` で Base64URL)。
 
 テストで動作を固定する考え方のポイントです。
 
@@ -776,19 +741,17 @@ mvc.perform(post("/oauth2/token")
 
 ## つまずきポイント
 
-**1. テスト用スターターを入れていないと、`@AutoConfigureMockMvc` や `MockMvc` が解決できない**
+**1. `redirect_uri` が登録と少しでも違うと、リダイレクトされずエラーページ (400) になる**
 
-- 症状: `package org.springframework.boot.webmvc.test.autoconfigure does not exist` などのコンパイルエラー。
-- 原因: Boot 4 では、テスト部品が機能別のテスト用スターターに分かれている。
-- 対処: `spring-boot-starter-webmvc-test` と `spring-boot-starter-security-oauth2-authorization-server-test` を `test` スコープで入れる。import は新しいパッケージにする。
+- 症状: 登録外の `redirect_uri` で `/oauth2/authorize` を呼ぶと、ログイン済みなら `Whitelabel Error Page` の 400 が返る。`127.0.0.1` を `localhost` に変えただけでも同じ結果になった。
+- 原因: 登録されていない `redirect_uri` にエラーを返すと、攻撃者のサイトへユーザーを送ることになる。そのためエラーは IdP 自身の画面に出す (RFC 6749 §4.1.2.1)。
+- 対処: `redirectUri(...)` の登録と、スキーム・ホスト・ポート・パスまで完全に一致させる。
 
-なお、この症状は、記憶にある旧バージョンの情報から推測した内容で、スターターを抜いてのコンパイルまでは確かめていません (未検証)。
+**2. `redirect_uri` を間違えているのに、エラーではなくログイン画面が出る**
 
-**2. 認可リクエストで `redirect_uri` が登録と少しでも違うと、白紙のエラーページ (400) になる**
-
-- 症状: 登録外の `redirect_uri` (例: `http://evil.example/cb`) で `/oauth2/authorize` を呼ぶと、リダイレクトされず `Whitelabel Error Page` の 400 が返る。
-- 原因: 登録されていない `redirect_uri` に認可コードを送ると、攻撃者に渡してしまう。そのため、エラーもそこへは返さずに IdP 自身の画面に出す。
-- 対処: `redirectUri(...)` の登録を、スキーム・ホスト・ポート・パスまで完全一致させる。`localhost` と `127.0.0.1` を取り違えないこと (別の文字列なので一致しないはずですが、実際に試してはいません。未検証)。
+- 症状: 未ログインの状態で登録外の `redirect_uri` を送ると、400 ではなく `/login` へリダイレクトされる。ログインしても元の認可リクエストには戻れない。
+- 原因: 400 のエラーページは `/error` で描画される。`/error` は 2 本目のチェーンで認証が必要なので、未ログインだとログイン画面へ送られる。
+- 対処: ログイン画面が出たからといって認可リクエストが正しいとは限らない。ログイン済みの状態で試すか、テストで確かめる。エラーページの扱いは 6 章で画面を作るときに整える。
 
 **3. PKCE なしで認可リクエストを送ると `invalid_request`**
 
