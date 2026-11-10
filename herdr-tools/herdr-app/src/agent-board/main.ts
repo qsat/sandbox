@@ -7,8 +7,9 @@ import { TITLE_BAR_HEIGHT } from "../shared/title-bar";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import type { Tag } from "@herdr-tools/utils/tag";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
+import { COLLAPSED_KEY } from "@herdr-tools/tmux/sidebar-order";
 import { usageSegments } from "@herdr-tools/utils/usage-segments";
-import { boardRows, changeTargets, EMPTY_LIST, parseChanges, type ChangeAmount, keyActionFor, moveSelection, parseList, rowId, toggleCollapsed, wsArgsFor, type BoardAction, type BoardRow, type LiveTerminal, wsArgsForModCommand } from "./board";
+import { boardRows, changeTargets, EMPTY_LIST, nextList, parseChanges, type ChangeAmount, keyActionFor, moveSelection, rowId, toggleCollapsed, wsArgsFor, type BoardAction, type BoardRow, type LiveTerminal, wsArgsForModCommand } from "./board";
 
 const MOD_NAME = "agent-board";
 const LIST_REFRESH_MS = 2000;
@@ -16,7 +17,6 @@ const LIST_REFRESH_MS = 2000;
 const CHANGES_REFRESH_MS = 10000;
 const CONFIRM_DIALOG_WIDTH = 360;
 const CONFIRM_DIALOG_HEIGHT = 160;
-const COLLAPSED_KEY = "agent-board.collapsed";
 const REPOSITORY_SPACING = ROW_HEIGHT * 0.5;
 const CURRENT_PANE_BG: Color = "#e6ff0014";
 const PIE_SIZE = 12;
@@ -170,9 +170,9 @@ export default class AgentBoard extends View {
     if (this.fetching) return;
     this.fetching = true;
     cx.spawn(async (cx) => {
-      const r = await execWs(["list", "--json"]);
-      this.list = parseList(r.stdout);
-      this.error = r.error;
+      const next = nextList(this.list, await execWs(["list", "--json"]));
+      this.list = next.list;
+      this.error = next.error;
       this.fetching = false;
       cx.notify();
       // 並ぶ worktree が変わったら、10 秒を待たずに変更量を読む

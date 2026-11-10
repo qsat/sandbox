@@ -32,6 +32,8 @@ export default class CommitHistory extends View {
   noUpstream!: boolean;
   /** ベースブランチ（origin/main など）。分からなければ null */
   baseRef!: string | null;
+  /** 今の worktree のベースブランチを調べ終えたか（見つからなかったときも true。調べ直すのは worktree が変わったときと、ベースからの範囲を選んだとき） */
+  baseKnown!: boolean;
   local!: FileChange[];
   filesOf!: Map<string, FileChange[]>;
   expanded!: string | null;
@@ -50,6 +52,7 @@ export default class CommitHistory extends View {
     this.range = "all";
     this.noUpstream = false;
     this.baseRef = null;
+    this.baseKnown = false;
     this.local = [];
     this.filesOf = new Map();
     this.expanded = null;
@@ -110,6 +113,7 @@ export default class CommitHistory extends View {
     if (next?.path !== this.target?.path) {
       this.gitDirs = [];
       this.baseRef = null;
+      this.baseKnown = false;
       this.commits = [];
       this.local = [];
       this.filesOf = new Map();
@@ -132,7 +136,9 @@ export default class CommitHistory extends View {
       this.watchGit(root, this.gitDirs, cx);
     }
     const range = this.range;
-    if (this.baseRef === null) this.baseRef = await findBaseRef((args) => this.git(root, args), (args) => exec("gh", args, { cwd: root }));
+    // ベースブランチは gh に問い合わせる（GitHub への往復）。ベースからの範囲のとき以外はコミットの一覧を待たせず、分かったら題名の帯の名前に反映する
+    const lookup = this.baseKnown ? null : this.lookUpBase(root);
+    if (range === "base") await lookup;
     const args = logArgs(range, this.baseRef);
     const [log, head, status] = await Promise.all([
       args ? this.git(root, args) : Promise.resolve({ code: 1, stdout: "", stderr: "" }),
@@ -143,11 +149,23 @@ export default class CommitHistory extends View {
     const numstats = hasHead
       ? [await this.git(root, ["diff", "HEAD", "--numstat", "-z", "--no-renames"])]
       : [await this.git(root, ["diff", "--cached", "--numstat", "-z", "--no-renames"]), await this.git(root, ["diff", "--numstat", "-z", "--no-renames"])];
-    if (this.target?.path !== root || this.range !== range) return;
-    this.commits = hasHead && log.code === 0 ? parseLog(log.stdout) : [];
-    this.noUpstream = range === "unpushed" && hasHead && log.code !== 0;
-    this.local = status.code === 0 ? localFiles(status.stdout, sumNumstat(...numstats.map((n) => n.stdout))) : [];
-    if (this.expanded === LOCAL_ID && this.local.length === 0) this.expanded = null;
+    if (this.target?.path === root && this.range === range) {
+      this.commits = hasHead && log.code === 0 ? parseLog(log.stdout) : [];
+      this.noUpstream = range === "unpushed" && hasHead && log.code !== 0;
+      this.local = status.code === 0 ? localFiles(status.stdout, sumNumstat(...numstats.map((n) => n.stdout))) : [];
+      if (this.expanded === LOCAL_ID && this.local.length === 0) this.expanded = null;
+      // ベースブランチをまだ調べているなら、読めたコミットを先に出す
+      if (lookup && range !== "base") cx.notify();
+    }
+    await lookup;
+  }
+
+  /** ベースブランチを調べて覚える。見つからなくても調べ終えたことにして、読み直しのたびに gh を呼ばない */
+  async lookUpBase(root: string) {
+    const found = await findBaseRef((args) => this.git(root, args), (args) => exec("gh", args, { cwd: root })).catch(() => null);
+    if (this.target?.path !== root) return;
+    this.baseRef = found;
+    this.baseKnown = true;
   }
 
   /**
@@ -406,7 +424,10 @@ export default class CommitHistory extends View {
     this.commits = [];
     this.noUpstream = false;
     // ベースは選ぶたびに調べ直す（mod を開いた後に作ったプルリクエストの base も拾う）
-    if (range === "base") this.baseRef = null;
+    if (range === "base") {
+      this.baseRef = null;
+      this.baseKnown = false;
+    }
     if (this.expanded !== LOCAL_ID) this.expanded = null;
     cx.notify();
     this.refresh(cx);
