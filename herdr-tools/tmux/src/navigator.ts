@@ -3,19 +3,19 @@ import { runInteractive } from "@herdr-tools/utils/run-interactive";
 import { looksLikePath, resolveRef, type Resolved, type WsCore } from "@herdr-tools/ws-core";
 import { focusGhostty, openGhosttyWindowRunning } from "./ghostty";
 import { AGENTS_WINDOW, chooseClient, ensureSession, planGo, workingDir, type PaneTarget, type Step } from "./plans/go";
-import { continuingRecord, cycleCandidates, decideCurrentPane, inRecordedOrder, MESSAGE_WHEN_NO_CANDIDATE, nextCandidate, prevCandidate } from "./plans/cycle";
+import { chooseCycleTarget, continuingRecord, cycleCandidates, decideCurrentPane, MESSAGE_WHEN_NO_CANDIDATE } from "./plans/cycle";
 import { planPanes } from "./plans/panes";
 import { HUNK_WINDOW, planHunk, type HunkSource } from "./plans/hunk";
 import { HunkCli } from "./hunk-cli";
 import { toListJson } from "./list-json";
-import { currentRowId, goRefOf, itemId, sidebarItems, stepFrom, steppableItems } from "./sidebar-order";
-import { readCollapsed, readCycleRecord, readStepRecord, writeCycleRecord, writeStepRecord } from "./step-state";
+import { goRefOf, rowIdOfPane, sidebarItems, stepFrom, steppableItems } from "./sidebar-order";
+import { readCollapsed, readCycleRecord, writeCycleRecord } from "./step-state";
+import { indexTmux, isPaneId, sessionPaths } from "./tmux-index";
+import { TmuxServer } from "./tmux-server";
 
 export const MESSAGE_WHEN_NO_ROW = "移る行がありません";
 /** hunk を起動した直後、セッションが daemon に現れるのを待つ試行の回数（300ms 間隔） */
 const HUNK_START_ATTEMPTS = 30;
-import { indexTmux, isPaneId, sessionPaths } from "./tmux-index";
-import { TmuxServer } from "./tmux-server";
 
 interface GoOptions {
   client?: string;
@@ -39,12 +39,7 @@ export class TmuxNavigator {
     const target = resolveRef(view.snap, path);
     if (!target) throw new Error(`見つかりません: ${path}`);
     const cwd = workingDir(target.worktree, this.cwdWhenMissing);
-    const client = chooseClient({
-      explicit: opts.client,
-      fromApp: !!opts.fromApp,
-      callerClient: opts.fromApp ? undefined : await this.tmux.callerClient(this.env),
-      clients: await this.tmux.listClients(),
-    });
+    const client = await this.clientToMove(opts);
     const session = ensureSession(target.worktree, view.idx, cwd);
     const steps = planHunk({
       cwd,
@@ -66,13 +61,14 @@ export class TmuxNavigator {
     return { snap, idx: indexTmux(snap.locate, facts) };
   }
 
+  /** 移動に使う tmux クライアント（--client > --from-app なら最後に使われたもの > 呼び出し元 > その場で attach） */
+  private async clientToMove(opts: { client?: string; fromApp?: boolean }) {
+    const [callerClient, clients] = await Promise.all([opts.fromApp ? undefined : this.tmux.callerClient(this.env), this.tmux.listClients()]);
+    return chooseClient({ explicit: opts.client, fromApp: !!opts.fromApp, callerClient, clients });
+  }
+
   async go(target: Resolved | PaneTarget, view: TmuxView, opts: GoOptions = {}) {
-    const client = chooseClient({
-      explicit: opts.client,
-      fromApp: !!opts.fromApp,
-      callerClient: opts.fromApp ? undefined : await this.tmux.callerClient(this.env),
-      clients: await this.tmux.listClients(),
-    });
+    const client = await this.clientToMove(opts);
     const steps = planGo(target, view.idx, { client, fromApp: !!opts.fromApp, cwdWhenMissing: this.cwdWhenMissing });
     if (!opts.dryRun) for (const step of steps) await this.run(step);
     return steps;
@@ -153,8 +149,7 @@ export class TmuxNavigator {
     const candidates = cycleCandidates(view.snap.tree);
     if (opts.listOnly) return { candidates, moved: undefined, message: undefined };
     const record = continuingRecord(await readCycleRecord(opts.recordPath), opts.nowMs ?? Date.now());
-    const list = record ? inRecordedOrder(candidates, record.order) : candidates;
-    const target = (opts.prev ? prevCandidate : nextCandidate)(list, record?.lastId);
+    const { list, target } = chooseCycleTarget(candidates, record, !!opts.prev);
     if (!target) {
       const clients = await this.tmux.listClients();
       const client = chooseClient({ explicit: opts.client, fromApp: !!opts.fromApp, callerClient: undefined, clients });
@@ -174,8 +169,6 @@ export class TmuxNavigator {
   async stepRows(opts: {
     /** 畳んだ workspace を読む共有状態のファイル（無ければ何も畳んでいないとみなす） */
     sharedStatePath: string;
-    /** 「今いる行」の記録ファイル */
-    recordPath: string;
     prev?: boolean;
     pane?: string;
     client?: string;
@@ -193,12 +186,7 @@ export class TmuxNavigator {
       clientPane: clientName ? await this.tmux.paneShownBy(clientName) : undefined,
       displayedPanes: view.idx.facts.panes.filter((p) => p.current).map((p) => p.paneId),
     });
-    const recordPath = opts.recordPath;
-    const current = currentRowId({
-      pane: currentPane,
-      agentId: currentPane ? view.idx.livePaneById(currentPane)?.agentId : undefined,
-      record: await readStepRecord(recordPath),
-    });
+    const current = currentPane ? rowIdOfPane(currentPane, view.idx.livePaneById(currentPane)?.agentId) : undefined;
     if (opts.listOnly) return { rows, current, moved: undefined, message: undefined };
     const target = stepFrom(rows, current, !!opts.prev);
     if (!target) {
@@ -206,8 +194,6 @@ export class TmuxNavigator {
       return { rows, current, moved: undefined, message: MESSAGE_WHEN_NO_ROW };
     }
     await this.goRef(goRefOf(target), { client: opts.client, fromApp: opts.fromApp });
-    const shown = clientName ? await this.tmux.paneShownBy(clientName) : undefined;
-    if (shown) await writeStepRecord(recordPath, { row: itemId(target), pane: shown }).catch(() => {});
     return { rows, current, moved: target, message: undefined };
   }
 

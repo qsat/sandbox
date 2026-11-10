@@ -1,6 +1,6 @@
 import { agentDisplayName } from "@herdr-tools/utils/agent-display-name";
 import { worktreeDisplayName } from "@herdr-tools/utils/worktree-display-name";
-import { byAttention, type AgentStatus } from "@herdr-tools/ws-core/domain/agent";
+import { byAttention, toAgentStatus, type AgentStatus } from "@herdr-tools/ws-core/domain/agent";
 import type { ListedAgent, ListedTree } from "./list-json";
 
 /**
@@ -8,6 +8,9 @@ import type { ListedAgent, ListedTree } from "./list-json";
  * mod の表示（board.ts の boardRows）と CLI（ws step）が同じ並びを使うよう、並びの決め方はここだけに書く。
  * I/O は無い（tmux も herdr-core も呼ばない）。
  */
+
+/** mod が畳んだ workspace のパスを入れる、Herdr app の共有状態（shared.json）のキー。mod が書き、ws step が読む */
+export const COLLAPSED_KEY = "agent-board.collapsed";
 
 /** Herdr app が持つ端末の今の状態。エージェントの status は、これがあれば一覧（ws list --json）の値より優先する */
 export interface LiveTerminal {
@@ -29,7 +32,7 @@ export type SidebarItem =
 
 function withLiveStatus(a: ListedAgent, live: Map<string, LiveTerminal>): LiveAgent {
   const st = live.get(a.id)?.status;
-  return st ? { ...a, status: st.state as AgentStatus, blockedReason: st.kind ?? undefined } : (a as LiveAgent);
+  return st ? { ...a, status: toAgentStatus(st.state), blockedReason: st.kind ?? undefined } : (a as LiveAgent);
 }
 
 /** workspace の見出し → worktree → その worktree のエージェント（注意が要る順）→ ペイン。畳んだ workspace は見出しだけ */
@@ -79,26 +82,12 @@ export function itemLabel(item: SidebarItem) {
   }
 }
 
-/** 今いるペインから決まる行の id。会話ペインならエージェントの行、そうでなければペインの行 */
+/**
+ * 今いるペインから決まる行の id。会話ペインならエージェントの行、そうでなければペインの行。
+ * 移る先はエージェントとペインの行だけなので、今いる行はペインから必ず決まる（最後に移った行を覚えておく必要は無い）
+ */
 export function rowIdOfPane(paneId: string, agentId: string | undefined | null) {
   return agentId ? `agent:${agentId}` : `pane:${paneId}`;
-}
-
-export interface StepRecord {
-  /** 最後に移った行の id（`worktree:/path`、`agent:3`、`pane:%12`） */
-  row: string;
-  /** 移った直後に表示されていたペイン */
-  pane: string;
-}
-
-/**
- * 今いる行の id。記録のペインが今いるペインと同じなら記録の行（worktree の行へ移った直後など、ペインからは行が決まらない場合）。
- * 違えば（別の操作で動いたので）今いるペインから決める
- */
-export function currentRowId(opts: { pane: string | undefined; agentId: string | undefined | null; record: StepRecord | null }) {
-  if (!opts.pane) return undefined;
-  if (opts.record && opts.record.pane === opts.pane) return opts.record.row;
-  return rowIdOfPane(opts.pane, opts.agentId);
 }
 
 /** 今いる行の次（prev なら 1 つ前）。端では反対の端へ回り、今いる行が列に無ければ下は先頭・上は最後 */

@@ -63,6 +63,19 @@ export function prevCandidate(candidates: CycleCandidate[], currentAgentId: stri
 }
 
 /**
+ * 次に移るエージェント（target）と、その順を決めた列（list。次に続けて押したときのために記録する）。
+ * 続けて押している間（record がある）は、前回の列の順のまま前回移った先の次へ進む。
+ * 前回の列のエージェントが 1 つも候補に残っていなければ（全員が working になった・止まったなど）、今の列で端から回り直す。
+ * 候補があるのに「巡回するエージェントはありません」にはしない
+ */
+export function chooseCycleTarget(candidates: CycleCandidate[], record: CycleRecord | null, prev: boolean) {
+  const continued = record ? inRecordedOrder(candidates, record.order) : [];
+  const continuing = continued.length > 0;
+  const list = continuing ? continued : candidates;
+  return { list, target: (prev ? prevCandidate : nextCandidate)(list, continuing ? record?.lastId : undefined) };
+}
+
+/**
  * 巡回で「今いるペイン」を決める。
  * 優先順: 明示（--pane）> 環境変数（TMUX_PANE）> 移動に使うクライアントが表示しているペイン > 表示中のペインの最初の 1 つ
  */

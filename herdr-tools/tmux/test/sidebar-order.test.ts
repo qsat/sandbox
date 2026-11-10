@@ -1,10 +1,10 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ListedTree } from "../src/list-json";
-import { currentRowId, goRefOf, itemId, rowIdOfPane, sidebarItems, stepFrom, steppableItems } from "../src/sidebar-order";
-import { readCollapsed, readStepRecord, writeStepRecord } from "../src/step-state";
+import { goRefOf, itemId, rowIdOfPane, sidebarItems, stepFrom, steppableItems } from "../src/sidebar-order";
+import { readCollapsed } from "../src/step-state";
 
 const agent = (id: string, status: "working" | "idle" | "blocked", worktree: string) => ({
   id,
@@ -68,6 +68,11 @@ describe("サイドバーの並び", () => {
     const live = [{ address: "t1", status: { state: "blocked", kind: "permission" } }, { address: "t2", status: { state: "idle" } }];
     expect(ids(sidebarItems(list, live, [])).filter((i) => i.startsWith("agent:t"))).toEqual(["agent:t1", "agent:t2"]);
   });
+  test("Herdr app の端末が知らない status を名乗っても、先頭には出さず unknown として最後に並べる", () => {
+    const items = sidebarItems(list, [{ address: "t2", status: { state: "compacting" } }], []);
+    expect(ids(items).filter((i) => i.startsWith("agent:t"))).toEqual(["agent:t1", "agent:t2"]);
+    expect(items.flatMap((i) => (i.kind === "agent" && i.key === "t2" ? [i.agent.status] : []))).toEqual(["unknown"]);
+  });
   test("移る先に数える行はエージェントとペインだけ（workspace の見出しと worktree の行は飛ばす）で、移る先の ref はエージェントの id・ペインの id", () => {
     const rows = steppableItems(sidebarItems(list, [], []));
     expect(rows.every((r) => r.kind === "agent" || r.kind === "pane")).toBe(true);
@@ -99,17 +104,14 @@ describe("今いる行", () => {
     expect(rowIdOfPane("%5", "t1")).toBe("agent:t1");
     expect(rowIdOfPane("%5", null)).toBe("pane:%5");
   });
-  test("記録のペインが今いるペインと同じなら記録の行（worktree の行へ移った直後）", () => {
-    expect(currentRowId({ pane: "%7", agentId: null, record: { row: "worktree:/g/o/api", pane: "%7" } })).toBe("worktree:/g/o/api");
+  test("移る先の行（エージェント・ペイン）は、どれも今いるペインから決まる行と同じ id を持つ", () => {
+    for (const row of steppableItems(sidebarItems(list, [], []))) {
+      expect(itemId(row)).toBe(row.kind === "agent" ? rowIdOfPane("%99", row.key) : rowIdOfPane(row.key, null));
+    }
   });
-  test("記録のペインと違えば、今いるペインから決める", () => {
-    expect(currentRowId({ pane: "%8", agentId: "t1", record: { row: "worktree:/g/o/api", pane: "%7" } })).toBe("agent:t1");
-    expect(currentRowId({ pane: "%8", agentId: null, record: null })).toBe("pane:%8");
-  });
-  test("今いるペインが分からなければ行も決まらない", () => expect(currentRowId({ pane: undefined, agentId: null, record: null })).toBeUndefined());
 });
 
-describe("畳んだ workspace と記録のファイル", () => {
+describe("畳んだ workspace のファイル", () => {
   const dir = mkdtempSync(join(tmpdir(), "step-"));
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
   test("shared.json の agent-board.collapsed を読む。無い・壊れている・形が違うときは何も畳んでいない", async () => {
@@ -120,14 +122,5 @@ describe("畳んだ workspace と記録のファイル", () => {
     expect(await readCollapsed(join(dir, "b.json"))).toEqual([]);
     expect(await readCollapsed(join(dir, "c.json"))).toEqual([]);
     expect(await readCollapsed(join(dir, "none.json"))).toEqual([]);
-  });
-  test("記録は、フォルダーが無くても書け、読み戻せる。壊れていれば null", async () => {
-    const path = join(dir, "sub", "step-last.json");
-    expect(await readStepRecord(path)).toBeNull();
-    await writeStepRecord(path, { row: "agent:t1", pane: "%3" });
-    expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ row: "agent:t1", pane: "%3" });
-    expect(await readStepRecord(path)).toEqual({ row: "agent:t1", pane: "%3" });
-    writeFileSync(path, "xx");
-    expect(await readStepRecord(path)).toBeNull();
   });
 });

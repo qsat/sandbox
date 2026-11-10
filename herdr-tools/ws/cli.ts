@@ -16,7 +16,7 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
   ws new [<worktree>] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
                                                    エージェント起動。--here は今の端末で会話、--attach は agents ウィンドウへ移動
   ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
-  ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す
+  ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す（<agent> は id か名前）
   ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは止めない
   ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる（他の場所の会話ペインは移して集める）
   ws next [--prev] [--client <name> | --from-app] [--list]
@@ -146,7 +146,9 @@ async function main(argv: string[]) {
       const pane = str(p, "--pane") ?? process.env.TMUX_PANE;
       if (!pane) throw new Error("--pane '#{pane_id}' を渡してください（tmux の外からは使えません）");
       const maxRaw = str(p, "--max") ?? process.env.WS_PANES_MAX;
-      const r = await nav.openPanesForWorktreeOf(pane, { includeChildren: has(p, "-a", "--all"), max: maxRaw ? Number(maxRaw) : 8 });
+      const max = maxRaw ? Number(maxRaw) : 8;
+      if (!Number.isInteger(max) || max < 0) throw new Error(`--max（WS_PANES_MAX）には 0 以上の整数を指定してください: ${maxRaw}`);
+      const r = await nav.openPanesForWorktreeOf(pane, { includeChildren: has(p, "-a", "--all"), max });
       process.stdout.write(`ws panes: ${r.opened} 開いた / ${r.gathered} 集めた / ${r.alreadyOpen} 表示済み${r.overLimit ? ` / ${r.overLimit} 上限で省略` : ""}\n`);
       return 0;
     }
@@ -169,7 +171,6 @@ async function main(argv: string[]) {
       const home = process.env.HOME || homedir();
       const r = await nav.stepRows({
         sharedStatePath: join(process.env.HERDR_APP_HOME || join(home, ".config", "herdr-app"), "shared.json"),
-        recordPath: join(process.env.XDG_CACHE_HOME || join(home, ".cache"), "herdr-tools", "step-last.json"),
         prev: has(p, "--prev"), pane: str(p, "--pane"), client: str(p, "--client"), fromApp: goOpts.fromApp, listOnly: has(p, "--list") });
       if (goOpts.fromApp && r.message) process.stderr.write(r.message + "\n");
       if (has(p, "--list")) {
