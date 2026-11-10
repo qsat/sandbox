@@ -97,6 +97,12 @@ class SecurityBasicsTests {
         assertThat(filterNames("/learn/security-context")).isEqualTo(inspector.describe().get(1).filters());
     }
 
+    @Test
+    void チェーンの対象はHTTPメソッドも見る_GETの_oauth2_tokenは認可サーバー用チェーンに入らない() {
+        // FilterChainProxy#getFilters(String) は GET として matcher を試すため、POST 専用の /oauth2/token は外れる
+        assertThat(filterNames("/oauth2/token")).isEqualTo(inspector.describe().get(1).filters());
+    }
+
     private List<String> filterNames(String url) {
         return filterChainProxy.getFilters(url).stream()
             .map(Filter::getClass).map(Class::getSimpleName).toList();
@@ -157,8 +163,7 @@ class SecurityBasicsTests {
         authorizeRequest(session);
         String before = session.getId();
 
-        var res = login(session, "user").andReturn();
-        System.out.println("DBG before=" + before + " after=" + session.getId() + " reqSession=" + res.getRequest().getSession(false).getId() + " same=" + (res.getRequest().getSession(false) == session) + " wrapper=" + res.getRequest().getClass());
+        login(session, "user");
 
         assertThat(session.getId()).isNotEqualTo(before);
         // 変わるのは ID だけで、属性 (覚えておいたリクエスト) は引き継がれる
@@ -264,10 +269,19 @@ class SecurityBasicsTests {
 
     // ---- ヘルパー ----
 
-    /** 既存のセッションを使って /login に POST する (formLogin() はセッションを指定できないため自前で組む)。 */
+    /**
+     * 既存のセッションを使って /login に POST する (formLogin() はセッションを指定できないため自前で組む)。
+     *
+     * <p>requestedSessionId を設定するのは、ブラウザが JSESSIONID Cookie を送ってきた状態を再現するため。
+     * これが無いと「リクエストが有効なセッション ID を持っていない」と判断され、セッション ID の変更が行われない。
+     */
     private ResultActions login(MockHttpSession session, String username) throws Exception {
         return mvc.perform(post("/login")
             .session(session)
+            .with(request -> {
+                request.setRequestedSessionId(session.getId());
+                return request;
+            })
             .with(csrf())
             .param("username", username)
             .param("password", "password"));

@@ -62,13 +62,15 @@ class TokensTests {
     // ---------------------------------------------------------------- JWK
 
     @Test
-    void jwksに固定したkidの公開鍵だけが載り_秘密鍵は載らない() throws Exception {
+    void jwksに鍵のサムプリントをkidとした公開鍵だけが載り_秘密鍵は載らない() throws Exception {
         String body = mvc.perform(get("/oauth2/jwks")).andExpect(status().isOk())
             .andReturn().getResponse().getContentAsString();
 
         JWKSet jwkSet = JWKSet.parse(body);
         assertThat(jwkSet.getKeys()).hasSize(1);
-        assertThat(jwkSet.getKeys().get(0).getKeyID()).isEqualTo("study-key-1");
+        // kid は鍵から導いた JWK Thumbprint (RFC 7638)
+        assertThat(jwkSet.getKeys().get(0).getKeyID())
+            .isEqualTo(jwkSet.getKeys().get(0).computeThumbprint().toString());
         assertThat(jwkSet.getKeys().get(0).isPrivate()).isFalse();
     }
 
@@ -194,6 +196,15 @@ class TokensTests {
     }
 
     @Test
+    void 参照型のアクセストークンでは_userinfoは401になる() throws Exception {
+        // UserInfo エンドポイントのベアラートークン認証は JWT 専用 (opaque を読む設定になっていない)
+        String accessToken = (String) issueTokens(OPAQUE, OPAQUE_SECRET, "openid", null).get("access_token");
+
+        mvc.perform(get("/userinfo").header("Authorization", "Bearer " + accessToken))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void 知らないトークンのintrospectionはactiveがfalseだけを返す() throws Exception {
         assertThat(introspect(WEB, WEB_SECRET, "not-a-token")).isEqualTo(Map.of("active", false));
     }
@@ -269,6 +280,18 @@ class TokensTests {
         String body = refresh(OPAQUE, OPAQUE_SECRET, refreshToken).andExpect(status().isOk())
             .andReturn().getResponse().getContentAsString();
         assertThat((String) JsonPath.read(body, "$.refresh_token")).isEqualTo(refreshToken);
+    }
+
+    @Test
+    void reuseRefreshTokensがtrueでも更新でリフレッシュトークンの期限は延びない() throws Exception {
+        String refreshToken = (String) issueTokens(OPAQUE, OPAQUE_SECRET, "openid", null).get("refresh_token");
+        Object expBefore = introspect(OPAQUE, OPAQUE_SECRET, refreshToken).get("exp");
+
+        // exp は秒単位なので、延びるなら差が出るように 1 秒以上待ってから更新する
+        Thread.sleep(1100);
+        refresh(OPAQUE, OPAQUE_SECRET, refreshToken).andExpect(status().isOk());
+
+        assertThat(introspect(OPAQUE, OPAQUE_SECRET, refreshToken).get("exp")).isEqualTo(expBefore);
     }
 
     // ---------------------------------------------------------------- ヘルパー

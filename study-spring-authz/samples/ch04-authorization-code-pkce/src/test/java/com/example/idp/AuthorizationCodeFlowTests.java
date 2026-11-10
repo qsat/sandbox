@@ -173,6 +173,34 @@ class AuthorizationCodeFlowTests {
     }
 
     @Test
+    void リフレッシュ時にscopeを省略すると元のscopeが引き継がれる() throws Exception {
+        String refreshToken = obtainRefreshToken();
+
+        refresh(refreshToken, null)
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.scope").value("openid profile"));
+    }
+
+    @Test
+    void リフレッシュ時に元より狭いscopeを要求するとそのscopeだけになる() throws Exception {
+        String refreshToken = obtainRefreshToken();
+
+        refresh(refreshToken, "openid")
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.scope").value("openid"));
+    }
+
+    @Test
+    void リフレッシュ時に元より広いscopeを要求するとinvalid_scopeになる() throws Exception {
+        String refreshToken = obtainRefreshToken();
+
+        // email は web-client に登録されていない scope でもあるが、ここでは「元の認可に含まれない」ことで拒否される
+        refresh(refreshToken, "openid profile email")
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("invalid_scope"));
+    }
+
+    @Test
     void 有効期限が切れた認可コードは交換できない() throws Exception {
         String code = obtainCode(mvc, FlowSupport.login(mvc), "web-client", WEB_REDIRECT);
 
@@ -185,6 +213,24 @@ class AuthorizationCodeFlowTests {
         exchange("web-client", "web-client-secret", code, WEB_REDIRECT)
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.error").value("invalid_grant"));
+    }
+
+    private String obtainRefreshToken() throws Exception {
+        String code = obtainCode(mvc, FlowSupport.login(mvc), "web-client", WEB_REDIRECT);
+        MvcResult result = exchange("web-client", "web-client-secret", code, WEB_REDIRECT).andReturn();
+        return json.readTree(result.getResponse().getContentAsString()).get("refresh_token").asText();
+    }
+
+    private org.springframework.test.web.servlet.ResultActions refresh(String refreshToken, String scope)
+            throws Exception {
+        var request = post("/oauth2/token")
+            .with(httpBasic("web-client", "web-client-secret"))
+            .param("grant_type", "refresh_token")
+            .param("refresh_token", refreshToken);
+        if (scope != null) {
+            request.param("scope", scope);
+        }
+        return mvc.perform(request);
     }
 
     /** confidential client として認可コードをトークンに交換する。 */

@@ -2,7 +2,6 @@ package com.example.idp;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.formLogin;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
@@ -53,9 +52,10 @@ final class FlowSupport {
 
     /** 同意画面からの POST。approvedScopes が空なら「拒否」と同じ送信になる。 */
     MvcResult submitConsent(MockHttpSession session, String state, String... approvedScopes) throws Exception {
+        // CSRF トークンは付けない。認可サーバーのエンドポイントは CSRF 検査の対象外で、
+        // 同意の POST は「同意用の state」を知っていることで守られる。
         MockHttpServletRequestBuilder request = post("/oauth2/authorize")
             .session(session)
-            .with(csrf())
             .param("client_id", "web-client")
             .param("state", state);
         if (approvedScopes.length > 0) {

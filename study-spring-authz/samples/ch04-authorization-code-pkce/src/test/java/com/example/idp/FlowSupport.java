@@ -45,17 +45,19 @@ final class FlowSupport {
             .andReturn().getRequest().getSession(false);
     }
 
-    /** 認可リクエストを組み立てる。codeChallenge が null なら PKCE のパラメーターを付けない。 */
+    /** 認可リクエストを組み立てる。session が null なら未ログイン。codeChallenge が null なら PKCE のパラメーターを付けない。 */
     static MockHttpServletRequestBuilder authorizeRequest(MockHttpSession session, String clientId,
             String redirectUri, String scope, String codeChallenge) {
         MockHttpServletRequestBuilder request = get("/oauth2/authorize")
-            .session(session)
             .queryParam("response_type", "code")
             .queryParam("client_id", clientId)
             .queryParam("redirect_uri", redirectUri)
             .queryParam("scope", scope)
             .queryParam("state", "xyz")
             .queryParam("nonce", "n-0S6_WzA2Mj");
+        if (session != null) {
+            request.session(session);
+        }
         if (codeChallenge != null) {
             request.queryParam("code_challenge", codeChallenge).queryParam("code_challenge_method", "S256");
         }

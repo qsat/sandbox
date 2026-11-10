@@ -62,6 +62,14 @@
 - MockMvc のテストで `user("user")` を使って認証を差し込むと、ID トークン生成が `authenticationTime cannot be null` で失敗する。`formLogin()` で実際にログインしてセッションを引き回す (`IdpApplicationTests` を参照)。
 - ID トークンには最小構成でも `sid` と `auth_time` が入る。ID トークンの寿命は `TokenSettings` では変えられず、`JwtGenerator` が 30 分に固定している。
 - `InMemoryRegisteredClientRepository` は、複数のクライアントが同じ `clientSecret` の値 (ハッシュ文字列) を持つと `Registered client must be unique` で起動に失敗する。`RegisteredClient.from(...)` で複製するときは secret も設定し直す。
+- 認可サーバーのエンドポイント (`/oauth2/authorize` への同意の POST を含む) は CSRF 検査の対象外。`POST /login` と `POST /logout` は検査される。
+- `/error` を `permitAll` にしていないと、未ログイン時の 400 や 403 が `/login` へのリダイレクトに化ける。MockMvc はエラーディスパッチをしないので、この挙動は `@SpringBootTest(webEnvironment = RANDOM_PORT)` と実 HTTP でしか確かめられない。
+- ログインすると権限に `ROLE_USER` と並んで `FACTOR_PASSWORD` が付く。
+- MockMvc でログイン時のセッション ID 変更を再現するには `request.setRequestedSessionId(session.getId())` が要る。
+- JSON は Jackson 3 (`tools.jackson.databind.*`)。JDBC 実装が attributes を保存するときは型名つき JSON になり、許可リストに無い独自クラスは読み戻しで失敗する。ログイン中のユーザー (`Authentication` の principal) も attributes に入るので、独自の `UserDetails` 実装を JDBC 実装と組み合わせるときは許可リストへの登録が要る。
+- public client (認証方式 `NONE`) には、認可コード交換でリフレッシュトークンが発行されない。
+- UserInfo エンドポイントはアクセストークンを JWT として検証する。参照型 (opaque) のアクセストークンでは 401 になる。
+- 同梱スキーマ SQL は authorization-server の jar の `org/springframework/security/oauth2/server/authorization/` 配下にある。
 - 既定のエンドポイント: `/oauth2/authorize`、`/oauth2/token`、`/oauth2/jwks`、`/oauth2/revoke`、`/oauth2/introspect`、`/userinfo`、`/connect/logout`、`/.well-known/openid-configuration`。
 
 ここに無い API は、記憶ではなく実物で確かめます。

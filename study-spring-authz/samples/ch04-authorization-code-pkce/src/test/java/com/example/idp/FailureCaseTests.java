@@ -44,7 +44,9 @@ class FailureCaseTests {
     // ---- 認可エンドポイント (ブラウザ経由) のエラー ----
 
     @Test
-    void 登録されていないredirect_uriはリダイレクトせずIdPがエラーを返す() throws Exception {
+    void 登録外のredirect_uriはリダイレクトせずIdPが400を返す() throws Exception {
+        // MockMvc はエラーページ (/error) への内部転送を行わないので、ここで確かめられるのは「400 で Location が無い」まで。
+        // エラーページが実際に描画されるかどうか (ログイン状態による違い) は ErrorPageDispatchTests で確かめる
         MvcResult result = mvc.perform(authorizeRequest(FlowSupport.login(mvc), "web-client",
                 "http://evil.example/cb", "openid", s256(VERIFIER)))
             .andExpect(status().isBadRequest())
