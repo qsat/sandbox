@@ -334,6 +334,9 @@ if command -v nvim >/dev/null 2>&1; then
   check "2 つ目のファイルでもウィンドウは増えない" "$(edit_windows)" "1"
   check "同じ nvim が 2 つ目のファイルを開いた" "$(nvim_buffers)" "a.txt,b.txt"
   nvim --server "$HOME"/.cache/herdr-tools/nvim/*.sock --remote-send '<Esc>:qa!<CR>' >/dev/null 2>&1 || true
+  # nvim は $XDG_CACHE_HOME/nvim（$TMP の下）に書く。終わりきる前に後片付けの rm -rf を始めると、消している間に
+  # ファイルが増えて rm が失敗する（Directory not empty）。nvim が終わってソケットが消えるまで待つ
+  for _ in $(seq 50); do ls "$HOME"/.cache/herdr-tools/nvim/*.sock >/dev/null 2>&1 || break; sleep 0.1; done
 else
   echo "  (nvim が無いので省略)"
 fi
