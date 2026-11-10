@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ログイン</title>
+  <style>
+    body { font-family: sans-serif; max-width: 22rem; margin: 3rem auto; padding: 0 1rem; }
+    label, input, button { display: block; width: 100%; box-sizing: border-box; margin-top: .5rem; }
+    input, button { padding: .5rem; font-size: 1rem; }
+    .error { color: #b00020; }
+  </style>
+</head>
+<body>
+  <h1>ログイン</h1>
+
+  <!-- 失敗の理由 (ユーザーがいない / パスワードが違う / 無効化) は区別して見せない -->
+  <p class="error" th:if="${param.error}">ログイン名またはパスワードが正しくありません。</p>
+  <p th:if="${param.logout}">ログアウトしました。</p>
+
+  <!-- th:action を使うと Thymeleaf が CSRF トークンの hidden フィールドを自動で差し込む -->
+  <form method="post" th:action="@{/login}">
+    <label for="username">ログイン名</label>
+    <input type="text" id="username" name="username" autofocus required>
+    <label for="password">パスワード</label>
+    <input type="password" id="password" name="password" required>
+    <button type="submit">ログイン</button>
+  </form>
+</body>
+</html>

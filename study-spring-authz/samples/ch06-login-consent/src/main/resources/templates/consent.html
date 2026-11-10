@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>アクセスの許可</title>
+  <style>
+    body { font-family: sans-serif; max-width: 28rem; margin: 3rem auto; padding: 0 1rem; }
+    button { padding: .5rem 1rem; font-size: 1rem; margin-right: .5rem; }
+    ul { padding-left: 1.2rem; }
+  </style>
+</head>
+<body>
+  <h1>アクセスの許可</h1>
+  <p>
+    <strong th:text="${clientName}">client</strong>
+    (<code th:text="${clientId}">client-id</code>) が
+    <strong th:text="${principalName}">user</strong> のアカウントへのアクセスを求めています。
+  </p>
+
+  <!-- 許可する: チェックされた scope だけが POST される。送り先は /oauth2/authorize -->
+  <form method="post" th:action="@{/oauth2/authorize}">
+    <input type="hidden" name="client_id" th:value="${clientId}">
+    <input type="hidden" name="state" th:value="${state}">
+
+    <div th:if="${!toApprove.isEmpty()}">
+      <p>次の権限を許可しますか。</p>
+      <div th:each="entry : ${toApprove}">
+        <label>
+          <input type="checkbox" name="scope" th:value="${entry.key}" checked>
+          <span th:text="${entry.value}">説明</span> (<code th:text="${entry.key}">scope</code>)
+        </label>
+      </div>
+    </div>
+
+    <div th:if="${!alreadyApproved.isEmpty()}">
+      <p>すでに許可済みの権限:</p>
+      <ul>
+        <li th:each="entry : ${alreadyApproved}">
+          <span th:text="${entry.value}">説明</span> (<code th:text="${entry.key}">scope</code>)
+        </li>
+      </ul>
+    </div>
+
+    <button type="submit">許可する</button>
+  </form>
+
+  <!-- 拒否する: scope を 1 つも送らない POST。認可サーバーはこれを access_denied として扱う -->
+  <form method="post" th:action="@{/oauth2/authorize}">
+    <input type="hidden" name="client_id" th:value="${clientId}">
+    <input type="hidden" name="state" th:value="${state}">
+    <button type="submit">拒否する</button>
+  </form>
+</body>
+</html>

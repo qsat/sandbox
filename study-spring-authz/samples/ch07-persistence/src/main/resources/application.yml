@@ -1,0 +1,16 @@
+server:
+  port: 9000
+
+spring:
+  datasource:
+    # ファイルモードの H2。target/ 配下に作るので、アプリを止めて再起動してもデータが残る。
+    # (mvn clean するとファイルごと消える。コミットされる場所には作らない)
+    url: jdbc:h2:file:./target/idp-db
+    username: sa
+    password: ""
+  flyway:
+    enabled: true
+
+logging:
+  level:
+    org.springframework.security: INFO
