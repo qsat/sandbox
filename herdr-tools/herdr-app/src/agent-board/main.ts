@@ -10,7 +10,6 @@ import { TITLE_BAR_HEIGHT } from "../shared/title-bar";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import type { Tag } from "@herdr-tools/utils/tag";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { COLLAPSED_KEY } from "@herdr-tools/tmux/sidebar-order";
 import { usageSegments } from "@herdr-tools/utils/usage-segments";
 import { boardRows, changeTargets, EMPTY_LIST, nextList, parseChanges, type ChangeAmount, keyActionFor, moveSelection, rowId, toggleCollapsed, wsArgsFor, type BoardAction, type BoardRow, type LiveTerminal, wsArgsForModCommand } from "./board";
 
@@ -182,7 +181,8 @@ export default class AgentBoard extends View {
     if (this.fetching) return;
     this.fetching = true;
     cx.spawn(async (cx) => {
-      const next = nextList(this.list, await execWs(["list", "--json"]));
+      const r = await execWs(["list", "--json"]);
+      const next = nextList(this.list, r);
       this.list = next.list;
       this.error = next.error;
       this.fetching = false;
