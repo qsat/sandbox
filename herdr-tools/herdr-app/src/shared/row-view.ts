@@ -45,6 +45,25 @@ export function hunkLink(id: string, text: string, tooltip: string, t: Theme, on
     .child(text);
 }
 
+/**
+ * 行の中で押すと外（GitHub など）を開く、長さの決まらない文字（題名）。幅が足りなければ末尾を省略する。
+ * マウスを重ねると下線を付け、行の開閉は起こさない
+ */
+export function titleLink(id: string, text: string, tooltip: string, onClick: (cx: Context) => void) {
+  return div()
+    .id(id)
+    .min_w(0)
+    .truncate()
+    .cursor_pointer()
+    .tooltip(tooltip)
+    .hover((s) => s.underline())
+    .on_click((_e, cx) => {
+      cx.stop_propagation();
+      onClick(cx);
+    })
+    .child(text);
+}
+
 /** 行の右端などに置く、アイコンだけのボタン。icon は mod の中の svg のパス（mods/<mod>/<name>.svg） */
 export function iconButton(id: string, icon: string, tooltip: string, t: Theme, onClick: (cx: Context) => void) {
   return div()

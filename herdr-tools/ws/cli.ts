@@ -16,7 +16,7 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
   ws new [<worktree>] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
                                                    エージェント起動。--here は今の端末で会話、--attach は agents ウィンドウへ移動
   ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
-  ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す
+  ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す（<agent> は id か名前）
   ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは止めない
   ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる（他の場所の会話ペインは移して集める）
   ws next [--prev] [--client <name> | --from-app] [--list]
@@ -27,7 +27,7 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
                                                    差分を hunk で開く。--commit なら hunk show <hash>、--pr なら GitHub のプルリクエスト全体（hunk gh pr）、--gh-commit なら GitHub のコミット（hunk gh commit）、--range ならブランチ間の差分（hunk diff <range>）、--against なら作業ツリーと <rev> の差分（hunk diff <rev>。未コミットも含む）、無ければ未コミットの変更（hunk diff）。--file のファイルへ移る。
                                                    hunk のセッションがあれば中身を入れ替え、無ければ tmux セッションの hunk ウィンドウで起動する（HUNK_BIN で実行ファイルを指定）
   ws edit <worktree> --file <path> [--client <name> | --from-app]
-                                                   ファイルを $EDITOR で開く。EDITOR は tmux のグローバルな環境（set-environment -g EDITOR）のもの。そのファイル専用の tmux ウィンドウで起動し、クライアントをそこへ移す（既にあれば移るだけ）
+                                                   ファイルを $EDITOR で開く。EDITOR は tmux のグローバルな環境（set-environment -g EDITOR）のもの。nvim なら tmux セッションごとに 1 つの edit ウィンドウの nvim に開かせ、そうでなければそのファイル専用のウィンドウで起動して、クライアントをそこへ移す
   ws pr <number> [<worktree>] [--no-go] [--client <name> | --from-app]
                                                    プルリクエストのブランチの worktree を用意する（無ければ本体の横に作り、あれば早送りできるときだけ最新にする。エージェントは起動しない）。そのあと tmux セッションへ移る（--no-go で移らない）
   ws changes [--json] <worktree>...               worktree ごとの変更量（ベースブランチから分かれた点と作業ツリーの差の +/− 行数。未コミット・追跡されていないファイルも含む）
@@ -148,7 +148,9 @@ async function main(argv: string[]) {
       const pane = str(p, "--pane") ?? process.env.TMUX_PANE;
       if (!pane) throw new Error("--pane '#{pane_id}' を渡してください（tmux の外からは使えません）");
       const maxRaw = str(p, "--max") ?? process.env.WS_PANES_MAX;
-      const r = await nav.openPanesForWorktreeOf(pane, { includeChildren: has(p, "-a", "--all"), max: maxRaw ? Number(maxRaw) : 8 });
+      const max = maxRaw ? Number(maxRaw) : 8;
+      if (!Number.isInteger(max) || max < 0) throw new Error(`--max（WS_PANES_MAX）には 0 以上の整数を指定してください: ${maxRaw}`);
+      const r = await nav.openPanesForWorktreeOf(pane, { includeChildren: has(p, "-a", "--all"), max });
       process.stdout.write(`ws panes: ${r.opened} 開いた / ${r.gathered} 集めた / ${r.alreadyOpen} 表示済み${r.overLimit ? ` / ${r.overLimit} 上限で省略` : ""}\n`);
       return 0;
     }
@@ -171,7 +173,6 @@ async function main(argv: string[]) {
       const home = process.env.HOME || homedir();
       const r = await nav.stepRows({
         sharedStatePath: join(process.env.HERDR_APP_HOME || join(home, ".config", "herdr-app"), "shared.json"),
-        recordPath: join(process.env.XDG_CACHE_HOME || join(home, ".cache"), "herdr-tools", "step-last.json"),
         prev: has(p, "--prev"), pane: str(p, "--pane"), client: str(p, "--client"), fromApp: goOpts.fromApp, listOnly: has(p, "--list") });
       if (goOpts.fromApp && r.message) process.stderr.write(r.message + "\n");
       if (has(p, "--list")) {

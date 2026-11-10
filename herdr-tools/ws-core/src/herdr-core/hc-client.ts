@@ -3,6 +3,32 @@ import type { HcTerminal } from "./hc-terminal";
 
 type Notification = { method: string; params?: unknown };
 
+/** 切れた理由として残す標準エラーの長さ（末尾だけ） */
+const STDERR_TAIL = 2000;
+
+/** ストリームの末尾だけを覚えながら最後まで読む（hc connect の標準エラーを溜め込まない） */
+async function tailOf(stream: ReadableStream<Uint8Array>) {
+  const decoder = new TextDecoder();
+  let tail = "";
+  try {
+    for await (const chunk of stream) tail = (tail + decoder.decode(chunk, { stream: true })).slice(-STDERR_TAIL);
+  } catch {}
+  return tail;
+}
+
+/** JSON-RPC の 1 行を読む。JSON でない行（hc が標準出力に混ぜた警告など）は捨て、接続は切らない */
+function parseMessage(line: string): any {
+  try {
+    return JSON.parse(line);
+  } catch {
+    return undefined;
+  }
+}
+
+function lastLine(text: string) {
+  return text.trim().split("\n").at(-1)?.trim() ?? "";
+}
+
 class HcConnection {
   private readonly proc: ReturnType<typeof Bun.spawn>;
   private nextId = 1;
@@ -10,11 +36,11 @@ class HcConnection {
   closed = false;
 
   constructor(bin: string, onNotification: (n: Notification) => void = () => {}) {
-    this.proc = Bun.spawn([bin, "connect"], { stdin: "pipe", stdout: "pipe", stderr: "ignore", env: withoutClaudeCodeSession(process.env) });
-    void this.readLines(onNotification);
+    this.proc = Bun.spawn([bin, "connect"], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: withoutClaudeCodeSession(process.env) });
+    void this.readLines(onNotification, tailOf(this.proc.stderr as ReadableStream<Uint8Array>));
   }
 
-  private async readLines(onNotification: (n: Notification) => void) {
+  private async readLines(onNotification: (n: Notification) => void, stderr: Promise<string>) {
     const decoder = new TextDecoder();
     let buf = "";
     try {
@@ -23,12 +49,15 @@ class HcConnection {
         for (let nl = buf.indexOf("\n"); nl >= 0; nl = buf.indexOf("\n")) {
           const line = buf.slice(0, nl).trim();
           buf = buf.slice(nl + 1);
-          if (line) this.dispatch(JSON.parse(line), onNotification);
+          const msg = line ? parseMessage(line) : undefined;
+          if (msg) this.dispatch(msg, onNotification);
         }
       }
     } catch {}
     this.closed = true;
-    for (const p of this.pending.values()) p.reject(new Error("hc connect closed"));
+    // hc connect が理由を標準エラーに出して終わったとき（herdr-core が動いていないなど）、その最後の行を添える
+    const reason = lastLine(await Promise.race([stderr, Bun.sleep(200).then(() => "")]));
+    for (const p of this.pending.values()) p.reject(new Error(reason ? `hc connect closed: ${reason}` : "hc connect closed"));
     this.pending.clear();
   }
 
@@ -45,9 +74,15 @@ class HcConnection {
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      const sink = this.proc.stdin as import("bun").FileSink;
-      sink.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
-      sink.flush();
+      // 書けない（hc connect が先に終わった）ときは EPIPE をそのまま出さず、読み取り側が理由を添えて reject するのに任せる
+      const giveUp = () => this.close();
+      try {
+        const sink = this.proc.stdin as import("bun").FileSink;
+        sink.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
+        void Promise.resolve(sink.flush()).catch(giveUp);
+      } catch {
+        giveUp();
+      }
     });
   }
 

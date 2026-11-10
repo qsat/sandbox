@@ -44,7 +44,8 @@ export class PrWorktrees {
     if (localBranch) {
       await this.git.ok(main, ["worktree", "add", "--quiet", path, pr.head]);
       const updated = await this.update(path, remote);
-      // 手元のブランチで作ったうえで、早送りできなかった・必要なかったときも「作った」と伝える（更新しなかった理由は別に出す）
+      // 手元のブランチで作り、origin に追いつけた（早送りした・もう同じだった）ときは「作った」と伝える。
+      // 手元のブランチに push 前のコミットがあって追いつけなかったときは、作ったことより、origin と違うという理由のほうを伝える
       return updated.kind === "updated" || updated.kind === "up-to-date" ? { kind: "created", path, branch: pr.head } : updated;
     }
     await this.git.ok(main, ["worktree", "add", "--quiet", "--track", "-b", pr.head, path, remote]);

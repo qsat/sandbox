@@ -1,4 +1,12 @@
-export type AgentStatus = "working" | "blocked" | "idle" | "done" | "error" | "unknown";
+/** エージェントが名乗る状態。上ほど先に注意が要る（一覧の並び順）。名乗っていない・知らない状態は unknown */
+const ATTENTION_ORDER = ["blocked", "error", "idle", "working", "done", "unknown"] as const;
+
+export type AgentStatus = (typeof ATTENTION_ORDER)[number];
+
+/** 外から来た状態の文字（herdr-core の status.state、Herdr app の端末の status）をドメインの状態にする。知らない値は unknown */
+export function toAgentStatus(state: string | null | undefined): AgentStatus {
+  return (ATTENTION_ORDER as readonly string[]).includes(state ?? "") ? (state as AgentStatus) : "unknown";
+}
 
 export interface AgentRecord {
   id: string;
@@ -34,8 +42,6 @@ export function toAgentNode(a: AgentRecord, worktreeExists: boolean): AgentNode 
 export function agentLocation(a: AgentRecord) {
   return a.recordedWorktree || a.cwd;
 }
-
-const ATTENTION_ORDER: AgentStatus[] = ["blocked", "error", "idle", "working", "done", "unknown"];
 
 export function attentionRank(a: { status: AgentStatus }) {
   return ATTENTION_ORDER.indexOf(a.status);

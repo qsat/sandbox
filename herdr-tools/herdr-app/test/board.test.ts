@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
-import { boardRows, changeTargets, keyActionFor, parseChanges, moveSelection, rowId, wsArgsFor, wsArgsForModCommand, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
+import { boardRows, changeTargets, keyActionFor, nextList, parseChanges, moveSelection, rowId, wsArgsFor, wsArgsForModCommand, parseList, toggleCollapsed, type BoardRow } from "../src/agent-board/board";
 
 const agent = (p: { id: string; name: string; status: "working" | "idle"; resumable: boolean; attached: boolean; current?: boolean; contextUsedPercentage?: number }) => ({
   contextUsedPercentage: p.contextUsedPercentage,
@@ -195,6 +195,19 @@ describe("moveSelection（j / k で上下に動かす）", () => {
   });
   test("選んでいた行が消えたら、選び直す", () => expect(moveSelection(rows, "agent:gone", 1)).toBe(ids[0]!));
   test("選べる行が無ければ null", () => expect(moveSelection([], null, 1)).toBeNull());
+});
+
+describe("nextList（ws list --json の結果から、次に表示する一覧を決める）", () => {
+  const previous = parseList(JSON.stringify({ usage: {}, workspaces: [{ path: "/g/o/api", name: "api", worktrees: [] }] }));
+  test("読めたら、その一覧に入れ替える", () => {
+    const stdout = JSON.stringify({ usage: {}, workspaces: [] });
+    expect(nextList(previous, { ok: true, stdout, error: "" })).toEqual({ list: { usage: {}, workspaces: [] }, error: "" });
+  });
+  test("読めなかったら前の一覧のままにして、理由を返す（1 回の失敗で一覧を空にしない）", () => {
+    const r = nextList(previous, { ok: false, stdout: "", error: "ws: hc connect closed" });
+    expect(r.list).toBe(previous);
+    expect(r.error).toBe("ws: hc connect closed");
+  });
 });
 
 describe("keyActionFor（選んだ行へのキー操作）", () => {

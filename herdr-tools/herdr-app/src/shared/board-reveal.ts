@@ -1,7 +1,7 @@
 // agent-board と workspace-picker が Herdr app の共有値（shared / setShared）でやりとりするときの名前と形。I/O なし
 
-/** agent-board で畳んだ workspace のパスの一覧 */
-export const COLLAPSED_KEY = "agent-board.collapsed";
+/** agent-board で畳んだ workspace のパスの一覧のキー。ws step も同じ値を読むので、定義は sidebar-order.ts の 1 か所に置く */
+export { COLLAPSED_KEY } from "@herdr-tools/tmux/sidebar-order";
 
 /** workspace-picker が agent-board に「この worktree の行を選んで」と頼む値 */
 export const REVEAL_KEY = "agent-board.reveal";

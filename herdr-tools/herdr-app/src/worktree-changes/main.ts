@@ -1,6 +1,7 @@
 import { View, div, type AsyncContext, type Context, type FocusHandle } from "gpui-kit";
 import { exec, theme } from "herdr";
 import { readCurrentTarget } from "../shared/current-target";
+import { shownError } from "../shared/errors";
 import { footerBar, footerButton } from "../shared/footer-bar";
 import { branchLabel, compareRef, findBaseRef } from "../shared/base-ref";
 import { HEAD_ARGS, readLocalFiles, readRangeFiles, type FileChange } from "../shared/local-changes";
@@ -25,14 +26,19 @@ export default class WorktreeChanges extends View {
   files!: FileChange[];
   mode!: ViewMode;
   range!: ChangeRange;
-  /** ベースブランチ（origin/main など）。まだ調べていなければ null */
+  /** ベースブランチ（origin/main など）。分からなければ null */
   baseRef!: string | null;
+  /** 今の worktree のベースブランチを調べ終えたか（見つからなかったときも true。調べ直すのは worktree が変わったときと、ベースからの範囲を選んだとき） */
+  baseKnown!: boolean;
   /** 範囲 unpushed・base で、比べる相手のブランチが無い（上流のブランチ・ベースブランチが無い） */
   noCompare!: boolean;
   /** 閉じているフォルダーのパス */
   collapsed!: Set<string>;
   selected!: string | null;
+  /** 読み直し（ws list・git）の失敗。読み直すたびに入れ替わる */
   error!: string;
+  /** 操作（ファイルを $EDITOR で開く）の失敗。読み直しでは消さず、次の操作まで残す */
+  actionError!: string;
   fetching!: boolean;
   dirty!: boolean;
   snapshot!: string;
@@ -44,10 +50,12 @@ export default class WorktreeChanges extends View {
     this.mode = "tree";
     this.range = "head";
     this.baseRef = null;
+    this.baseKnown = false;
     this.noCompare = false;
     this.collapsed = new Set();
     this.selected = null;
     this.error = "";
+    this.actionError = "";
     this.fetching = false;
     this.dirty = false;
     this.snapshot = "";
@@ -102,6 +110,7 @@ export default class WorktreeChanges extends View {
     if (next?.path !== this.target?.path) {
       this.files = [];
       this.baseRef = null;
+      this.baseKnown = false;
       this.noCompare = false;
       this.collapsed = new Set();
       this.selected = null;
@@ -122,7 +131,11 @@ export default class WorktreeChanges extends View {
     if (range === "head") {
       files = await readLocalFiles(git, hasHead);
     } else {
-      if (range === "base" && this.baseRef === null) this.baseRef = await findBaseRef(git, (args) => exec("gh", args, { cwd: root }));
+      // 見つからなくても調べ終えたことにして、読み直しのたびに gh（GitHub への問い合わせ）を呼ばない
+      if (range === "base" && !this.baseKnown) {
+        this.baseRef = await findBaseRef(git, (args) => exec("gh", args, { cwd: root }));
+        this.baseKnown = true;
+      }
       const ref = compareRef(range, this.baseRef);
       files = hasHead && ref ? await readRangeFiles(git, ref) : null;
     }
@@ -138,14 +151,14 @@ export default class WorktreeChanges extends View {
     this.selected = row.id;
     const blocked = editBlockedReason(row.file);
     if (blocked) {
-      this.error = blocked;
+      this.actionError = blocked;
       cx.notify();
       return;
     }
     cx.notify();
     cx.spawn(
       async (cx) => {
-        this.error = (await execWs(wsEditArgs(root, row.file))).error;
+        this.actionError = (await execWs(wsEditArgs(root, row.file))).error;
         cx.notify();
       },
       { owner: this },
@@ -207,7 +220,11 @@ export default class WorktreeChanges extends View {
     this.files = [];
     this.noCompare = false;
     this.error = "";
-    if (range === "base") this.baseRef = null;
+    this.actionError = "";
+    if (range === "base") {
+      this.baseRef = null;
+      this.baseKnown = false;
+    }
     cx.notify();
     this.refresh(cx);
   }
@@ -265,6 +282,7 @@ export default class WorktreeChanges extends View {
   render() {
     const t = theme() as unknown as Theme;
     const rows = changeRows(this.files, this.mode, this.collapsed);
+    const error = shownError(this.error, this.actionError);
     const body = div()
       .flex()
       .flex_col()
@@ -285,7 +303,7 @@ export default class WorktreeChanges extends View {
               .when(this.files.length === 0 && this.error === "", (el) => el.child(label(emptyMessage(this.range, this.noCompare, this.baseRef ? branchLabel(this.baseRef) : null), t.muted)))
               .children(rows.map((r) => this.renderRow(r, t))),
           )
-          .when(this.error !== "", (el) => el.child(label(this.error, t.ansi1))),
+          .when(error !== "", (el) => el.child(label(error, t.ansi1))),
       );
     return div()
       .id("worktree-changes")

@@ -55,6 +55,9 @@ describe("toAgentRecord（herdr-core の言葉 → ドメインの言葉）", ()
   test("名乗っていない状態は unknown、名前が無ければアドレス", () => {
     expect(toAgentRecord({ ...raw, status: null, name: null }, L)).toMatchObject({ status: "unknown", name: "t7" });
   });
+  test("知らない状態の文字は unknown にする（並び順の先頭に紛れ込ませない）", () => {
+    expect(toAgentRecord({ ...raw, status: { state: "compacting" } }, L).status).toBe("unknown");
+  });
   test("isShell", () => {
     expect(isShell("/bin/bash")).toBe(true);
     expect(isShell("node")).toBe(false);

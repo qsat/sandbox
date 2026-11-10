@@ -2,6 +2,7 @@ import { View, div, type AsyncContext, type Context, type Element, type FocusHan
 import { exec, theme, watchFolder } from "herdr";
 import { BRANCH_COLOR } from "../shared/colors";
 import { readCurrentTarget } from "../shared/current-target";
+import { shownError } from "../shared/errors";
 import { relativeTime } from "../shared/relative-time";
 import { hunkLink, iconButton, label, rowBase, statusColor, targetHeader, type Theme } from "../shared/row-view";
 import { moveSelection } from "../shared/selection";
@@ -29,11 +30,16 @@ export default class CommitHistory extends View {
   noUpstream!: boolean;
   /** ベースブランチ（origin/main など）。分からなければ null */
   baseRef!: string | null;
+  /** 今の worktree のベースブランチを調べ終えたか（見つからなかったときも true。調べ直すのは worktree が変わったときと、ベースからの範囲を選んだとき） */
+  baseKnown!: boolean;
   local!: FileChange[];
   filesOf!: Map<string, FileChange[]>;
   expanded!: string | null;
   selected!: string | null;
+  /** 読み直し（ws list・git）の失敗。読み直すたびに入れ替わる */
   error!: string;
+  /** 操作（コミットを開く・hunk で開く）の失敗。読み直しでは消さず、次の操作まで残す */
+  actionError!: string;
   fetching!: boolean;
   dirty!: boolean;
   snapshot!: string;
@@ -47,11 +53,13 @@ export default class CommitHistory extends View {
     this.range = "all";
     this.noUpstream = false;
     this.baseRef = null;
+    this.baseKnown = false;
     this.local = [];
     this.filesOf = new Map();
     this.expanded = null;
     this.selected = null;
     this.error = "";
+    this.actionError = "";
     this.fetching = false;
     this.dirty = false;
     this.snapshot = "";
@@ -107,6 +115,7 @@ export default class CommitHistory extends View {
     if (next?.path !== this.target?.path) {
       this.gitDirs = [];
       this.baseRef = null;
+      this.baseKnown = false;
       this.commits = [];
       this.local = [];
       this.filesOf = new Map();
@@ -129,7 +138,9 @@ export default class CommitHistory extends View {
       this.watchGit(root, this.gitDirs, cx);
     }
     const range = this.range;
-    if (this.baseRef === null) this.baseRef = await findBaseRef((args) => this.git(root, args), (args) => exec("gh", args, { cwd: root }));
+    // ベースブランチは gh に問い合わせる（GitHub への往復）。ベースからの範囲のとき以外はコミットの一覧を待たせず、分かったら題名の帯の名前に反映する
+    const lookup = this.baseKnown ? null : this.lookUpBase(root);
+    if (range === "base") await lookup;
     const args = logArgs(range, this.baseRef);
     const head = await this.git(root, HEAD_ARGS);
     const hasHead = head.code === 0;
@@ -137,11 +148,23 @@ export default class CommitHistory extends View {
       args ? this.git(root, args) : Promise.resolve({ code: 1, stdout: "", stderr: "" }),
       readLocalFiles((a) => this.git(root, a), hasHead),
     ]);
-    if (this.target?.path !== root || this.range !== range) return;
-    this.commits = hasHead && log.code === 0 ? parseLog(log.stdout) : [];
-    this.noUpstream = range === "unpushed" && hasHead && log.code !== 0;
-    this.local = local;
-    if (this.expanded === LOCAL_ID && this.local.length === 0) this.expanded = null;
+    if (this.target?.path === root && this.range === range) {
+      this.commits = hasHead && log.code === 0 ? parseLog(log.stdout) : [];
+      this.noUpstream = range === "unpushed" && hasHead && log.code !== 0;
+      this.local = local;
+      if (this.expanded === LOCAL_ID && this.local.length === 0) this.expanded = null;
+      // ベースブランチをまだ調べているなら、読めたコミットを先に出す
+      if (lookup && range !== "base") cx.notify();
+    }
+    await lookup;
+  }
+
+  /** ベースブランチを調べて覚える。見つからなくても調べ終えたことにして、読み直しのたびに gh を呼ばない */
+  async lookUpBase(root: string) {
+    const found = await findBaseRef((args) => this.git(root, args), (args) => exec("gh", args, { cwd: root })).catch(() => null);
+    if (this.target?.path !== root) return;
+    this.baseRef = found;
+    this.baseKnown = true;
   }
 
   /**
@@ -184,10 +207,10 @@ export default class CommitHistory extends View {
         try {
           const [names, stats] = await Promise.all([this.git(root, showFilesArgs(hash, "name-status")), this.git(root, showFilesArgs(hash, "numstat"))]);
           if (this.target?.path !== root) return;
-          if (names.code !== 0) this.error = names.stderr.trim();
-          else this.filesOf.set(hash, commitFiles(names.stdout, stats.stdout));
+          this.actionError = names.code !== 0 ? names.stderr.trim() || `git show: exit ${names.code}` : "";
+          if (names.code === 0) this.filesOf.set(hash, commitFiles(names.stdout, stats.stdout));
         } catch (e) {
-          this.error = String((e as Error)?.message ?? e);
+          this.actionError = String((e as Error)?.message ?? e);
         }
         cx.notify();
       },
@@ -247,13 +270,13 @@ export default class CommitHistory extends View {
           const base = await this.git(root, mergeBaseArgs(ref));
           const hash = base.stdout.trim();
           if (base.code !== 0 || !hash) {
-            this.error = (base.stderr.trim() || `git merge-base: exit ${base.code}`);
+            this.actionError = base.stderr.trim() || `git merge-base: exit ${base.code}`;
             cx.notify();
             return;
           }
           if (this.target?.path === root) this.execHunk(wsHunkAgainstArgs(root, hash), cx);
         } catch (e) {
-          this.error = String((e as Error)?.message ?? e);
+          this.actionError = String((e as Error)?.message ?? e);
           cx.notify();
         }
       },
@@ -265,7 +288,7 @@ export default class CommitHistory extends View {
     cx.notify();
     cx.spawn(
       async (cx) => {
-        this.error = (await execWs(args)).error;
+        this.actionError = (await execWs(args)).error;
         cx.notify();
       },
       { owner: this },
@@ -370,7 +393,10 @@ export default class CommitHistory extends View {
     this.commits = [];
     this.noUpstream = false;
     // ベースは選ぶたびに調べ直す（mod を開いた後に作ったプルリクエストの base も拾う）
-    if (range === "base") this.baseRef = null;
+    if (range === "base") {
+      this.baseRef = null;
+      this.baseKnown = false;
+    }
     if (this.expanded !== LOCAL_ID) this.expanded = null;
     cx.notify();
     this.refresh(cx);
@@ -386,6 +412,7 @@ export default class CommitHistory extends View {
     const t = theme() as unknown as Theme;
     const rows = visibleRows(this.commits, this.local, this.expanded, this.filesOf);
     const now = Math.floor(Date.now() / 1000);
+    const error = shownError(this.error, this.actionError);
     const body = div()
       .flex()
       .flex_col()
@@ -405,7 +432,7 @@ export default class CommitHistory extends View {
               .when(this.commits.length === 0 && this.error === "", (el) => el.child(label(this.emptyMessage(), t.muted)))
               .children(rows.map((r) => this.renderRow(r, t, now))),
           )
-          .when(this.error !== "", (el) => el.child(label(this.error, t.ansi1))),
+          .when(error !== "", (el) => el.child(label(error, t.ansi1))),
       );
     return div()
       .id("commit-history")

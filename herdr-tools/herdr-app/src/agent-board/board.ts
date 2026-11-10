@@ -8,6 +8,8 @@ import { worktreeTags } from "@herdr-tools/utils/worktree-tags";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
 import { sidebarItems, type LiveTerminal, type SidebarItem } from "@herdr-tools/tmux/sidebar-order";
 
+import { moveSelection as moveSelectionIn } from "../shared/selection";
+import { parseList } from "../shared/ws-list";
 import { wsNewArgs } from "../shared/ws-new";
 
 export { WS, EMPTY_LIST, parseList } from "../shared/ws-list";
@@ -65,12 +67,19 @@ export function rowId(row: BoardRow) {
   return `${row.kind}:${row.key}`;
 }
 
+/** j / k で選ぶ行を動かす。workspace の見出しは選ばない */
 export function moveSelection(rows: BoardRow[], current: string | null, delta: 1 | -1) {
-  const selectable = rows.filter((r) => r.kind !== "workspace").map(rowId);
-  if (selectable.length === 0) return null;
-  const i = current ? selectable.indexOf(current) : -1;
-  if (i < 0) return (delta === 1 ? selectable[0] : selectable.at(-1)) ?? null;
-  return selectable[Math.min(selectable.length - 1, Math.max(0, i + delta))] ?? null;
+  const selectable = rows.filter((r) => r.kind !== "workspace").map((r) => ({ id: rowId(r) }));
+  return moveSelectionIn(selectable, current, delta);
+}
+
+/**
+ * `ws list --json` の結果から、次に表示する一覧を決める。
+ * 読めなかったとき（herdr-core に一時的につながらないなど）は前の一覧のままにして、理由だけを返す。
+ * 2 秒ごとに読み直すので、1 回の失敗で一覧を空にしない（選んでいる行やスクロールの位置も保つ）
+ */
+export function nextList(previous: ListedTree, r: { ok: boolean; stdout: string; error: string }) {
+  return { list: r.ok ? parseList(r.stdout) : previous, error: r.error };
 }
 
 export function wsArgsFor(row: BoardRow, action: BoardAction): string[] | null {

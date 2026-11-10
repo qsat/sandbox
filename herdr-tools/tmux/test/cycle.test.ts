@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildTree, type AgentRecord, type PathInspection } from "@herdr-tools/ws-core";
-import { continuingRecord, CYCLE_BURST_MS, cycleCandidates, decideCurrentPane, inRecordedOrder, MESSAGE_WHEN_NO_CANDIDATE, nextCandidate, prevCandidate } from "../src/plans/cycle";
+import { chooseCycleTarget, continuingRecord, CYCLE_BURST_MS, cycleCandidates, decideCurrentPane, inRecordedOrder, MESSAGE_WHEN_NO_CANDIDATE, nextCandidate, prevCandidate } from "../src/plans/cycle";
 
 const G = "/Users/me/ghq/github.com/o";
 const API = `${G}/api`;
@@ -107,5 +107,30 @@ describe("続けて押したときと、間が空いたとき", () => {
   test("回り直すときは、前へは列の先頭・後ろへは列の最後", () => {
     expect(nextCandidate(c, undefined)?.agent.id).toBe("b3");
     expect(prevCandidate(c, undefined)?.agent.id).toBe("i1");
+  });
+});
+
+describe("次に移るエージェントと、記録する列（chooseCycleTarget）", () => {
+  const record = { atMs: 10_000, order: ["d2", "gone", "b3", "i1"], lastId: "b3" };
+  const picked = (r: typeof record | null, prev: boolean) => {
+    const { list, target } = chooseCycleTarget(c, r, prev);
+    return { list: list.map((x) => x.agent.id), target: target?.agent.id };
+  };
+  test("続けて押している間は、前回の列の順のまま前回移った先の次・前へ進む", () => {
+    expect(picked(record, false)).toEqual({ list: ["d2", "b3", "i1"], target: "i1" });
+    expect(picked(record, true)).toEqual({ list: ["d2", "b3", "i1"], target: "d2" });
+  });
+  test("記録が無ければ（間が空いた）、今の列の端から回り直す", () => {
+    expect(picked(null, false)).toEqual({ list: ids, target: "b3" });
+    expect(picked(null, true)).toEqual({ list: ids, target: "i1" });
+  });
+  test("前回の列のエージェントが 1 つも候補に残っていなければ、今の列で端から回り直す（候補があるのに「ありません」にしない）", () => {
+    const stale = { atMs: 10_000, order: ["work", "gone"], lastId: "work" };
+    expect(picked(stale, false)).toEqual({ list: ids, target: "b3" });
+    expect(picked(stale, true)).toEqual({ list: ids, target: "i1" });
+  });
+  test("候補が無ければ移る先も無い", () => {
+    expect(chooseCycleTarget([], record, false)).toEqual({ list: [], target: undefined });
+    expect(chooseCycleTarget([], null, true)).toEqual({ list: [], target: undefined });
   });
 });
