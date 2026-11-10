@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { PR_LIST_ARGS, ghFailureMessage, parsePrCommits, parsePrList, prCommitsArgs, type PrCommit, type PullRequest } from "../src/pull-requests/gh";
+import { PR_LIST_ARGS, ghFailureMessage, parsePrCommits, parsePrList, prCommitsArgs, type PrCommit, type PullRequest, openInBrowserCommand } from "../src/pull-requests/gh";
 import { visibleRows } from "../src/pull-requests/rows";
 import { wsPrArgs } from "../src/pull-requests/ws-pr";
 import { wsHunkArgs, wsHunkGithubCommitArgs, wsHunkPrArgs, wsHunkPrCommitArgs } from "../src/shared/ws-hunk";
@@ -92,4 +92,16 @@ describe("ws hunk へ渡す引数（GitHub）", () => {
 
 describe("ws pr の引数", () => {
   test("プルリクエストの番号と worktree を渡し、Herdr app から呼んだ印を付ける", () => expect(wsPrArgs("/w", 55)).toEqual(["pr", "55", "/w", "--from-app"]));
+});
+
+describe("openInBrowserCommand（題名を押して GitHub で開く）", () => {
+  test("url が https:// なら、macOS の open で開く", () => {
+    expect(openInBrowserCommand({ url: "https://github.com/o/api/pull/7" })).toEqual(["open", ["https://github.com/o/api/pull/7"]]);
+  });
+  test("url が無い・https でない・空白を含むときは開かない（open にファイルやオプションとして渡さない）", () => {
+    expect(openInBrowserCommand({ url: "" })).toBeNull();
+    expect(openInBrowserCommand({ url: "-a Calculator" })).toBeNull();
+    expect(openInBrowserCommand({ url: "file:///etc/passwd" })).toBeNull();
+    expect(openInBrowserCommand({ url: "https://github.com/o/api/pull/7 -a Calculator" })).toBeNull();
+  });
 });

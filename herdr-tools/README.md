@@ -283,7 +283,7 @@ tmux で今いるペインの worktree のリポジトリについて、開い�
 | --- | --- | --- |
 | 題名の帯 | プルリクエストのアイコン、「Pull requests」、件数の枠（`N PRs`） | — |
 | 先頭の行 | worktree（workspace 名とブランチ） | — |
-| プルリクエスト（`gh pr list --state open --limit 30`。今のブランチのものを先頭に置き `[このブランチ]` の印を付ける） | `#番号`、題名、下書きなら「下書き」の印、`head → base`、作者、相対的な更新日時、右端に worktree のアイコン（フォークのものには出さない） | `#番号` を押すと、プルリクエスト全体を hunk で開く（`ws hunk --pr`）。worktree のアイコンを押すと、そのブランチの worktree を用意して移る（`ws pr`）。行のほかの部分を押す（または `Enter`）と、コミットの一覧を開閉する |
+| プルリクエスト（`gh pr list --state open --limit 30`。今のブランチのものを先頭に置き `[このブランチ]` の印を付ける） | 2 行で出す。1 行目に `#番号`、題名、右端に worktree のアイコン（フォークのものには出さない）。2 行目に、下書きなら「下書き」の印、`head → base`、作者、相対的な更新日時 | 題名を押すと、プルリクエストを GitHub（ブラウザー）で開く（macOS の `open <url>`。url は `gh pr list` の `url`）。`#番号` を押すと、プルリクエスト全体を hunk で開く（`ws hunk --pr`）。worktree のアイコンを押すと、そのブランチの worktree を用意して移る（`ws pr`）。行のほかの部分（題名の右の空きと 2 行目）を押す（または `Enter`）と、コミットの一覧を開閉する |
 | プルリクエストの下のコミット（`gh pr view <番号> --json commits`。新しい順） | 短いハッシュ、件名、作者、相対的な日時 | 短いハッシュを押す（または選んで `Enter`）と、そのコミットの差分を hunk で開く。手元にあれば（`git cat-file -e <sha>^{commit}`）`ws hunk --commit`（`hunk show`）、無ければ `ws hunk --gh-commit`（`hunk gh commit`） |
 
 - キー（mod を一度クリックしてフォーカスを渡してから）: `j` / `k`（↓ / ↑）で行を選ぶ

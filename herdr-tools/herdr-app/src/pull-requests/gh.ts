@@ -87,6 +87,14 @@ export function parsePrCommits(stdout: string): PrCommit[] {
     .reverse();
 }
 
+/**
+ * プルリクエストを GitHub（ブラウザー）で開くコマンド（macOS の open）。
+ * url が https:// で始まる 1 語でないとき（gh が url を返さなかったなど）は null（題名を押せなくする）
+ */
+export function openInBrowserCommand(pr: { url: string }): [string, string[]] | null {
+  return /^https:\/\/\S+$/.test(pr.url) ? ["open", [pr.url]] : null;
+}
+
 export const NO_PULL_REQUESTS_MESSAGE = "No open pull requests";
 
 /**

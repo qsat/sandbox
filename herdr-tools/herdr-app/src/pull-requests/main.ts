@@ -4,14 +4,14 @@ import { BRANCH_COLOR } from "../shared/colors";
 import { readCurrentTarget } from "../shared/current-target";
 import { shownError } from "../shared/errors";
 import { relativeTime } from "../shared/relative-time";
-import { ROW_HEIGHT, hunkLink, iconButton, label, rowBase, targetHeader, type Theme } from "../shared/row-view";
+import { ROW_HEIGHT, hunkLink, iconButton, label, rowBase, targetHeader, titleLink, type Theme } from "../shared/row-view";
 import { moveSelection } from "../shared/selection";
 import type { Target } from "../shared/target";
 import { stackTitleBar } from "../shared/stack-tabs";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import { wsHunkPrArgs, wsHunkPrCommitArgs } from "../shared/ws-hunk";
 import { execWs } from "../shared/ws-exec";
-import { NO_PULL_REQUESTS_MESSAGE, PR_LIST_ARGS, ghFailureMessage, parsePrCommits, parsePrList, prCommitsArgs, type PrCommit, type PullRequest } from "./gh";
+import { NO_PULL_REQUESTS_MESSAGE, PR_LIST_ARGS, ghFailureMessage, openInBrowserCommand, parsePrCommits, parsePrList, prCommitsArgs, type PrCommit, type PullRequest } from "./gh";
 import { visibleRows, type Row } from "./rows";
 import { wsPrArgs } from "./ws-pr";
 
@@ -20,6 +20,9 @@ const FOLLOW_MS = 5000;
 /** gh（GitHub への問い合わせ）の読み直しの間隔 */
 const PR_REFRESH_MS = 60000;
 const NO_TARGET_MESSAGE = "Select a tmux pane in a worktree";
+/** プルリクエストの行の 2 行目（ブランチ・作者・日時）の高さと、1 行目の #番号 にそろえる左の余白 */
+const PR_DETAIL_HEIGHT = 16;
+const PR_DETAIL_INDENT = 18;
 
 export default class PullRequests extends View {
   target!: Target | null;
@@ -219,6 +222,26 @@ export default class PullRequests extends View {
     );
   }
 
+  /** プルリクエストを GitHub（ブラウザー）で開く。行は開閉しない */
+  openInGithub(row: Extract<Row, { kind: "pr" }>, cx: Context) {
+    const command = openInBrowserCommand(row.pr);
+    if (!command) return;
+    this.selected = row.id;
+    cx.notify();
+    cx.spawn(
+      async (cx) => {
+        try {
+          const r = await exec(command[0], command[1]);
+          this.actionError = r.code === 0 ? "" : r.stderr.trim() || `${command[0]}: exit ${r.code}`;
+        } catch (e) {
+          this.actionError = String((e as Error)?.message ?? e);
+        }
+        cx.notify();
+      },
+      { owner: this },
+    );
+  }
+
   /** プルリクエスト全体の差分を hunk で開く（hunk gh pr） */
   openPrInHunk(row: Extract<Row, { kind: "pr" }>, cx: Context) {
     this.runHunk(row.id, async (root) => wsHunkPrArgs(root, row.pr.number), cx);
@@ -259,16 +282,21 @@ export default class PullRequests extends View {
     switch (row.kind) {
       case "pr": {
         const p = row.pr;
-        return rowBase(row.id, selected, t, 4)
-          .on_click((_e, cx) => this.toggle(row, cx))
+        // 題名は、GitHub の url が分かるときだけ押せる（押すとブラウザーで開く）
+        const title = openInBrowserCommand(p)
+          ? titleLink(`${row.id}:title`, p.title, "GitHub で開く", (cx) => this.openInGithub(row, cx))
+          : div().min_w(0).truncate().child(p.title);
+        // 1 行目: 開閉の印・#番号・題名（右端に worktree のアイコン）。題名の右の空きを押すと、行を開閉する
+        const head = div()
+          .flex()
+          .items_center()
+          .gap(8)
+          .min_h(ROW_HEIGHT)
           .child(label(row.open ? "▾" : "▸", t.muted))
           .child(hunkLink(`${row.id}:number`, `#${p.number}`, "プルリクエスト全体を hunk で開く", t, (cx) => this.openPrInHunk(row, cx)))
           .when(row.current, (el) => el.child(div().flex_none().text_size(11).text_color(BRANCH_COLOR).child("[このブランチ]")))
-          .child(div().flex_1().min_w(0).truncate().child(p.title))
-          .when(p.isDraft, (el) => el.child(div().flex_none().px(4).rounded(4).border_1().border_color(t.border).text_size(10).text_color(t.blocked).child("下書き")))
-          .child(div().flex_none().text_size(11).text_color(t.muted).child(`${p.headRef} → ${p.baseRef}`))
-          .child(div().flex_none().text_size(11).text_color(t.muted).child(p.author || "作者不明"))
-          .child(div().flex_none().text_size(11).text_color(t.dim).child(relativeTime(now, p.updatedAt)))
+          .child(title)
+          .child(div().flex_1())
           .when(!p.crossRepository, (el) =>
             el.child(
               iconButton(`${row.id}:worktree`, "mods/pull-requests/worktree.svg", "このブランチの worktree を用意して移る（無ければ作り、あれば最新にする。エージェントは起動しない）", t, (cx) =>
@@ -276,6 +304,22 @@ export default class PullRequests extends View {
               ),
             ),
           );
+        // 2 行目: 下書きの印・ブランチ・作者・更新日時
+        const detail = div()
+          .flex()
+          .items_center()
+          .gap(8)
+          .min_h(PR_DETAIL_HEIGHT)
+          .pl(PR_DETAIL_INDENT)
+          .text_size(11)
+          .when(p.isDraft, (el) => el.child(div().flex_none().px(4).rounded(4).border_1().border_color(t.border).text_size(10).text_color(t.blocked).child("下書き")))
+          .child(div().min_w(0).truncate().text_color(t.muted).child(`${p.headRef} → ${p.baseRef}`))
+          .child(div().flex_none().text_color(t.muted).child(p.author || "作者不明"))
+          .child(div().flex_none().text_color(t.dim).child(relativeTime(now, p.updatedAt)));
+        return rowBase(row.id, selected, t, 4)
+          .pb(3)
+          .on_click((_e, cx) => this.toggle(row, cx))
+          .child(div().flex().flex_col().flex_1().min_w(0).child(head).child(detail));
       }
       case "commit": {
         const c = row.commit;
