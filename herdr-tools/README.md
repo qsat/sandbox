@@ -11,14 +11,14 @@ herdr-tools/
 ├── utils/src/                    依存なしの共通関数（1ファイル1関数）
 ├── ws-core/src/                  ドメインとユースケース。herdr-core と ghq / git は知っていて、クライアントは知らない
 │   ├── domain/
-│   │   ├── agent.ts              AgentRecord → AgentNode、再開できるか、注意が要る順
+│   │   ├── agent.ts              AgentRecord → AgentNode、状態の語彙（知らない状態は unknown）、再開できるか、注意が要る順
 │   │   ├── tree.ts               Workspace > Worktree > Agent の木
 │   │   ├── locate.ts             パス・id から木の場所を引く
 │   │   ├── change-amount.ts      worktree の変更量（ws changes）の数え方
-│   │   └── pr-worktree.ts        プルリクエストの worktree を作るか・最新にするか（ws pr）の判断
-│   ├── ports.ts                  AgentRuntime / WorkspaceSource（単体テストで偽物に差し替える継ぎ目）
-│   ├── ws-core.ts                WsCore: snapshot / resume / startAgent / stopAgent / recordClaudeSessionFromHook / removeAgents
+│   │   ├── pr-worktree.ts        プルリクエストの worktree を作るか・最新にするか（ws pr）の判断
 │   │   └── usage.ts              Claude の利用上限（5h / 週）の枠、期限切れの扱い
+│   ├── ports.ts                  AgentRuntime / WorkspaceSource / UsageStore（単体テストで偽物に差し替える継ぎ目）
+│   ├── ws-core.ts                WsCore: snapshot / resume / startAgent / stopAgent / recordClaudeSessionFromHook / removeAgents / 利用上限と context 使用率の記録
 │   ├── claude-code.ts            会話の再開コマンド、SessionStart hook と statusLine の入力
 │   ├── ghq-workspace-source.ts   WorkspaceSource の実装（ghq と git worktree list で worktree を見つける）
 │   ├── git-cli.ts                git の呼び出し（-C <worktree>、.git に書かない読み取り、失敗を例外にする）
@@ -28,12 +28,12 @@ herdr-tools/
 ├── tmux/src/                     クライアント: tmux でエージェントへ移動し、会話する
 │   ├── facts.ts                  tmux のセッション・ペイン・クライアント
 │   ├── tmux-index.ts             木の worktree → セッション、エージェント → 会話ペイン
-│   ├── plans/                    go（ws go の判断フロー）/ panes / prune / hunk（ws hunk の計画）。I/O なし
+│   ├── plans/                    go（ws go の判断フロー）/ cycle（ws next の列と次に移る先）/ panes / prune / hunk（ws hunk の計画）。I/O なし
 │   ├── navigator.ts              計画を TmuxServer と WsCore で実行する
 │   ├── tmux-server.ts, ghostty.ts, hunk-cli.ts（hunk の daemon への問い合わせ）
 │   ├── list-json.ts              ws list --json の形（ListedTree）
-│   ├── sidebar-order.ts          サイドバー（mod）の行の並びと、ws step が次・前の行を選ぶ処理。mod と共有する。I/O なし
-│   ├── step-state.ts             ws step が読み書くファイル（畳んだ workspace、最後に移った行の記録）
+│   ├── sidebar-order.ts          サイドバー（mod）の行の並びと、ws step が次・前の行を選ぶ処理、畳んだ workspace の共有状態のキー。mod と共有する。I/O なし
+│   ├── step-state.ts             ws step が読むファイル（mod が畳んだ workspace）と、ws next が読み書くファイル（前回の巡回の記録）
 │   └── ui/                       rows（一覧の行）/ popup（ws ui）/ keys
 ├── herdr-app/                    クライアント: Herdr app の mod（ws を exec するだけ）
 │   ├── src/agent-board/          board.ts（行と ws の呼び出し）/ main.ts（Herdr app の API）
@@ -58,7 +58,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 ## セットアップ（手元の Mac）
 
 1. 設計書の「実機確認項目」（M0）を確かめる。結果で直す場所は下の「実機確認の結果で直す場所」を参照
-2. Herdr app（herdr-core を含む）を入れ、シェルで `hc ls` が動くことを確認する
+2. Herdr app（herdr-core を含む）を入れ、シェルで `hc ls` が動くことを確認する（herdr-core につながらないとき、`ws` は `ws: hc connect closed: <hc が標準エラーに出した最後の行>` を出して終わる）
 3. `./install.sh`（`--dry-run` で内容だけ確認できる）
    - `ws` をビルドして `~/.local/bin/ws` に置く（`bun build --compile` の単一バイナリ）
    - mod 3 つ（agent-board・commit-history・pull-requests）をバンドル（`dist/mods/<mod>/`）して `~/.config/herdr-app/mods/<mod>/` に、レイアウトを `~/.config/herdr-app/layouts/agents.json` に置く（上半分に agent-board、下半分の stack（id `lower`）に commit-history と pull-requests を重ねる。2 つは各 mod の題名の帯のタブ「Commits」「Pull requests」で切り替える。Herdr app の stack の帯は番号しか出さないので使わない。既にある `agents.json` は上書きしないので、前の形のままなら `herdr-app/layouts/agents.json` を手で写す）
@@ -77,7 +77,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
    ```
    - （任意）手順 6・7 の代わりに skhd でキーを取ると、Herdr app と Ghostty のどちらが前にあっても同じ経路（`ws next --from-app` と `ws next --prev --from-app`）で巡回する。設定例は `tmux/config/skhdrc`（`ctrl + alt + shift - j` で次へ、`ctrl + alt + shift - k` で後ろへ）。skhd に寄せるなら、手順 6・7 と `tmux.conf` の `bind -n M-B` / `M-W` は要らない（`prefix b` / `prefix B` は残してよい）。skhd は PATH が短いので、`ws` と、`ws` が呼ぶ `tmux` / `hc` / `ghq` / `git` が見つかる PATH を設定例のように書く。tmux のクライアントが複数あるときは、最後に使ったクライアントが移動する
    - skhd にはサイドバーの並び順で移るキーも書いてある（`shift + alt - j` で 1 つ下、`shift + alt - k` で 1 つ上。`ws step --from-app` と `ws step --prev --from-app`）。`tmux/config/skhdrc` の該当の 2 行も写す
-8. tmux の hook で、今いるペイン・ウィンドウ・セッションが変わったらすぐ mod に一覧を読み直させる。`tmux/config/tmux.conf` の `set-hook -g window-pane-changed[50]`、`session-window-changed[50]`、`client-session-changed[50]` の 3 行を `~/.tmux.conf` に写す（`[50]` は配列の番号なので、ほかの hook を上書きしない）。hook は `~/.cache/herdr-tools/tmux-focus/event` に `touch` するだけで、mod がそのフォルダーを見張り、変わったらすぐ読み直す。見張りが失敗しても mod は動き、2 秒ごとの読み直しが予備として残る。`./install.sh` で mod を入れ直したあと、Herdr app を再読み込みする
+8. tmux の hook で、今いるペイン・ウィンドウ・セッションが変わったらすぐ mod に一覧を読み直させる。`tmux/config/tmux.conf` の `set-hook -g window-pane-changed[50]`、`session-window-changed[50]`、`client-session-changed[50]` の 3 行を `~/.tmux.conf` に写す（`[50]` は配列の番号なので、ほかの hook を上書きしない）。hook は `~/.cache/herdr-tools/tmux-focus/event` に `touch` するだけで、mod がそのフォルダーを見張り、変わったらすぐ読み直す。見張りが失敗しても mod は動き、2 秒ごとの読み直しが予備として残る。`ws list` が読めなかったとき（herdr-core に一時的につながらないなど）は、一覧を空にせず前の一覧のまま、理由を一覧の下に出す。`./install.sh` で mod を入れ直したあと、Herdr app を再読み込みする
 9. 一覧だけの画面にしたければ `mod.json` を `{"place": "none"}` にし、`ctrl-shift-l` か `herdr-app do layout.switch '{"name":"agents"}'` で切り替える
 
 ## 使い方
@@ -89,7 +89,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | その worktree に入る | `C-e`（tm）で選ぶ（今までどおり） | 一覧で worktree をクリック → Ghostty が前に出る |
 | エージェントを起動する | `cc`（`ws new --here`。今のペインで会話）か `ws new --attach`（agents ウィンドウへ移る） | worktree の「＋ claude」ボタン |
 | 待っているエージェントを探す | `prefix a`（blocked が先頭） | 一覧を見る（常時表示） |
-| 注意が要るエージェントを次へ巡回する | `prefix b`、または Ghostty の `ctrl+alt+shift+j`（`ws next`）。列は blocked → done → idle の順で、同じ status の中は status になった時刻が新しい順（working は入れない）。3 秒以内に続けて押すと前回の続き、間が空くと先頭から。無ければステータス行に表示 | `ctrl+alt+shift+j`（`ws next --from-app`） |
+| 注意が要るエージェントを次へ巡回する | `prefix b`、または Ghostty の `ctrl+alt+shift+j`（`ws next`）。列は blocked → done → idle の順で、同じ status の中は status になった時刻が新しい順（working は入れない）。3 秒以内に続けて押すと前回の続き（前回の列のエージェントが全員外れていたら今の列の先頭から）、間が空くと先頭から。無ければステータス行に表示 | `ctrl+alt+shift+j`（`ws next --from-app`） |
 | サイドバーの並び順でペインを移る | skhd の `shift+alt+j`（1 つ下）と `shift+alt+k`（1 つ上）（`ws step --from-app`、`ws step --prev --from-app`）。エージェントとペインの行が対象で、worktree の行（tmux セッション）と、mod で畳んだ workspace の中は飛ばす | 同じ（skhd のキー） |
 | 同じ列を後ろへ巡回する | `prefix B`、または Ghostty の `ctrl+alt+shift+k`（`ws next --prev`） | `ctrl+alt+shift+k`（`ws next --prev --from-app`） |
 | そのエージェントと話す | 一覧で `Enter` → 会話ペインへ | クリック → Ghostty の会話ペインへ |
@@ -97,7 +97,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | tmux のペインへ移動する | 一覧で worktree の下のペインの行（実行中のコマンド名。会話ペインと死んだペインは出ない）を `j` / `k` で選び `Enter`。または `ws go %12`。移動だけで、停止・閉じるは付かない | ペインの行をクリック（`Enter` でも移動） |
 | worktree のエージェントを全部並べる | `prefix A`（`ws panes`）。会話ペインが無ければ開き、別のウィンドウ・セッションにあればそのペインを agents ウィンドウへ集める | — |
 | 再起動後に続きをやる | 一覧で `R`（再開できる行に「R で再開」と出る）か `ws resume <agent>`。移動では再開しない | 「再開」ボタン |
-| エージェントを止める | `ws stop <agent>`（止めて一覧から消す）。claude の中なら `/exit` | エージェントの停止ボタン（■ のアイコン。確認のダイアログで「停止する」か Enter で止める。「キャンセル」か Esc で取りやめる）。終了済みなら「削除」。再開できる行には停止ボタンを出さない（`s` では止められる） |
+| エージェントを止める | `ws stop <agent>`（止めて一覧から消す。`<agent>` は `ws go` と同じく id か名前）。claude の中なら `/exit` | エージェントの停止ボタン（■ のアイコン。確認のダイアログで「停止する」か Enter で止める。「キャンセル」か Esc で取りやめる）。終了済みなら「削除」。再開できる行には停止ボタンを出さない（`s` では止められる） |
 | worktree の tmux セッションを閉じる（エージェントは止めない） | 一覧で `x` → `y`。または `ws close [<worktree>]` | worktree の「閉じる」ボタン（tmux セッションがある行に出る。確認のダイアログで「閉じる」か Enter） |
 | 片付ける | claude を `/exit` → `gwq remove` → 必要なら `ws prune` | — |
 
@@ -109,13 +109,13 @@ ws go <ref> [--client <name> | --from-app] [--dry-run]
                                                  移動。ref は worktree のパス（配下でも可）かアドレス／端末名
 ws new [<worktree>] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
 ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
-ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す（エージェントでない端末は触らない）
+ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す（<agent> は id か名前。エージェントでない端末は触らない）
 ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは herdr-core で動き続ける
 ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる（会話ペインが無ければ開き、他の場所にあれば移して集める）
 ws next [--prev] [--client <name> | --from-app] [--list]
-                                                 blocked → done → idle の順の列（同じ status の中は status になった時刻が新しい順。working と動いていないものは除く）を巡回し、エージェントの会話ペインへ移動。3 秒以内に続けて押すと、前回の列の順のまま前回移った先の次へ進む（--prev で後ろへ）。3 秒以上空くと今いる場所は数えず、列の先頭（--prev なら最後）へ移る。前回の列と移った先は `~/.cache/herdr-tools/next-last.json` に記録する（--list は移動せず、列を「ID・名前・status・status になった時刻・workspace・worktree」で順に出す。--from-app は移動後に Ghostty を前に出し、候補が無いときは標準エラーにも出す）
+                                                 blocked → done → idle の順の列（同じ status の中は status になった時刻が新しい順。working と動いていないものは除く）を巡回し、エージェントの会話ペインへ移動。3 秒以内に続けて押すと、前回の列の順のまま前回移った先の次へ進む（--prev で後ろへ。前回の列のエージェントが 1 つも列に残っていなければ、今の列の端から回り直す）。3 秒以上空くと今いる場所は数えず、列の先頭（--prev なら最後）へ移る。前回の列と移った先は `~/.cache/herdr-tools/next-last.json` に記録する（--list は移動せず、列を「ID・名前・status・status になった時刻・workspace・worktree」で順に出す。--from-app は移動後に Ghostty を前に出し、候補が無いときは標準エラーにも出す）
 ws step [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]
-                                                 サイドバー（mod）に並ぶ行の順で、1 つ下（--prev で 1 つ上）の行へ移動。移る先はエージェントとペインの行（workspace の見出し、worktree の行、mod で畳んだ workspace の中の行は数えない）。端では反対の端へ回り、今いる行が無ければ下は先頭・上は最後。--list は移動せず、並びを「今いる行の印（*）・種類・ref・名前」で 1 行ずつ出す。--from-app は移動後に Ghostty を前に出す
+                                                 サイドバー（mod）に並ぶ行の順で、1 つ下（--prev で 1 つ上）の行へ移動。移る先はエージェントとペインの行（workspace の見出し、worktree の行、mod で畳んだ workspace の中の行は数えない）。端では反対の端へ回り、今いる行が無ければ下は先頭・上は最後。今いる行は、今いるペイン（会話ペインならそのエージェント）から決める。--list は移動せず、並びを「今いる行の印（*）・種類・ref・名前」で 1 行ずつ出す。--from-app は移動後に Ghostty を前に出す
 ws hunk [<worktree>] [--commit <hash> | --pr <number> | --gh-commit <sha> | --range <ref>...<ref> | --against <rev>] [--file <path>] [--client <name> | --from-app]
                                                  差分を hunk で開く（下の「ws hunk」を参照）
 ws pr <number> [<worktree>] [--no-go] [--client <name> | --from-app]
@@ -226,6 +226,7 @@ tmux で今いるペインの worktree のコミット履歴を出す。Herdr ap
 
 - キー（mod を一度クリックしてフォーカスを渡してから）: `j` / `k`（↓ / ↑）で行を選び、`Enter` でコミット・未コミットの行を開閉する。ファイルの行は `Enter` かクリックで、`ws hunk` を呼んで hunk で差分を開く。コミットの行の短いハッシュをクリックすると、行は開閉せず、そのコミット全体を hunk で開く
 - 読み直し: 今いるペインが変わったとき（agent-board と同じ tmux-focus の見張り）、`.git` の `HEAD` や `refs` が変わったとき（`git rev-parse --absolute-git-dir` と `--git-common-dir` を `watchFolder` で見張る）、5 秒ごと。結果が前と同じなら再描画しない。作業ツリーは見張らないので、未コミットの変更は 5 秒ごとかペインの変化で読み直す
+- ベースブランチは worktree ごとに 1 回調べる（`gh pr view` は GitHub への問い合わせなので、見つからなくても読み直しのたびには呼ばない。調べ直すのは、見る worktree が変わったときと、ベースブランチのボタンを押したとき）。範囲が「すべて」「push 前」のときは、調べ終わるのを待たずにコミットの一覧を出し、分かったらボタンの名前に反映する
 - git は `.git` に何も書かない引数（`--no-optional-locks` など）で読む
 - レイアウトに置いて使う（`mod.json` は `{"place": "none"}`）。`herdr-app/layouts/agents.json` では下半分の stack に入っていて、題名の帯のタブ「Commits」で選ぶ
 - プルリクエストは別の mod `pull-requests`（下の節）にある
@@ -398,7 +399,7 @@ Herdr app で開いただけのシェルは出さない。
 | `ws panes` に子エージェントを含めるか | 含めない（`-a` で含める） | フラグ |
 | `ws panes` の並べ方 | `agents` ウィンドウに `tiled` | `Tmux.openAgentPane` / `Tmux.moveAgentPane` |
 | `ws panes` で会話ペインが他の場所にあるとき | 開き直さず、そのペインを `agents` ウィンドウへ移す（`join-pane`。`agents` ウィンドウが無ければそのペインを切り出して作る）。移した元のウィンドウが空になれば閉じる | `plans/panes.ts` の `planPanes` |
-| `ws panes` の上限 | 8（開くものと集めるものを合わせて、注意が要る順に選び、超えた分は省略と表示） | `--max` / `WS_PANES_MAX` |
+| `ws panes` の上限 | 8（開くものと集めるものを合わせて、注意が要る順に選び、超えた分は省略と表示） | `--max` / `WS_PANES_MAX`（0 以上の整数。それ以外は断る） |
 | `ws panes` で再開できるエージェント | 再開しないで開く（`ws go` と同じ） | — |
 | `ws prune` でエージェントを終了する条件 | 記録した worktree の場所が消えたもの。確認プロンプトで y のときだけ（`--yes` で省略） | ws-core の `agentsInMissingWorktrees` |
 | 再開時のコマンド | `claude --resume <id>`（元の引数は引き継がない） | `WS_CLAUDE_BIN` |
@@ -415,6 +416,9 @@ Herdr app で開いただけのシェルは出さない。
 | API の形 | 合っている。`terminal.list` / `run` / `label` / `kill` / `rm` を実機で使った | `schema/hc.openrpc.json`（herdr-core リポジトリ）どおりに書いてある（`ws-core/src/herdr-core/hc-terminal.ts`）。実機で違えばそこと `hc-client.ts` を直す。hc とは `hc connect` の JSON-RPC だけで話し、接続は1本を使い回す。起動した端末のアドレスは `terminal.run` の返り値から取る |
 | `open -na Ghostty --args -e tmux attach -t <session>` | まだ確かめていない（画面に Ghostty の窓が開くので、人が試す） | `tmux/src/ghostty.ts` の `ghosttyNewWindow` |
 | mod の API（`gpui-kit.d.ts`。`herdr` モジュールを含む） | 合っている（gpui-shell 0.7.1） | アプリの更新で API が変わったら `bun run typecheck:mod` が型エラーを出すので、`main.ts` だけ直す。判断ロジック（`board.ts`）はテスト済み |
+
+`herdr-core` の端末が名乗る状態（`status.state`）と Herdr app の端末の status は、どちらも `ws-core/src/domain/agent.ts` の `toAgentStatus` でドメインの状態にする。
+知らない値は `unknown` になり、一覧の並びでは最後に置く（状態が増えても、一覧の先頭に紛れ込まない）。
 
 **mod の型**: Herdr app が `~/.config/herdr-app/mods/<mod>/gpui-kit.d.ts` を生成する。アプリの版ごとに変わり、
 アプリ自身がコミットしないよう指示しているので、`herdr-app/sync-types.sh` が `herdr-app/types/`（gitignore）に写してから検査する。
@@ -433,7 +437,7 @@ bun run build:mod   # mod だけ
 ```
 
 E2E は `git worktree` で `repo` と `repo=branch` を横並びに作り、tmux のコントロールモードのクライアントを切り替え対象にして、
-list / new / hook / go（全分岐）/ resume / stop / panes / new --attach / prune / ui / close を確かめる。
+list / new / hook / go（全分岐）/ resume / stop / panes / new --attach / prune / next / step / ui / close を確かめる。
 
 環境変数: `HC_BIN`（hc のパス）、`WS_TMUX_SOCKET`（`tmux -L`）、`TMUX_BIN`、`GHQ_ROOT`、`GHQ_BIN`、`GIT_BIN`、`GH_BIN`、`HUNK_BIN`、`WS_SESSION_LABEL`、`WS_CLAUDE_BIN`、`WS_PANES_MAX`、`WS_DEBUG`。
 

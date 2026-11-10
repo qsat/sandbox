@@ -12,6 +12,9 @@ export WS_TMUX_SOCKET="$SOCK"
 export GHQ_ROOT="$TMP/ghq"
 export GHQ_BIN="ghq-not-installed"
 export WS_PANES_MAX=8
+# ws next の記録（next-last.json）と、ws step が読む mod の共有状態（shared.json）を手元の環境に触れさせない
+export XDG_CACHE_HOME="$TMP/cache"
+export HERDR_APP_HOME="$TMP/herdr-app"
 unset TMUX TMUX_PANE
 
 ws() { bun "$ROOT/cli.ts" "$@"; }
@@ -158,6 +161,20 @@ echo "stop（エージェントを止めて一覧から消す）"
 check "止めた" "$(ws stop t4)" "stopped t4"
 check "herdr-core から消えた" "$(state '[.terminals[] | select(.address=="t4")] | length')" "0"
 check "無いものは止めない" "$(ws stop t4 || true)" "skip t4: not-found"
+BY_NAME="$(ws new "$FEAT")"
+BY_NAME_ID="${BY_NAME%%$'\t'*}"; BY_NAME_NAME="${BY_NAME##*$'\t'}"
+check "名前でも止められる（ws go・ws resume と同じ指し方）" "$(ws stop "$BY_NAME_NAME")" "stopped $BY_NAME_NAME"
+check "名前で止めたものが herdr-core から消えた" "$(state "[.terminals[] | select(.address==\"$BY_NAME_ID\")] | length")" "0"
+
+echo "herdr-core につながらないとき"
+cat >"$TMP/hc-down" <<'SH'
+#!/bin/sh
+echo "error: herdr-core is not running" >&2
+exit 1
+SH
+chmod +x "$TMP/hc-down"
+check "hc connect が出した理由を失敗の文に添える" "$(HC_BIN="$TMP/hc-down" ws list 2>&1 || true)" "ws: hc connect closed: error: herdr-core is not running"
+check "ws panes の --max は 0 以上の整数だけ" "$(ws panes --pane %0 --max abc 2>&1 || true)" "ws: --max（WS_PANES_MAX）には 0 以上の整数を指定してください: abc"
 
 echo "statusline（Claude Code の rate_limits を herdr-core に記録して表示）"
 NOW="$(date +%s)"
@@ -183,6 +200,33 @@ check "一覧のエージェントの行に ctx 42%" "$(ws list | without_color 
 
 echo "list（テキスト）"
 ws list
+
+echo "next（注意が要るエージェントを巡回する）"
+client_agent() { t display-message -p -c "$CLIENT" '#{@ws_agent}'; }
+set_status() { edit_state "(.terminals[] | select(.address==\"$1\") | .status) = {state: \"$2\"}"; }
+check "working だけなら列は空" "$(ws next --list | wc -l | tr -d ' ')" "0"
+set_status t1 blocked; set_status t2 idle
+check "列は blocked → idle の順" "$(ws next --list | cut -f1 | tr '\n' ' ')" "t1 t2 "
+ws next --client "$CLIENT"
+check "列の先頭（blocked）の会話ペインへ移る" "$(client_agent)" "t1"
+ws next --client "$CLIENT"
+check "続けて押すと次へ進む" "$(client_agent)" "t2"
+set_status t1 working; set_status t2 working; set_status t3 blocked
+ws next --client "$CLIENT"
+check "前回の列のエージェントが全員外れても、今の列のエージェントへ移る" "$(client_agent)" "t3"
+
+echo "step（サイドバーの並び順で移る）"
+current_row() { ws step --list --client "$CLIENT" | awk -F'\t' '$1=="*"{print $2":"$3}'; }
+ROWS="$(ws step --list --client "$CLIENT")"
+check "移る先はエージェントとペインの行だけ" "$(cut -f2 <<<"$ROWS" | sort -u | tr '\n' ' ')" "agent pane "
+check "今いる行（t3 の会話ペイン）に印が付く" "$(current_row)" "agent:t3"
+BELOW="$(awk -F'\t' 'found{print $2":"$3; exit} $1=="*"{found=1}' <<<"$ROWS")"
+[ -n "$BELOW" ] || BELOW="$(head -1 <<<"$ROWS" | awk -F'\t' '{print $2":"$3}')"
+ws step --client "$CLIENT"
+check "1 つ下の行へ移る（端なら先頭へ回る）" "$(current_row)" "$BELOW"
+ws step --prev --client "$CLIENT"
+check "--prev で 1 つ上の行へ戻る" "$(current_row)" "agent:t3"
+set_status t3 working
 
 echo "ui（pty で開いてキー操作）"
 ws go "$API" --client "$CLIENT"
