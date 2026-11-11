@@ -64,6 +64,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 2. Herdr app（herdr-core を含む）を入れ、シェルで `hc ls` が動くことを確認する（herdr-core につながらないとき、`ws` は `ws: hc connect closed: <hc が標準エラーに出した最後の行>` を出して終わる）
 3. `./install.sh`（`--dry-run` で内容だけ確認できる）
    - `ws` をビルドして `~/.local/bin/ws` に置く（`bun build --compile` の単一バイナリ）
+   - Claude Code の skill（`ws/skill/SKILL.md`）を `~/.claude/skills/ws/SKILL.md` に置く。エージェントが `ws` を呼んでよい条件（状態を読むサブコマンドはいつでも、起動・停止はユーザーが頼んだときだけ、ユーザーの画面を移すサブコマンドは呼ばない）を書いてある。サブコマンドを足す・変えるときは、この skill の表も直す
    - mod 5 つ（agent-board・commit-history・pull-requests・workspace-picker・worktree-changes）をバンドル（`dist/mods/<mod>/`）して `~/.config/herdr-app/mods/<mod>/` に、レイアウトを `~/.config/herdr-app/layouts/agents.json` に置く（上半分に agent-board、下半分の stack（id `lower`）に worktree-changes・commit-history・pull-requests を重ねる。3 つは各 mod の題名の帯のタブ「Changes」「Commits」「Pull requests」で切り替える。Herdr app の stack の帯は番号しか出さないので使わない。既にある `agents.json` は上書きしないので、前の形のままなら `herdr-app/layouts/agents.json` を手で写す）
    - `herdr-app` があれば `herdr-app check` を通す
 4. `ws/config/claude-settings.json` の SessionStart hook と statusLine を `~/.claude/settings.json` に足す
