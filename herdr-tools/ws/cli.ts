@@ -3,7 +3,7 @@
 import { homedir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
 import { expandHome } from "@herdr-tools/utils/expand-home";
-import { agentsInMissingWorktrees, looksLikePath, prWorktreeMessage } from "@herdr-tools/ws-core";
+import { agentsInMissingWorktrees, looksLikePath, prWorktreeMessage, worktreeCreatedMessage } from "@herdr-tools/ws-core";
 import { itemId, itemLabel, parseEditFile, parseHunkSource, renderText, runPopup, sessionsOfMissingWorktrees, toListJson, usageLine } from "@herdr-tools/tmux";
 import { composeFromEnv } from "./src/compose-from-env";
 
@@ -15,6 +15,11 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
                                                    移動。ref は worktree のパスかエージェントの id／名前
   ws new [<worktree>] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
                                                    エージェント起動。--here は今の端末で会話、--attach は agents ウィンドウへ移動
+  ws create <branch> [<worktree>] [--from <rev>] [--no-agent] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
+                                                   ブランチの worktree を本体の横に作り、そこでエージェントを起動する（--no-agent で起動しない。--here・--attach は ws new と同じ）。
+                                                   新しいブランチは --from、origin の同じ名前のブランチ、<worktree>（既定は今いる場所）の HEAD の順で分ける元を決める
+  ws destroy <worktree> [--force] [--dry-run]      worktree のエージェントを止め、worktree とブランチ（マージ済みのときだけ）を消し、tmux セッションを閉じる。
+                                                   未コミットの変更・追跡されていないファイル・submodule があれば --force が要る。本体の worktree は消さない
   ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
   ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す（<agent> は id か名前）
   ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは止めない
@@ -37,7 +42,7 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
   ws prune [--dry-run] [--yes]                     場所が消えた worktree のセッション・エージェントを片付ける
 `;
 
-const VALUE_FLAGS = new Set(["--client", "--pane", "--max", "--commit", "--file", "--pr", "--gh-commit", "--range", "--against"]);
+const VALUE_FLAGS = new Set(["--client", "--pane", "--max", "--commit", "--file", "--pr", "--gh-commit", "--range", "--against", "--from"]);
 
 function parseArgs(argv: string[]) {
   const positional: string[] = [];
@@ -95,8 +100,19 @@ async function main(argv: string[]) {
     return 0;
   }
   const p = parseArgs(restArgs);
-  const { core, nav, prWorktrees, changeAmounts } = composeFromEnv(process.env);
+  const { core, nav, prWorktrees, worktrees, changeAmounts } = composeFromEnv(process.env);
   const goOpts = { client: str(p, "--client"), fromApp: has(p, "--from-app") };
+  /** path でエージェントを起動する（ws new と ws create で同じ）。--here は今の端末で会話、--attach は agents ウィンドウへ移動、どちらも無ければ起動だけして id と名前を出す */
+  const startAgentIn = async (path: string) => {
+    if (has(p, "--here")) {
+      await nav.startAgentAndTalkHere(path, p.rest);
+    } else if (has(p, "--attach")) {
+      await nav.startAgentAndGo(path, p.rest, goOpts);
+    } else {
+      const r = await core.startAgent(path, p.rest);
+      process.stdout.write(`${r.id}\t${r.name}\n`);
+    }
+  };
 
   switch (cmd) {
     case "list": {
@@ -113,15 +129,21 @@ async function main(argv: string[]) {
       return 0;
     }
     case "new": {
-      const path = absolutePathFromCwd(p.positional[0] ?? ".");
-      if (has(p, "--here")) {
-        await nav.startAgentAndTalkHere(path, p.rest);
-      } else if (has(p, "--attach")) {
-        await nav.startAgentAndGo(path, p.rest, goOpts);
-      } else {
-        const r = await core.startAgent(path, p.rest);
-        process.stdout.write(`${r.id}\t${r.name}\n`);
-      }
+      await startAgentIn(absolutePathFromCwd(p.positional[0] ?? "."));
+      return 0;
+    }
+    case "create": {
+      const branch = p.positional[0];
+      if (!branch) throw new Error("ws create <branch> [<worktree>] [--from <rev>] [--no-agent] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]");
+      const created = await worktrees.create(absolutePathFromCwd(p.positional[1] ?? "."), branch, { from: str(p, "--from") });
+      process.stdout.write(worktreeCreatedMessage(created) + "\n");
+      if (!has(p, "--no-agent")) await startAgentIn(created.path);
+      return 0;
+    }
+    case "destroy": {
+      const path = p.positional[0];
+      if (!path) throw new Error("ws destroy <worktree> [--force] [--dry-run]");
+      await nav.destroyWorktree(absolutePathFromCwd(path), worktrees, { force: has(p, "--force"), dryRun: has(p, "--dry-run"), report: (line) => process.stdout.write(line + "\n") });
       return 0;
     }
     case "resume": {

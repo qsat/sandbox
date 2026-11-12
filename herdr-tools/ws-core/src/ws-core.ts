@@ -79,6 +79,11 @@ export class WsCore {
     return (await mapLimit(repos, 16, (repo) => this.source.worktrees(repo))).flat();
   }
 
+  /** このプロセスがエージェントの中で動いているなら、そのエージェントの id */
+  currentAgentId(env: Record<string, string | undefined>) {
+    return this.runtime.agentIdOfCurrentProcess(env);
+  }
+
   attachCommand(id: string) {
     return this.runtime.attachCommand(id);
   }

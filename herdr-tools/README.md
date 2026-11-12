@@ -16,6 +16,7 @@ herdr-tools/
 │   │   ├── locate.ts             パス・id から木の場所を引く
 │   │   ├── change-amount.ts      worktree の変更量（ws changes）の数え方
 │   │   ├── pr-worktree.ts        プルリクエストの worktree を作るか・最新にするか（ws pr）の判断
+│   │   ├── worktree-lifecycle.ts worktree を作るときに分ける元（ws create）、消すのを断る条件（ws destroy）の判断と文面
 │   │   └── usage.ts              Claude の利用上限（5h / 週）の枠、期限切れの扱い
 │   ├── ports.ts                  AgentRuntime / WorkspaceSource / UsageStore（単体テストで偽物に差し替える継ぎ目）
 │   ├── ws-core.ts                WsCore: snapshot / resume / startAgent / stopAgent / recordClaudeSessionFromHook / removeAgents / 利用上限と context 使用率の記録
@@ -24,6 +25,7 @@ herdr-tools/
 │   ├── git-cli.ts                git の呼び出し（-C <worktree>、.git に書かない読み取り、失敗を例外にする）
 │   ├── git-change-amounts.ts     ws changes の実行（worktree の変更量を git で数える）
 │   ├── pr-worktrees.ts           ws pr の実行（gh でブランチを調べ、git で worktree を作る・早送りする）
+│   ├── worktrees.ts              ws create / ws destroy の git の部分（worktree を作る、消す前に状態を調べる、worktree とブランチを消す）
 │   └── herdr-core/               AgentRuntime の実装（hc-terminal: schema/hc.openrpc.json の Terminal、hc-client: JSON-RPC、herdr-runtime: 翻訳）
 ├── tmux/src/                     クライアント: tmux でエージェントへ移動し、会話する
 │   ├── facts.ts                  tmux のセッション・ペイン・クライアント
@@ -91,6 +93,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | やりたいこと | tmux から | Herdr app から |
 | --- | --- | --- |
 | worktree を作る | `gwq add -b <branch>`（今までどおり） | — |
+| worktree を作って、そこでエージェントを起動する | `ws create <branch>`（今いる worktree の HEAD から分ける。`--attach` で agents ウィンドウへ移る、`--here` で今のペインで会話、`--no-agent` で起動しない） | — |
 | プルリクエストのブランチの worktree を用意する | `ws pr <番号>`（無ければ作り、あれば最新にして、その tmux セッションへ移る。エージェントは起動しない） | pull-requests の行の worktree のアイコン |
 | その worktree に入る | `C-e`（tm）で選ぶ（今までどおり） | 一覧で worktree をクリック → Ghostty が前に出る |
 | エージェントを起動する | `cc`（`ws new --here`。今のペインで会話）か `ws new --attach`（agents ウィンドウへ移る） | worktree の「＋ claude」ボタン |
@@ -108,7 +111,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | エージェントを止める | `ws stop <agent>`（止めて一覧から消す。`<agent>` は `ws go` と同じく id か名前）。claude の中なら `/exit` | エージェントの停止ボタン（■ のアイコン。確認のダイアログで「停止する」か Enter で止める。「キャンセル」か Esc で取りやめる）。終了済みなら「削除」。再開できる行には停止ボタンを出さない（`s` では止められる） |
 | worktree の tmux セッションを閉じる（エージェントは止めない） | 一覧で `x` → `y`。または `ws close [<worktree>]` | worktree の「閉じる」ボタン（tmux セッションがある行に出る。確認のダイアログで「閉じる」か Enter） |
 | 未コミットの変更のファイルを $EDITOR で開く | `ws edit <worktree> --file <path>`（tmux のグローバルな環境の EDITOR が nvim なら、worktree の tmux セッションごとに 1 つの nvim（`edit` ウィンドウ）に開かせて移る。nvim でなければファイルごとのウィンドウ） | worktree-changes のファイルの行を押す（または選んで `Enter`） |
-| 片付ける | claude を `/exit` → `gwq remove` → 必要なら `ws prune` | — |
+| 片付ける | `ws destroy <worktree>`（エージェントを止め、worktree とマージ済みのブランチを消し、tmux セッションを閉じる）。または claude を `/exit` → `gwq remove` → 必要なら `ws prune` | — |
 
 ### コマンド
 
@@ -117,6 +120,9 @@ ws list [--json] [--all]                         Workspace > Worktree > Agent �
 ws go <ref> [--client <name> | --from-app] [--dry-run]
                                                  移動。ref は worktree のパス（配下でも可）かアドレス／端末名
 ws new [<worktree>] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
+ws create <branch> [<worktree>] [--from <rev>] [--no-agent] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
+                                                 ブランチの worktree を本体の横に作り、そこでエージェントを起動する（下の「ws create / ws destroy」を参照）
+ws destroy <worktree> [--force] [--dry-run]      worktree のエージェントを止め、worktree とマージ済みのブランチを消し、tmux セッションを閉じる（下の「ws create / ws destroy」を参照）
 ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
 ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す（<agent> は id か名前。エージェントでない端末は触らない）
 ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは herdr-core で動き続ける
@@ -205,6 +211,43 @@ nvim を止めると保存していない編集を失うので、`ws edit` は�
 - gwq は使わず git で作る。ws は worktree を `git worktree list` で見つけるので、gwq で作ったものも `ws pr` で作ったものも同じように一覧に並ぶ。`gwq remove` でも片付けられる
 - gh の実行ファイルは `GH_BIN`（既定は `gh`）で指定する
 - Herdr app の mod `pull-requests` では、プルリクエストの行の右端の worktree のアイコン（フォークのものには出さない）で `ws pr <番号> <worktree> --from-app` を呼ぶ。結果の文を一覧の下に出す
+
+### `ws create` / `ws destroy`: worktree を作ってエージェントを起動する・まとめて片付ける
+
+`ws create <branch> [<worktree>]` は、`<worktree>`（既定は今のディレクトリ）のリポジトリに `<branch>` の worktree を作り、そこでエージェントを起動する。
+置き場所は `ws pr` と同じで、本体の横の `<本体のフォルダー名>=<ブランチ名>`（`/` は `-` にする）。gwq は使わず git で作る。
+
+ブランチを分ける元は、上の行から順に当てはまるものを使う。
+
+| 状況 | 分ける元 |
+| --- | --- |
+| 手元に `<branch>` がある | そのブランチをそのまま checkout する（`--from` を付けると断る） |
+| `--from <rev>` を付けた | `<rev>` から新しいブランチを分ける |
+| origin に同じ名前のブランチがある（`refs/remotes/origin/<branch>`。fetch はしない） | origin のブランチを追跡して作る |
+| どれでもない | `<worktree>` の HEAD から新しいブランチを分ける |
+
+- `<branch>` の worktree が既にあれば、作らずに断る（エージェントの起動だけなら `ws new <worktree>`）
+- 標準出力の 1 行目に作った場所（`worktree を作りました（<branch>。<分けた元>）: <場所>`）を出す。エージェントの起動は `ws new` と同じで、`--here` も `--attach` も無ければ 2 行目に `<id>\t<名前>` を出す。`--no-agent` なら起動しない
+- worktree を作ったあとでエージェントの起動に失敗したとき（herdr-core につながらないなど）、worktree は残る。`ws new <場所>` でやり直せる
+
+`ws destroy <worktree>` は、次の順で片付ける。断る条件は、何かを止める前に確かめる。
+
+1. その worktree のエージェントをすべて止めて、一覧から消す（`ws stop` と同じ）
+2. `git worktree remove` で worktree を消し、フォルダーが消えたことを確かめる
+3. ブランチを `git branch -d` で消す。マージされていないブランチは git が断るので、残して理由を出す
+4. その worktree の tmux セッションを閉じる（セッションの中から呼んだとき、ここで自分も終わるので最後にする）
+
+| 断る条件 | `--force` を付けたとき |
+| --- | --- |
+| 本体の worktree | 断る |
+| 呼び出したエージェント自身が、その worktree で動いている（`HC_TERMINAL_ID` で判断する） | 断る |
+| 未コミットの変更か、追跡されていないファイルがある（`git status --porcelain --untracked-files=all`。ファイルを 10 個まで出す） | 消す（`git worktree remove --force`） |
+| `.gitmodules` がある（submodule を持つ worktree は、git が `--force` なしでは消さない） | 消す |
+
+- `--dry-run` は、止めるエージェント・消す worktree・消すブランチ・閉じる tmux セッションを出すだけで、何も変えない
+- `.gitignore` に当てはまるファイル（`node_modules` など）は、`--force` が無くても worktree と一緒に消える（`git worktree remove` の動作）
+- 場所がもう消えている worktree は扱わない（`ws prune` で片付ける）
+- push していないコミットがあっても、worktree は消す。コミットはブランチに残る（マージされていないブランチは 3 で残るため）
 
 ### worktree の変更量（`ws changes`）
 

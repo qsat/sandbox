@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { run } from "@herdr-tools/utils/run";
 import { runInteractive } from "@herdr-tools/utils/run-interactive";
-import { looksLikePath, resolveRef, type Resolved, type WsCore } from "@herdr-tools/ws-core";
+import { branchRemovalMessage, destroyRefusal, looksLikePath, resolveRef, type Resolved, type Worktrees, type WsCore } from "@herdr-tools/ws-core";
 import { focusGhostty, openGhosttyWindowRunning } from "./ghostty";
 import { AGENTS_WINDOW, chooseClient, ensureSession, planGo, workingDir, type PaneTarget, type Step } from "./plans/go";
 import { chooseCycleTarget, continuingRecord, cycleCandidates, decideCurrentPane, MESSAGE_WHEN_NO_CANDIDATE } from "./plans/cycle";
@@ -270,6 +270,41 @@ export class TmuxNavigator {
     if (!session) return { closed: false, reason: "no-session" } as const;
     await this.tmux.killSession(session.name);
     return { closed: true, session: session.name } as const;
+  }
+
+  /**
+   * worktree を消す（ws destroy）。その worktree のエージェントを止め、git の worktree とブランチを消し、最後に tmux セッションを閉じる。
+   * 断る条件（本体・未コミットの変更・呼び出したエージェント自身がいる）は、何かを止める前に確かめる。
+   * セッションを最後に閉じるのは、このコマンドをそのセッションの中から呼んだとき、閉じた時点でこのプロセスも終わるため。
+   * 進んだ手順は report に 1 行ずつ渡す（途中で失敗しても、どこまで進んだかが残る）
+   */
+  async destroyWorktree(path: string, worktrees: Worktrees, opts: { force?: boolean; dryRun?: boolean; report: (line: string) => void }) {
+    const target = await worktrees.inspectForRemoval(path);
+    const view = await this.view({ alsoShow: [target.path] });
+    const agents = view.snap.tree.workspaces.flatMap((ws) => ws.worktrees).find((wt) => wt.path === target.path)?.agents ?? [];
+    const sessions = view.idx.facts.sessions.filter((s) => view.snap.locate(s.path)?.worktree.path === target.path).map((s) => s.name);
+    const caller = this.core.currentAgentId(this.env);
+    const refusal = destroyRefusal({ target, force: !!opts.force, callerIsAgentHere: !!caller && agents.some((a) => a.id === caller) });
+    if (refusal) throw new Error(refusal);
+
+    if (opts.dryRun) {
+      for (const a of agents) opts.report(`止めるエージェント: ${a.id} ${a.name} (${a.alive ? a.status : "finished"})`);
+      opts.report(`消す worktree: ${target.path}`);
+      opts.report(target.branch ? `消すブランチ（マージ済みのときだけ）: ${target.branch}` : "ブランチはありません（detached HEAD）");
+      for (const s of sessions) opts.report(`閉じる tmux セッション: ${s}`);
+      return;
+    }
+    for (const a of agents) {
+      await this.core.stopAgent(a.id);
+      opts.report(`エージェントを止めました: ${a.id} ${a.name}`);
+    }
+    const branch = await worktrees.remove(target, { force: opts.force });
+    opts.report(`worktree を消しました: ${target.path}`);
+    opts.report(branchRemovalMessage(branch));
+    for (const s of sessions) {
+      opts.report(`tmux セッションを閉じます: ${s}`);
+      await this.tmux.killSession(s);
+    }
   }
 
   async killSessions(names: string[]) {
