@@ -9,6 +9,7 @@ import { moveSelection } from "../shared/selection";
 import type { Target } from "../shared/target";
 import { stackTitleBar } from "../shared/stack-tabs";
 import { watchTmuxFocus } from "../shared/tmux-focus";
+import { FOCUS_MOVE_KEY, moveFocus, takeFocusOnCommand } from "../shared/focus-move";
 import { wsHunkPrArgs, wsHunkPrCommitArgs } from "../shared/ws-hunk";
 import { execWs } from "../shared/ws-exec";
 import { NO_PULL_REQUESTS_MESSAGE, PR_LIST_ARGS, ghFailureMessage, openInBrowserCommand, parsePrCommits, parsePrList, prCommitsArgs, type PrCommit, type PullRequest } from "./gh";
@@ -66,6 +67,7 @@ export default class PullRequests extends View {
     cx.timer.every(PR_REFRESH_MS, (cx) => this.loadPrs(cx));
     this.follow(cx);
     watchTmuxFocus(cx, this, (cx) => this.follow(cx));
+    takeFocusOnCommand(cx, this, this.focus);
   }
 
   /** 結果が前と同じなら再描画しない */
@@ -269,6 +271,11 @@ export default class PullRequests extends View {
     if (keystroke === "j" || keystroke === "down" || keystroke === "k" || keystroke === "up") {
       this.selected = moveSelection(rows, this.selected, keystroke === "j" || keystroke === "down" ? 1 : -1);
       cx.notify();
+      return true;
+    }
+    // Tab で、上半分の agent-board へフォーカスを移す
+    if (keystroke === FOCUS_MOVE_KEY) {
+      moveFocus("up");
       return true;
     }
     const row = keystroke === "enter" ? rows.find((r) => r.id === this.selected) : undefined;

@@ -6,7 +6,7 @@ import { commitFiles, localFiles, parseNameStatus, parseStatus, sumNumstat } fro
 import { parseNumstat } from "@herdr-tools/utils/parse-numstat";
 import { relativeTime } from "../src/shared/relative-time";
 import { moveSelection } from "../src/shared/selection";
-import { wsHunkAgainstArgs, wsHunkArgs, wsHunkRangeArgs } from "../src/shared/ws-hunk";
+import { wsHunkAgainstArgs, wsHunkArgs, wsHunkBrowseArgs, wsHunkCloseArgs, wsHunkRangeArgs } from "../src/shared/ws-hunk";
 
 describe("一覧に出すコミットの範囲", () => {
   test("すべては HEAD からの履歴", () => expect(logArgs("all")).toEqual(LOG_ARGS));
@@ -46,7 +46,7 @@ describe("一覧に出すコミットの範囲", () => {
   });
 });
 import { findBaseRef } from "../src/shared/base-ref";
-import { LOCAL_ID, visibleRows } from "../src/commit-history/rows";
+import { LOCAL_ID, moveToHeadRow, visibleRows } from "../src/commit-history/rows";
 import { resolveTarget, type Target } from "../src/shared/target";
 
 const wt = (path: string, branch: string | null, panesCurrent: boolean, agentCurrent: boolean) => ({
@@ -182,6 +182,38 @@ describe("行の並びと選択", () => {
     expect(moveSelection(rows, "commit:c1", 1)).toBe("commit:c2");
     expect(moveSelection(rows, "commit:c2", 1)).toBe("commit:c2");
     expect(moveSelection(rows, "commit:c1", -1)).toBe("commit:c1");
+  });
+});
+
+describe("コミットを順に見ていく（ctrl-j / ctrl-k）", () => {
+  const commit = (hash: string) => ({ hash, short: hash.slice(0, 7), author: "A", time: 0, refs: [], subject: hash });
+  const file = { status: "M", path: "x.ts", add: 1, del: 0, binary: false };
+  const rows = visibleRows([commit("c1"), commit("c2"), commit("c3")], [file], "c2", new Map([["c2", [file]]]));
+  const id = (current: string | null, delta: 1 | -1) => moveToHeadRow(rows, current, delta)?.id;
+
+  test("ファイルの行を飛ばして、コミットの行だけを移る", () => {
+    expect(rows.map((r) => r.id)).toEqual([LOCAL_ID, "commit:c1", "commit:c2", "file:c2:x.ts", "commit:c3"]);
+    expect(id("commit:c2", 1)).toBe("commit:c3");
+    expect(id("commit:c3", -1)).toBe("commit:c2");
+  });
+  test("「未コミットの変更」の行にも止まる", () => expect(id("commit:c1", -1)).toBe(LOCAL_ID));
+  test("ファイルの行にいるときは、持ち主のコミットから数える", () => {
+    expect(id("file:c2:x.ts", 1)).toBe("commit:c3");
+    expect(id("file:c2:x.ts", -1)).toBe("commit:c1");
+  });
+  test("端で止まる", () => {
+    expect(id("commit:c3", 1)).toBe("commit:c3");
+    expect(id(LOCAL_ID, -1)).toBe(LOCAL_ID);
+  });
+  test("何も選んでいなければ、下へは先頭、上へは最後", () => {
+    expect(id(null, 1)).toBe(LOCAL_ID);
+    expect(id(null, -1)).toBe("commit:c3");
+  });
+  test("行が無ければ null", () => expect(moveToHeadRow([], null, 1)).toBeNull());
+  test("ws hunk には、ファイルツリーを出し、Ghostty を前に出さない引数を渡す", () => {
+    expect(wsHunkBrowseArgs("/r", "abc")).toEqual(["hunk", "/r", "--commit", "abc", "--sidebar", "--from-app", "--no-focus"]);
+    expect(wsHunkBrowseArgs("/r", null)).toEqual(["hunk", "/r", "--sidebar", "--from-app", "--no-focus"]);
+    expect(wsHunkCloseArgs("/r")).toEqual(["hunk", "/r", "--close"]);
   });
 });
 

@@ -133,7 +133,8 @@ ws next [--prev] [--client <name> | --from-app] [--list]
                                                  blocked → done → idle の順の列（同じ status の中は status になった時刻が新しい順。working と動いていないものは除く）を巡回し、エージェントの会話ペインへ移動。3 秒以内に続けて押すと、前回の列の順のまま前回移った先の次へ進む（--prev で後ろへ。前回の列のエージェントが 1 つも列に残っていなければ、今の列の端から回り直す）。3 秒以上空くと今いる場所は数えず、列の先頭（--prev なら最後）へ移る。前回の列と移った先は `~/.cache/herdr-tools/next-last.json` に記録する（--list は移動せず、列を「ID・名前・status・status になった時刻・workspace・worktree」で順に出す。--from-app は移動後に Ghostty を前に出し、候補が無いときは標準エラーにも出す）
 ws step [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]
                                                  サイドバー（mod）に並ぶ行の順で、1 つ下（--prev で 1 つ上）の行へ移動。移る先はエージェントとペインの行（workspace の見出し、worktree の行、mod で畳んだ workspace の中の行は数えない）。端では反対の端へ回り、今いる行が無ければ下は先頭・上は最後。今いる行は、今いるペイン（会話ペインならそのエージェント）から決める。--list は移動せず、並びを「今いる行の印（*）・種類・ref・名前」で 1 行ずつ出す。--from-app は移動後に Ghostty を前に出す
-ws hunk [<worktree>] [--commit <hash> | --pr <number> | --gh-commit <sha> | --range <ref>...<ref> | --against <rev>] [--file <path>] [--client <name> | --from-app]
+ws hunk [<worktree>] [--commit <hash> | --pr <number> | --gh-commit <sha> | --range <ref>...<ref> | --against <rev>] [--file <path>] [--sidebar] [--client <name> | --from-app [--no-focus]]
+ws hunk [<worktree>] --close                      その worktree の hunk ウィンドウを閉じる
                                                  差分を hunk で開く（下の「ws hunk」を参照）
 ws edit <worktree> --file <path> [--client <name> | --from-app]
                                                  ファイルを $EDITOR で開く（下の「ws edit」を参照）
@@ -173,6 +174,20 @@ GitHub のものを開く指定（`--commit` と同時には指定できない�
 | `hunk` ウィンドウはあるがセッションが無い | そのペインを `respawn-pane -k` で作り直して起動し、同じく待って `navigate` する |
 
 hunk を開いた tmux のペインへ、`ws go` と同じ移動の部品（クライアントの選び方、Ghostty を前に出す処理）で移る。
+`--no-focus` を `--from-app` と一緒に付けると、クライアントは hunk ウィンドウへ移すが、Ghostty を前に出さない（呼んだアプリでキー操作を続けるため。commit-history の `ctrl-j` / `ctrl-k` が使う）。
+
+`ws hunk <worktree> --close` は、その worktree の tmux セッションの `hunk` ウィンドウを閉じる（`kill-window`）。差分は開かない。`hunk` ウィンドウが無ければ何もしない。
+
+`--sidebar` は、hunk のファイルツリー（files pane）を出して開く。hunk は、端末の幅が狭いと `--sidebar` を付けずに起動したときファイルツリーを出さない
+（hunk 0.24.1 で、幅 200 桁では出て、幅 100 桁では出なかった）。`hunk session reload` はファイルツリーの出し方を変えないので、起動のしかたを tmux のウィンドウの印（`@ws_hunk_sidebar`）で覚える。
+
+| `--sidebar` を付けたときの状況 | やること |
+| --- | --- |
+| `hunk` ウィンドウが無い | `hunk show <hash> --sidebar` で起動し、ウィンドウに印 `@ws_hunk_sidebar=1` を付ける |
+| `hunk` ウィンドウがあり、印が無い（`--sidebar` なしで起動した） | hunk のセッションがあっても、ペインを `respawn-pane -k` で作り直して `--sidebar` で起動し、印を付ける |
+| `hunk` ウィンドウがあり、印がある | reload で中身を入れ替える（ファイルツリーは出たまま） |
+
+`--sidebar` を付けずに `hunk` ウィンドウを起動し直したとき（セッションが無い・GitHub のものを開く）は、印を外す。hunk の中でユーザーがファイルツリーを閉じたときは、印は残るので、`--sidebar` を付けても出し直さない。
 
 hunk の中で `e` を押すと、選んでいる行をエディターで開く。hunk は `$EDITOR` だけを見る（`$VISUAL` や hunk の設定ファイルは見ない。`vim` / `nvim` / `vi` なら `+<行>` を付け、hunk を止めて同じペインで開く）。
 `ws hunk` は hunk を tmux のウィンドウで起動するので、hunk の環境は tmux サーバーのグローバルな環境になる。`tmux/config/tmux.conf` の `set-environment -g EDITOR nvim` を `~/.tmux.conf` に写す。
@@ -294,12 +309,42 @@ tmux で今いるペインの worktree のコミット履歴を出す。Herdr ap
 
 上流のブランチが無いとき・ベースブランチが分からないとき・範囲が「すべて」のときは、どちらのボタンも出さない。
 
-- キー（mod を一度クリックしてフォーカスを渡してから）: `j` / `k`（↓ / ↑）で行を選び、`Enter` でコミット・未コミットの行を開閉する。ファイルの行は `Enter` かクリックで、`ws hunk` を呼んで hunk で差分を開く。コミットの行の短いハッシュをクリックすると、行は開閉せず、そのコミット全体を hunk で開く
+- キー（mod を一度クリックしてフォーカスを渡してから）:
+
+  | キー | 動作 |
+  | --- | --- |
+  | `j` / `k`（↓ / ↑） | 行を選ぶ |
+  | `Enter` | コミット・未コミットの行を開閉する。ファイルの行では、`ws hunk` を呼んで hunk で差分を開く（クリックでも同じ） |
+  | `ctrl-j` | 1 つ下のコミットへ移り、そのコミット全体を hunk に出す |
+  | `ctrl-k`、`ctrl-h` | 1 つ上のコミットへ移り、そのコミット全体を hunk に出す |
+  | `e` | 選んでいるファイルの行を `$EDITOR` で開く（`ws edit`。worktree-changes のファイルの行と同じで、EDITOR が nvim なら tmux セッションごとの nvim に開かせる） |
+  | `q` | この worktree の hunk ウィンドウを閉じる（`ws hunk <worktree> --close`）。Ghostty の tmux クライアントは、同じ tmux セッションの前にいたウィンドウへ戻る。hunk ウィンドウが無ければ何もしない |
+  | `Tab` | 上半分の agent-board へフォーカスを移す（下の「Tab で mod の間のフォーカスを移す」） |
+
+- `ctrl-j` / `ctrl-k` は、コミットの行と「未コミットの変更」の行だけを数え、ファイルの行は飛ばす（ファイルの行にいるときは、そのファイルの持ち主のコミットから数える）。端で止まる。
+  `ws hunk <worktree> --commit <hash> --sidebar --from-app --no-focus` を呼ぶので、Ghostty の tmux クライアントは hunk ウィンドウへ移るが、Ghostty は前に出ず、mod にフォーカスが残る。
+  hunk はファイルツリーを出して開く。キーを続けて押したときは、`ws hunk` を 1 つずつ呼び、呼んでいる間に来た依頼は最後の 1 つだけを残す（途中のコミットを 1 つずつ hunk に出さない）
+- `e` が開くのは作業ツリーの今のファイルで、コミットの時点の中身ではない。そのコミットで削除されたファイル（D）は開かない。コミットの行と「未コミットの変更」の行では、開かずにその旨を出す
+- コミットの行の短いハッシュをクリックすると、行は開閉せず、そのコミット全体を hunk で開く
 - 読み直し: 今いるペインが変わったとき（agent-board と同じ tmux-focus の見張り）、`.git` の `HEAD` や `refs` が変わったとき（`git rev-parse --absolute-git-dir` と `--git-common-dir` を `watchFolder` で見張る）、5 秒ごと。結果が前と同じなら再描画しない。作業ツリーは見張らないので、未コミットの変更は 5 秒ごとかペインの変化で読み直す
 - ベースブランチは worktree ごとに 1 回調べる（`gh pr view` は GitHub への問い合わせなので、見つからなくても読み直しのたびには呼ばない。調べ直すのは、見る worktree が変わったときと、ベースブランチのボタンを押したとき）。範囲が「すべて」「push 前」のときは、調べ終わるのを待たずにコミットの一覧を出し、分かったらボタンの名前に反映する
 - git は `.git` に何も書かない引数（`--no-optional-locks` など）で読む
 - レイアウトに置いて使う（`mod.json` は `{"place": "none"}`）。`herdr-app/layouts/agents.json` では下半分の stack に入っていて、題名の帯のタブ「Commits」で選ぶ
 - プルリクエストは別の mod `pull-requests`（下の節）にある
+
+### Tab で mod の間のフォーカスを移す
+
+`herdr-app/layouts/agents.json` のレイアウトで、Tab を押すと、上半分の agent-board と、下半分の stack に表示中の mod の間でキーボードのフォーカスが移る。
+
+| フォーカスがある mod | Tab で移る先 | mod が呼ぶコマンド |
+| --- | --- | --- |
+| agent-board | 下半分の stack に表示中の mod（worktree-changes・commit-history・pull-requests のどれか） | `pane.go {direction: "down"}` |
+| worktree-changes、commit-history、pull-requests | agent-board | `pane.go {direction: "up"}` |
+
+- Herdr app の `pane.go` は、`mod.json` に `"focusable": true` を書いた表示中の mod へ移る。4 つの mod の `mod.json` にこれを書いてある
+- 移った先の mod には `nextCommand()` で `"focus"` が届き、mod が自分のフォーカスハンドルにフォーカスを当てる（`herdr-app/src/shared/focus-move.ts`）
+- 移る向きは上と下に決めてあるので、agent-board と stack を左右に並べたレイアウトでは Tab で移らない
+- 最初の 1 回は、どれかの mod をクリックしてフォーカスを渡す
 
 ### Herdr app の mod `worktree-changes`
 

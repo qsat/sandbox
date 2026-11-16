@@ -9,6 +9,7 @@ import { execWs } from "../shared/ws-exec";
 import { BRANCH_COLOR, REPOSITORY_COLOR } from "../shared/colors";
 import { TITLE_BAR_HEIGHT } from "../shared/title-bar";
 import { watchTmuxFocus } from "../shared/tmux-focus";
+import { FOCUS_COMMAND, FOCUS_MOVE_KEY, moveFocus } from "../shared/focus-move";
 import type { Tag } from "@herdr-tools/utils/tag";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
 import { usageSegments } from "@herdr-tools/utils/usage-segments";
@@ -203,7 +204,14 @@ export default class AgentBoard extends View {
   listenForKeyCommands(cx: Context) {
     cx.spawn(async (cx) => {
       for (;;) {
-        const args = wsArgsForModCommand(await nextCommand());
+        const command = await nextCommand();
+        // Tab（pane.go）でこの mod に移ってきたら、キーボードを受け取る
+        if (command === FOCUS_COMMAND) {
+          this.focus.focus();
+          cx.notify();
+          continue;
+        }
+        const args = wsArgsForModCommand(command);
         if (!args) continue;
         // 候補が無いとき、ws next --from-app は終了コード 0 で理由を標準エラーに出す
         const r = await execWs(args);
@@ -482,6 +490,11 @@ export default class AgentBoard extends View {
   }
 
   onBoardKey(keystroke: string, rows: BoardRow[], cx: Context) {
+    // Tab で、下半分の stack に表示中の mod（worktree-changes・commit-history・pull-requests）へフォーカスを移す
+    if (keystroke === FOCUS_MOVE_KEY) {
+      moveFocus("down");
+      return true;
+    }
     if (keystroke === "j" || keystroke === "down" || keystroke === "k" || keystroke === "up") {
       this.selected = moveSelection(rows, this.selected, keystroke === "j" || keystroke === "down" ? 1 : -1);
       cx.notify();

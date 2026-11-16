@@ -12,8 +12,8 @@ export type Step =
   | { op: "attachHere"; target: string }
   | { op: "newGhosttyWindow"; target: string }
   | { op: "focusGhostty" }
-  | { op: "openHunkWindow"; session: string; cwd: string; argv: string[] }
-  | { op: "respawnHunkWindow"; session: string; cwd: string; argv: string[] }
+  | { op: "openHunkWindow"; session: string; cwd: string; argv: string[]; sidebar?: true }
+  | { op: "respawnHunkWindow"; session: string; cwd: string; argv: string[]; sidebar?: true }
   | { op: "openEditWindow"; session: string; window: string; cwd: string; argv: string[] }
   | { op: "remoteEdit"; bin: string; socket: string; file: string }
   | { op: "hunkReload"; cwd: string; hunkBin: string; args: string[] }

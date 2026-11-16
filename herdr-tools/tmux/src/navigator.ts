@@ -7,7 +7,7 @@ import { focusGhostty, openGhosttyWindowRunning } from "./ghostty";
 import { AGENTS_WINDOW, chooseClient, ensureSession, planGo, workingDir, type PaneTarget, type Step } from "./plans/go";
 import { chooseCycleTarget, continuingRecord, cycleCandidates, decideCurrentPane, MESSAGE_WHEN_NO_CANDIDATE } from "./plans/cycle";
 import { planPanes } from "./plans/panes";
-import { HUNK_WINDOW, planHunk, type HunkSource } from "./plans/hunk";
+import { HUNK_SIDEBAR_OPTION, HUNK_WINDOW, planHunk, type HunkSource } from "./plans/hunk";
 import { editSocketPath, editWindowName, planEdit, serverEditorBin, SHARED_EDIT_WINDOW } from "./plans/edit";
 import { HunkCli } from "./hunk-cli";
 import { toListJson } from "./list-json";
@@ -48,25 +48,40 @@ export class TmuxNavigator {
   ) {}
 
   /** worktree の差分を hunk で開く。hunk のセッションがあれば中身を入れ替え、無ければ tmux セッションの hunk ウィンドウで起動し、file があればそこへ移る */
-  async openInHunk(path: string, opts: { source: HunkSource; file?: string; client?: string; fromApp?: boolean }) {
+  async openInHunk(path: string, opts: { source: HunkSource; file?: string; client?: string; fromApp?: boolean; sidebar?: boolean; noFocus?: boolean }) {
     const view = await this.view({ alsoShow: [path] });
     const target = resolveRef(view.snap, path);
     if (!target) throw new Error(`見つかりません: ${path}`);
     const cwd = workingDir(target.worktree, this.cwdWhenMissing);
     const client = await this.clientToMove(opts);
     const session = ensureSession(target.worktree, view.idx, cwd);
+    const windowExists = await this.tmux.hasWindow(session.name, HUNK_WINDOW);
     const steps = planHunk({
       cwd,
       hunkBin: this.hunk.bin,
       source: opts.source,
       file: opts.file,
       session,
-      windowExists: await this.tmux.hasWindow(session.name, HUNK_WINDOW),
+      windowExists,
       hunkSessionExists: await this.hunk.hasSession(cwd),
-      ctx: { client, fromApp: !!opts.fromApp, cwdWhenMissing: this.cwdWhenMissing },
+      sidebar: opts.sidebar,
+      sidebarShown: windowExists && (await this.tmux.windowOption(session.name, HUNK_WINDOW, HUNK_SIDEBAR_OPTION)) === "1",
+      // noFocus: クライアントは hunk ウィンドウへ移すが、Ghostty を前に出さない（呼んだアプリでキー操作を続けるため）
+      ctx: { client, fromApp: !!opts.fromApp && !opts.noFocus, cwdWhenMissing: this.cwdWhenMissing },
     });
     for (const step of steps) await this.run(step);
     return steps;
+  }
+
+  /** worktree の tmux セッションの hunk ウィンドウを閉じる（ws hunk --close）。無ければ何もしない */
+  async closeHunk(path: string) {
+    const view = await this.view({ alsoShow: [path] });
+    const target = resolveRef(view.snap, path);
+    if (!target) throw new Error(`見つかりません: ${path}`);
+    const session = view.idx.sessionOf(target.worktree.path);
+    if (!session || !(await this.tmux.hasWindow(session.name, HUNK_WINDOW))) return { closed: false } as const;
+    await this.tmux.killWindow(session.name, HUNK_WINDOW);
+    return { closed: true, session: session.name } as const;
   }
 
   /** その nvim が応答するか（`--remote-expr 1` の答えで確かめる） */
@@ -172,9 +187,11 @@ export class TmuxNavigator {
       case "focusGhostty":
         return focusGhostty();
       case "openHunkWindow":
-        return void (await this.tmux.openWindowRunning(step.session, HUNK_WINDOW, step.cwd, step.argv));
+        await this.tmux.openWindowRunning(step.session, HUNK_WINDOW, step.cwd, step.argv);
+        return this.markHunkSidebar(step.session, !!step.sidebar);
       case "respawnHunkWindow":
-        return this.tmux.respawnWindowRunning(step.session, HUNK_WINDOW, step.cwd, step.argv);
+        await this.tmux.respawnWindowRunning(step.session, HUNK_WINDOW, step.cwd, step.argv);
+        return this.markHunkSidebar(step.session, !!step.sidebar);
       case "openEditWindow":
         mkdirSync(NVIM_SOCKET_DIR, { recursive: true });
         return void (await this.tmux.openWindowRunning(step.session, step.window, step.cwd, step.argv));
@@ -188,6 +205,11 @@ export class TmuxNavigator {
       case "hunkNavigate":
         return this.hunk.navigate(step.cwd, step.file, step.wait ? HUNK_START_ATTEMPTS : 1);
     }
+  }
+
+  /** hunk ウィンドウを --sidebar で起動したかを、ウィンドウの印に残す。起動した hunk がすぐ終わってウィンドウが消えていても失敗にしない */
+  private async markHunkSidebar(session: string, sidebar: boolean) {
+    await this.tmux.setWindowOption(session, HUNK_WINDOW, HUNK_SIDEBAR_OPTION, sidebar ? "1" : null).catch(() => {});
   }
 
   async openPanesForWorktreeOf(paneId: string, opts: { includeChildren: boolean; max: number }) {

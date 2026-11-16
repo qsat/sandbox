@@ -23,8 +23,15 @@ export interface HunkPlanInput {
   windowExists: boolean;
   /** `hunk session get --repo <cwd>` が成功するか */
   hunkSessionExists: boolean;
+  /** ファイルツリー（hunk の files pane）を出して開く（`hunk ... --sidebar`）。幅が狭い端末では、hunk はこの指定が無いとファイルツリーを出さない */
+  sidebar?: boolean;
+  /** 今の hunk ウィンドウが、ファイルツリーを出す指定（--sidebar）で起動したものか（ウィンドウに付けた印 HUNK_SIDEBAR_OPTION） */
+  sidebarShown?: boolean;
   ctx: GoContext;
 }
+
+/** hunk ウィンドウを --sidebar で起動したことを覚える、tmux のウィンドウのユーザーオプション（値は "1"） */
+export const HUNK_SIDEBAR_OPTION = "@ws_hunk_sidebar";
 
 export function hunkArgs(source: HunkSource) {
   switch (source.kind) {
@@ -98,22 +105,27 @@ export function parseHunkSource(flags: { commit?: string; pr?: string; ghCommit?
  * - GitHub のプルリクエスト・コミット（gh-pr / gh-commit）: reload せず、hunk ウィンドウがあれば respawn-pane -k で作り直し、無ければ作る。GH_TOKEN は githubLaunch が渡す
  * - セッションが無くウィンドウも無い: tmux セッション（無ければ作る）に hunk ウィンドウを作って起動する
  * - セッションが無いがウィンドウはある（hunk が終わっている、または起動中）: そのペインを respawn-pane -k で作り直す
+ * - ファイルツリーを出す指定（sidebar）で、hunk ウィンドウがファイルツリーを出す指定なしで起動したもの: reload ではファイルツリーを出せないので、
+ *   セッションがあっても respawn-pane -k で `--sidebar` を付けて起動し直す。一度起動し直せば、reload してもファイルツリーは出たままなので、次からは reload で入れ替える
  * 起動・入れ替えのあと、クライアントを hunk ウィンドウへ移し、最後に navigate でファイルへ移る（起動直後はセッションが現れるまで待つ）
  */
 export function planHunk(input: HunkPlanInput): Step[] {
   const args = hunkArgs(input.source);
   const github = fromGithub(input.source);
+  const relaunchForSidebar = !!input.sidebar && input.windowExists && !input.sidebarShown;
   // GitHub のものは hunk session reload で入れ替えられないので、常にペインを作り直して起動し直す（起動を待って navigate する）
-  const sessionLive = input.hunkSessionExists && !github;
+  const sessionLive = input.hunkSessionExists && !github && !relaunchForSidebar;
   const navigate: Step[] = input.file ? [{ op: "hunkNavigate", cwd: input.cwd, file: input.file, wait: !sessionLive }] : [];
   const bring = bringClientTo(`${input.session.name}:${HUNK_WINDOW}`, input.ctx);
-  const launch = github ? githubLaunch(input.hunkBin, args) : [input.hunkBin, ...args];
+  const launchArgs = input.sidebar ? [...args, "--sidebar"] : args;
+  const launch = github ? githubLaunch(input.hunkBin, launchArgs) : [input.hunkBin, ...launchArgs];
+  const sidebar = input.sidebar ? ({ sidebar: true } as const) : {};
   if (sessionLive) {
     const reload: Step = { op: "hunkReload", cwd: input.cwd, hunkBin: input.hunkBin, args };
     return [reload, ...(input.windowExists ? bring : []), ...navigate];
   }
   if (input.windowExists) {
-    return [{ op: "respawnHunkWindow", session: input.session.name, cwd: input.cwd, argv: launch }, ...bring, ...navigate];
+    return [{ op: "respawnHunkWindow", session: input.session.name, cwd: input.cwd, argv: launch, ...sidebar }, ...bring, ...navigate];
   }
-  return [...input.session.steps, { op: "openHunkWindow", session: input.session.name, cwd: input.cwd, argv: launch }, ...bring, ...navigate];
+  return [...input.session.steps, { op: "openHunkWindow", session: input.session.name, cwd: input.cwd, argv: launch, ...sidebar }, ...bring, ...navigate];
 }

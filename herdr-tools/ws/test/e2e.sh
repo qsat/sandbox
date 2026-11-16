@@ -340,6 +340,32 @@ t send-keys -K -c "$CLIENT" C-b 'C-\'
 sleep 0.3
 check "会話中でないペインには送らない（SIGQUIT でプログラムを落とさない）" "$(t display -p -t "$PLAIN_PANE" '#{pane_id} #{pane_current_command}')" "$PLAIN_PANE cat"
 
+echo "hunk --sidebar（ファイルツリーを出して開く。出していない hunk は 1 度だけ起動し直す）"
+if command -v hunk >/dev/null 2>&1; then
+  hunk_pane_pid() { t list-panes -t '=api=feat-auth:hunk' -F '#{pane_pid}' 2>/dev/null | head -1; }
+  hunk_sidebar_mark() { t show-options -w -q -v -t '=api=feat-auth:hunk' @ws_hunk_sidebar 2>/dev/null || true; }
+  wait_hunk_session() { for _ in $(seq 50); do hunk session get --repo "$FEAT" --json >/dev/null 2>&1 && return 0; sleep 0.2; done; return 0; }
+  ws go "$API" --client "$CLIENT"
+  ws hunk "$FEAT" --commit HEAD --client "$CLIENT"
+  wait_hunk_session
+  PLAIN_PID="$(hunk_pane_pid)"
+  check "--sidebar が無ければ、印を付けずに起動する" "$(hunk_sidebar_mark)" ""
+  check "クライアントが hunk ウィンドウへ移る" "$(t display -p -c "$CLIENT" '#{session_name}:#{window_name}')" "api=feat-auth:hunk"
+  ws hunk "$FEAT" --commit HEAD --sidebar --client "$CLIENT"
+  wait_hunk_session
+  SIDE_PID="$(hunk_pane_pid)"
+  check "ファイルツリーなしで起動した hunk は、--sidebar で起動し直す" "$([ -n "$SIDE_PID" ] && [ "$SIDE_PID" != "$PLAIN_PID" ] && echo 起動し直した)" "起動し直した"
+  check "起動し直したウィンドウに印を付ける" "$(hunk_sidebar_mark)" "1"
+  ws hunk "$FEAT" --sidebar --client "$CLIENT"
+  check "印があれば起動し直さず、中身を入れ替える" "$(hunk_pane_pid)" "$SIDE_PID"
+  check "入れ替えた中身は未コミットの変更（hunk diff。hunk の inputKind は show から vcs に変わる）" "$(hunk session get --repo "$FEAT" --json | jq -r '.session.inputKind // .inputKind')" "vcs"
+  check "--close は hunk ウィンドウを閉じる" "$(ws hunk "$FEAT" --close)" "closed api=feat-auth:hunk"
+  check "hunk ウィンドウが消える" "$(t list-windows -t '=api=feat-auth' -F '#{window_name}' | grep -c '^hunk$' || true)" "0"
+  check "hunk ウィンドウが無ければ何もしない" "$(ws hunk "$FEAT" --close)" "skip: hunk ウィンドウはありません"
+else
+  echo "  (hunk が無いので省略)"
+fi
+
 echo "edit（セッションごとに 1 つの nvim を使い回す）"
 if command -v nvim >/dev/null 2>&1; then
   # nvim のソケットを置く ~/.cache を、利用者のものにしない。unix ソケットのパスは短くしないと --listen できないので /tmp の下に作る

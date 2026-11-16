@@ -10,6 +10,7 @@ import { moveSelection } from "../shared/selection";
 import { stackTitleBar } from "../shared/stack-tabs";
 import type { Target } from "../shared/target";
 import { watchTmuxFocus } from "../shared/tmux-focus";
+import { FOCUS_MOVE_KEY, moveFocus, takeFocusOnCommand } from "../shared/focus-move";
 import { execWs } from "../shared/ws-exec";
 import { editBlockedReason, wsEditArgs } from "../shared/ws-edit";
 import { GIT_READ_ARGS } from "@herdr-tools/utils/git-read-args";
@@ -64,6 +65,7 @@ export default class WorktreeChanges extends View {
     this.refresh(cx);
     // tmux で今いるペインが変わったらすぐ読み直す
     watchTmuxFocus(cx, this, (cx) => this.refresh(cx));
+    takeFocusOnCommand(cx, this, this.focus);
   }
 
   git(root: string, args: string[]) {
@@ -238,6 +240,11 @@ export default class WorktreeChanges extends View {
     if (keystroke === "j" || keystroke === "down" || keystroke === "k" || keystroke === "up") {
       this.selected = moveSelection(rows, this.selected, keystroke === "j" || keystroke === "down" ? 1 : -1);
       cx.notify();
+      return true;
+    }
+    // Tab で、上半分の agent-board へフォーカスを移す
+    if (keystroke === FOCUS_MOVE_KEY) {
+      moveFocus("up");
       return true;
     }
     const row = keystroke === "enter" ? rows.find((r) => r.id === this.selected) : undefined;

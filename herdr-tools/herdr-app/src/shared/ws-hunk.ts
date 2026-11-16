@@ -11,6 +11,19 @@ export function wsHunkArgs(root: string, commit: string | null, file: { path: st
   return ["hunk", root, ...(commit ? ["--commit", commit] : []), ...(file ? ["--file", file.path] : []), "--from-app"];
 }
 
+/**
+ * コミットを順に見ていくときの引数（commit-history の ctrl-j / ctrl-k）。コミット全体（commit が null なら未コミットの変更）を、
+ * hunk のファイルツリーを出して開く（`--sidebar`）。Ghostty を前に出さない（`--no-focus`）ので、mod にフォーカスを残したまま続けてキーを押せる
+ */
+export function wsHunkBrowseArgs(root: string, commit: string | null) {
+  return ["hunk", root, ...(commit ? ["--commit", commit] : []), "--sidebar", "--from-app", "--no-focus"];
+}
+
+/** その worktree の hunk ウィンドウを閉じる引数（commit-history の q）。Ghostty の tmux クライアントは、同じ tmux セッションの前にいたウィンドウへ戻る */
+export function wsHunkCloseArgs(root: string) {
+  return ["hunk", root, "--close"];
+}
+
 /** GitHub のプルリクエスト全体を開く引数（`hunk gh pr <番号>`） */
 export function wsHunkPrArgs(root: string, prNumber: number) {
   return ["hunk", root, "--pr", String(prNumber), "--from-app"];

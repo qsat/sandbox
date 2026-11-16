@@ -29,8 +29,9 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
                                                    blocked → done → idle の順の列を巡回（3 秒以内に続けて押すと前回の続き、間が空くと先頭から。--prev で後ろへ。--list は移動せず列を順に出す。--from-app は移動後に Ghostty を前に出す）
   ws step [--prev] [--pane <pane_id>] [--client <name> | --from-app] [--list]
                                                    サイドバーの並び順で 1 つ下（--prev で上）の行へ移動（--list は移動せず並びを出す。今いる行は先頭に * を付ける）
-  ws hunk [<worktree>] [--commit <hash> | --pr <number> | --gh-commit <sha> | --range <ref>...<ref> | --against <rev>] [--file <path>] [--client <name> | --from-app]
-                                                   差分を hunk で開く。--commit なら hunk show <hash>、--pr なら GitHub のプルリクエスト全体（hunk gh pr）、--gh-commit なら GitHub のコミット（hunk gh commit）、--range ならブランチ間の差分（hunk diff <range>）、--against なら作業ツリーと <rev> の差分（hunk diff <rev>。未コミットも含む）、無ければ未コミットの変更（hunk diff）。--file のファイルへ移る。
+  ws hunk [<worktree>] [--commit <hash> | --pr <number> | --gh-commit <sha> | --range <ref>...<ref> | --against <rev>] [--file <path>] [--sidebar] [--client <name> | --from-app [--no-focus]]
+                                                   ws hunk [<worktree>] --close は、その worktree の hunk ウィンドウを閉じる。
+                                                   差分を hunk で開く。--sidebar は hunk のファイルツリーを出す。--no-focus は --from-app のとき Ghostty を前に出さない。--commit なら hunk show <hash>、--pr なら GitHub のプルリクエスト全体（hunk gh pr）、--gh-commit なら GitHub のコミット（hunk gh commit）、--range ならブランチ間の差分（hunk diff <range>）、--against なら作業ツリーと <rev> の差分（hunk diff <rev>。未コミットも含む）、無ければ未コミットの変更（hunk diff）。--file のファイルへ移る。
                                                    hunk のセッションがあれば中身を入れ替え、無ければ tmux セッションの hunk ウィンドウで起動する（HUNK_BIN で実行ファイルを指定）
   ws edit <worktree> --file <path> [--client <name> | --from-app]
                                                    ファイルを $EDITOR で開く。EDITOR は tmux のグローバルな環境（set-environment -g EDITOR）のもの。nvim なら tmux セッションごとに 1 つの edit ウィンドウの nvim に開かせ、そうでなければそのファイル専用のウィンドウで起動して、クライアントをそこへ移す
@@ -206,8 +207,13 @@ async function main(argv: string[]) {
     }
     case "hunk": {
       const path = absolutePathFromCwd(p.positional[0] ?? ".");
+      if (has(p, "--close")) {
+        const r = await nav.closeHunk(path);
+        process.stdout.write(r.closed ? `closed ${r.session}:hunk\n` : "skip: hunk ウィンドウはありません\n");
+        return 0;
+      }
       const source = parseHunkSource({ commit: str(p, "--commit"), pr: str(p, "--pr"), ghCommit: str(p, "--gh-commit"), range: str(p, "--range"), against: str(p, "--against") });
-      await nav.openInHunk(path, { source, file: str(p, "--file"), client: str(p, "--client"), fromApp: goOpts.fromApp });
+      await nav.openInHunk(path, { source, file: str(p, "--file"), client: str(p, "--client"), fromApp: goOpts.fromApp, sidebar: has(p, "--sidebar"), noFocus: has(p, "--no-focus") });
       return 0;
     }
     case "edit": {

@@ -40,7 +40,7 @@ which ws && ws list --json
 | `ws stop <agent>` | ユーザーがそのエージェントの停止を頼んだとき | エージェントを止めて一覧から消す |
 | `ws close [<ref>] [--stop-agents]` | ユーザーが頼んだとき | worktree の tmux セッションを閉じる。エージェントは止まらない。`--stop-agents` を付けると、その worktree のエージェントをすべて止めてから閉じる |
 | `ws prune --yes` | ユーザーが `--dry-run` の結果を見て頼んだとき | セッションとエージェントを片付ける |
-| `ws hunk ...` / `ws edit ...` | ユーザーが「開いて」と頼んだとき | ユーザーの画面が hunk・エディタへ移る |
+| `ws hunk ...` / `ws edit ...` | ユーザーが「開いて」と頼んだとき | ユーザーの画面が hunk・エディタへ移る。`ws hunk` に `--sidebar` を付けると、hunk のファイルツリーも出す |
 | `--dry-run` の無い `ws go`、`--list` の無い `ws next`・`ws step`、`ws panes`、`ws ui` | 呼ばない | ユーザーのキー操作用。ユーザーの画面が移る |
 | `--client <name>` / `--from-app` を付けた呼び出し | 呼ばない | どのクライアントの画面を移すかの指定で、ユーザーのキー操作と Herdr app が使う |
 | `--here` / `--attach` を付けた `ws new`・`ws create` | 呼ばない | 今の端末を claude に渡すか、ユーザーの画面が移る |

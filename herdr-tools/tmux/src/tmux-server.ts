@@ -96,6 +96,23 @@ export class TmuxServer {
     return (await this.linesOrNoneWhenServerIsDown(["list-windows", "-t", exact(session), "-F", "#{window_name}"])).includes(window);
   }
 
+  /** window を閉じる（中のプログラムも止まる）。その window を見ていたクライアントは、同じセッションの前にいた window へ移る */
+  async killWindow(session: string, window: string) {
+    await this.exec(["kill-window", "-t", `${exact(session)}:${window}`]);
+  }
+
+  /** window に付けたユーザーオプション（`@name`）の値。無ければ空 */
+  async windowOption(session: string, window: string, name: string) {
+    const r = await run(this.bin, this.argv(["show-options", "-w", "-q", "-v", "-t", `${exact(session)}:${window}`, name]));
+    return r.code === 0 ? r.stdout.trim() : "";
+  }
+
+  /** window にユーザーオプション（`@name`）を付ける。value が null なら外す */
+  async setWindowOption(session: string, window: string, name: string, value: string | null) {
+    const target = `${exact(session)}:${window}`;
+    await this.exec(value === null ? ["set-option", "-w", "-u", "-t", target, name] : ["set-option", "-w", "-t", target, name, value]);
+  }
+
   /** tmux のグローバルな環境の値（`set-environment -g NAME ...`）。無ければ空 */
   async globalEnv(name: string) {
     const r = await run(this.bin, this.argv(["show-environment", "-g", name]));

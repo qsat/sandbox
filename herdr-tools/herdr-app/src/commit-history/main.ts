@@ -12,11 +12,13 @@ import { footerBar, footerButton } from "../shared/footer-bar";
 import { HEAD_ARGS, commitFiles, readLocalFiles, type FileChange } from "../shared/local-changes";
 import { branchLabel, compareRef, findBaseRef, mergeBaseArgs } from "../shared/base-ref";
 import { watchTmuxFocus } from "../shared/tmux-focus";
-import { wsHunkAgainstArgs, wsHunkArgs, wsHunkRangeArgs } from "../shared/ws-hunk";
+import { wsHunkAgainstArgs, wsHunkArgs, wsHunkBrowseArgs, wsHunkCloseArgs, wsHunkRangeArgs } from "../shared/ws-hunk";
+import { FOCUS_MOVE_KEY, moveFocus, takeFocusOnCommand } from "../shared/focus-move";
+import { editBlockedReason, wsEditArgs } from "../shared/ws-edit";
 import { execWs } from "../shared/ws-exec";
 import { GIT_READ_ARGS } from "@herdr-tools/utils/git-read-args";
 import { diffRange, logArgs, type HistoryRange, parseLog, showFilesArgs, type Commit } from "./git";
-import { LOCAL_ID, visibleRows, type Row } from "./rows";
+import { LOCAL_ID, moveToHeadRow, visibleRows, type Row } from "./rows";
 
 /** 予備の読み直しの間隔（ws list と git log・git status）。結果が前と同じなら再描画しない */
 const REFRESH_MS = 5000;
@@ -44,6 +46,10 @@ export default class CommitHistory extends View {
   dirty!: boolean;
   snapshot!: string;
   watchGeneration!: number;
+  /** ctrl-j / ctrl-k で頼んだ ws hunk を呼んでいる最中か */
+  browsing!: boolean;
+  /** 呼んでいる間に来た、最後の依頼（ws の引数）。無ければ null */
+  browsePending!: string[] | null;
   focus!: FocusHandle;
 
   init(_props: unknown, cx: AsyncContext) {
@@ -64,11 +70,14 @@ export default class CommitHistory extends View {
     this.dirty = false;
     this.snapshot = "";
     this.watchGeneration = 0;
+    this.browsing = false;
+    this.browsePending = null;
     this.focus = cx.focus_handle();
     cx.timer.every(REFRESH_MS, (cx) => this.refresh(cx));
     this.refresh(cx);
     // tmux で今いるペインが変わったらすぐ読み直す（未コミットの変更の読み直しもここ）
     watchTmuxFocus(cx, this, (cx) => this.refresh(cx));
+    takeFocusOnCommand(cx, this, this.focus);
   }
 
   git(root: string, args: string[]) {
@@ -295,6 +304,58 @@ export default class CommitHistory extends View {
     );
   }
 
+  /**
+   * コミットを 1 つ下（delta が 1）か上（-1）へ移り、そのコミット全体（「未コミットの変更」の行なら未コミットの変更）を hunk に出す。
+   * Ghostty は前に出さないので、mod にフォーカスを残したまま続けて押せる
+   */
+  browse(delta: 1 | -1, rows: Row[], cx: Context) {
+    const root = this.target?.path;
+    const row = moveToHeadRow(rows, this.selected, delta);
+    if (!root || !row) return;
+    this.selected = row.id;
+    this.execLatest(wsHunkBrowseArgs(root, row.kind === "commit" ? row.commit.hash : null), cx);
+  }
+
+  /**
+   * ws を 1 つずつ呼ぶ。呼んでいる間に次の依頼が来たら、最後の依頼だけを覚えて、終わってから呼ぶ。
+   * キーを続けて押したときに、途中のコミットを 1 つずつ hunk に出して待たせないため
+   */
+  execLatest(args: string[], cx: Context) {
+    cx.notify();
+    this.browsePending = args;
+    if (this.browsing) return;
+    this.browsing = true;
+    cx.spawn(
+      async (cx) => {
+        try {
+          while (this.browsePending) {
+            const next = this.browsePending;
+            this.browsePending = null;
+            this.actionError = (await execWs(next)).error;
+            cx.notify();
+          }
+        } finally {
+          this.browsing = false;
+        }
+      },
+      { owner: this },
+    );
+  }
+
+  /** 選んでいるファイルの行を $EDITOR で開く（`ws edit`。worktree-changes と同じ）。開くのは作業ツリーの今のファイルで、コミットの時点の中身ではない */
+  editSelected(rows: Row[], cx: Context) {
+    const root = this.target?.path;
+    const row = rows.find((r) => r.id === this.selected);
+    if (!root) return;
+    const blocked = row?.kind !== "file" ? "e で開けるのはファイルの行（コミットの行で Enter を押すと、ファイルが並ぶ）" : editBlockedReason(row.file);
+    if (blocked || row?.kind !== "file") {
+      this.actionError = blocked ?? "";
+      cx.notify();
+      return;
+    }
+    this.execHunk(wsEditArgs(root, row.file), cx);
+  }
+
   act(row: Row, cx: Context) {
     if (row.kind === "file") this.openInHunk(row, cx);
     else this.toggle(row, cx);
@@ -304,6 +365,25 @@ export default class CommitHistory extends View {
     if (keystroke === "j" || keystroke === "down" || keystroke === "k" || keystroke === "up") {
       this.selected = moveSelection(rows, this.selected, keystroke === "j" || keystroke === "down" ? 1 : -1);
       cx.notify();
+      return true;
+    }
+    // ctrl-j で下、ctrl-k で上のコミットへ移りながら hunk の差分を切り替える。ctrl-h も上へ移る
+    if (keystroke === "ctrl-j" || keystroke === "ctrl-k" || keystroke === "ctrl-h") {
+      this.browse(keystroke === "ctrl-j" ? 1 : -1, rows, cx);
+      return true;
+    }
+    if (keystroke === "e") {
+      this.editSelected(rows, cx);
+      return true;
+    }
+    // q で、この worktree の hunk ウィンドウを閉じる（ctrl-j / ctrl-k で開いた hunk を、mod にフォーカスを残したまま閉じる）
+    if (keystroke === "q") {
+      if (this.target) this.execHunk(wsHunkCloseArgs(this.target.path), cx);
+      return true;
+    }
+    // Tab で、上半分の agent-board へフォーカスを移す
+    if (keystroke === FOCUS_MOVE_KEY) {
+      moveFocus("up");
       return true;
     }
     const row = keystroke === "enter" ? rows.find((r) => r.id === this.selected) : undefined;
@@ -345,7 +425,7 @@ export default class CommitHistory extends View {
         const shown = f.oldPath ? `${f.oldPath} → ${f.path}` : f.path;
         return rowBase(row.id, selected, t, 24)
           .on_click((_e, cx) => this.openInHunk(row, cx))
-          .tooltip("hunk で差分を開く（Enter）")
+          .tooltip("hunk で差分を開く（Enter）。e で $EDITOR で開く")
           .child(div().flex_none().w(12).text_color(statusColor(t, f.status)).child(f.status))
           .child(div().flex_1().min_w(0).truncate().child(shown))
           .when(f.binary, (el) => el.child(label("バイナリ", t.dim)))

@@ -125,6 +125,39 @@ describe("planHunk", () => {
     expect(steps[0]).toMatchObject({ op: "hunkReload", args: ["show", "abc123"] });
   });
 
+  describe("ファイルツリーを出す指定（sidebar）", () => {
+    const live = { hunkSessionExists: true, windowExists: true, file: undefined, sidebar: true };
+
+    test("ウィンドウが無ければ、--sidebar を付けて起動し、印を付ける", () => {
+      const steps = planHunk({ ...base, file: undefined, sidebar: true });
+      expect(steps[0]).toEqual({ op: "openHunkWindow", session: "api", cwd: "/w/api", argv: ["/opt/homebrew/bin/hunk", "show", "abc123", "--sidebar"], sidebar: true });
+    });
+
+    test("ファイルツリーなしで起動した hunk ウィンドウは、セッションがあっても --sidebar を付けて起動し直す", () => {
+      const steps = planHunk({ ...base, ...live, sidebarShown: false });
+      expect(steps.map((s) => s.op)).toEqual(["respawnHunkWindow", "switchClient", "focusGhostty"]);
+      expect(steps[0]).toMatchObject({ argv: ["/opt/homebrew/bin/hunk", "show", "abc123", "--sidebar"], sidebar: true });
+    });
+
+    test("--sidebar で起動した hunk ウィンドウは、reload で入れ替える（reload の引数に --sidebar は付けない）", () => {
+      const steps = planHunk({ ...base, ...live, sidebarShown: true });
+      expect(steps.map((s) => s.op)).toEqual(["hunkReload", "switchClient", "focusGhostty"]);
+      expect(steps[0]).toMatchObject({ args: ["show", "abc123"] });
+    });
+
+    test("hunk ウィンドウが無く、別の場所で開いているセッションは、起動し直さず reload する", () => {
+      expect(ops({ ...live, windowExists: false })).toEqual(["hunkReload"]);
+    });
+
+    test("指定が無ければ、起動のコマンドにも step にも sidebar を付けない", () => {
+      expect(planHunk({ ...base, windowExists: true })[0]).toEqual({ op: "respawnHunkWindow", session: "api", cwd: "/w/api", argv: ["/opt/homebrew/bin/hunk", "show", "abc123"] });
+    });
+  });
+
+  test("Ghostty を前に出さない指定（ctx.fromApp が false）なら、クライアントを移すだけで focusGhostty をしない", () => {
+    expect(ops({ file: undefined, hunkSessionExists: true, windowExists: true, ctx: { ...base.ctx, fromApp: false } })).toEqual(["hunkReload", "switchClient"]);
+  });
+
   test("file が無ければ navigate しない", () => {
     expect(ops({ file: undefined, hunkSessionExists: true, windowExists: true })).toEqual(["hunkReload", "switchClient", "focusGhostty"]);
   });
