@@ -43,6 +43,8 @@ function toRow(item: SidebarItem) {
         icon: statusIcon(a.status),
         status: statusLabel(a),
         rawStatus: a.status,
+        /** 今の状態になった時刻（エポックからのミリ秒）。分からなければ null */
+        statusMs: a.statusMs ?? null,
         tags: agentTags(a, a.tmux.attached),
         context: contextUsage(a),
         canResume: a.resumable,
@@ -97,6 +99,14 @@ export function wsArgsFor(row: BoardRow, action: BoardAction): string[] | null {
     case "close":
       return row.kind === "worktree" && row.hasSession ? ["close", row.key, "--stop-agents"] : null;
   }
+}
+
+/** done になってから、アイコンを点滅させて知らせる時間（ミリ秒） */
+export const DONE_NOTICE_MS = 10000;
+
+/** エージェントの行が、done になってから DONE_NOTICE_MS 以内か。状態が変わった時刻が分からなければ false */
+export function isJustDone(row: { rawStatus: string; statusMs: number | null }, nowMs: number) {
+  return row.rawStatus === "done" && row.statusMs !== null && nowMs - row.statusMs < DONE_NOTICE_MS;
 }
 
 export function wsArgsForModCommand(command: string): string[] | null {

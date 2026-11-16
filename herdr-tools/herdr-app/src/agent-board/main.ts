@@ -13,7 +13,7 @@ import { FOCUS_COMMAND, FOCUS_MOVE_KEY, moveFocus } from "../shared/focus-move";
 import type { Tag } from "@herdr-tools/utils/tag";
 import type { ListedTree } from "@herdr-tools/tmux/list-json";
 import { usageSegments } from "@herdr-tools/utils/usage-segments";
-import { boardRows, changeTargets, EMPTY_LIST, nextList, parseChanges, type ChangeAmount, keyActionFor, moveSelection, rowId, toggleCollapsed, wsArgsFor, type BoardAction, type BoardRow, type LiveTerminal, wsArgsForModCommand } from "./board";
+import { isJustDone, boardRows, changeTargets, EMPTY_LIST, nextList, parseChanges, type ChangeAmount, keyActionFor, moveSelection, rowId, toggleCollapsed, wsArgsFor, type BoardAction, type BoardRow, type LiveTerminal, wsArgsForModCommand } from "./board";
 
 const MOD_NAME = "agent-board";
 const LIST_REFRESH_MS = 2000;
@@ -85,12 +85,27 @@ function statusColor(t: Theme, status: string) {
   return status === "error" ? t.ansi1 : status === "done" ? DONE_COLOR : ((t as Record<string, Color>)[status] ?? t.unknown);
 }
 
+/** done になった直後の点滅で、今の色と交互に出す白 */
+const DONE_NOTICE_COLOR: Color = "#ffffff";
+/** done になった直後の点滅で、白と今の色を切り替える間隔（ミリ秒）。1 往復は 600 ミリ秒で、working の砂時計（WORKING_BLINK_MS）の半分 */
+const DONE_NOTICE_FRAME_MS = 300;
+/** done になった直後の点滅を止めるために、描き直しが要るかを確かめる間隔（ミリ秒） */
+const DONE_NOTICE_CHECK_MS = 1000;
 const HOURGLASS_SIZE = 12;
 /** working の砂時計が、濃い → 薄い → 濃いと 1 往復する時間（ミリ秒） */
 const WORKING_BLINK_MS = 1200;
 
 /** エージェントの状態のアイコン。working は砂時計を点滅させる（Herdr app の側で動くので、点滅のたびに描き直さない）。ほかは文字のアイコン */
 function statusMark(row: AgentRow, color: Color) {
+  if (isJustDone(row, Date.now())) {
+    // 今の色のアイコンの上に白のアイコンを重ね、白のアイコンを「出す・消す」の 2 コマで切り替える。
+    // 不透明度をなめらかに往復させる（loop）と気づきにくいので、途中の濃さを出さずにぱっと切り替える（frames）
+    return div()
+      .relative()
+      .flex_none()
+      .child(label(row.icon, color))
+      .child(div().absolute().top_0().left_0().text_color(DONE_NOTICE_COLOR).frames([row.icon, ""], DONE_NOTICE_FRAME_MS));
+  }
   if (row.rawStatus !== "working") return label(row.icon, color);
   return svg("mods/agent-board/hourglass.svg").flex_none().size(HOURGLASS_SIZE).text_color(color).loop("opacity", { from: 1, to: 0.25, period: WORKING_BLINK_MS });
 }
@@ -184,6 +199,8 @@ export default class AgentBoard extends View {
   changes!: Record<string, ChangeAmount>;
   changeTargets!: string;
   fetchingChanges!: boolean;
+  /** 直前の描画で、done になった直後の点滅を出した行があったか */
+  doneNoticeShown = false;
   /** エージェントごとの前回の status（macOS の通知を出すかの判断に使う）。null は、まだ一度も見ていない */
   lastStatuses!: Map<string, string> | null;
   /** workspace-picker からの「この worktree の行を選んで」をこなした印（頼みの時刻） */
@@ -210,6 +227,10 @@ export default class AgentBoard extends View {
     }
     cx.timer.every(LIST_REFRESH_MS, (cx) => this.refresh(cx));
     cx.timer.every(CHANGES_REFRESH_MS, (cx) => this.refreshChanges(cx));
+    // done になった直後の点滅は、10 秒たったら止める。一覧が変わらないと描き直さないので、点滅している行がある間だけ描き直す
+    cx.timer.every(DONE_NOTICE_CHECK_MS, (cx) => {
+      if (this.doneNoticeShown) cx.notify();
+    });
     this.refresh(cx);
     this.listenForKeyCommands(cx);
     // tmux の hook が今いるペインの変化を知らせたら、2 秒を待たずに読み直す（見張れなくても 2 秒ごとの読み直しで動く）
@@ -588,6 +609,7 @@ export default class AgentBoard extends View {
     const t = theme() as unknown as Theme;
     if (this.confirmRequest) return this.renderConfirmDialog(this.confirmRequest, t);
     const rows = boardRows(this.list, liveTerminals(), collapsedState());
+    this.doneNoticeShown = rows.some((r) => r.kind === "agent" && isJustDone(r, Date.now()));
     const error = shownError(this.error, this.actionError);
     this.syncSelection();
     return div()
