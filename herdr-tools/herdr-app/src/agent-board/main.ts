@@ -85,6 +85,21 @@ function statusColor(t: Theme, status: string) {
   return status === "error" ? t.ansi1 : status === "done" ? DONE_COLOR : ((t as Record<string, Color>)[status] ?? t.unknown);
 }
 
+const HOURGLASS_SIZE = 12;
+/** working の砂時計が、濃い → 薄い → 濃いと 1 往復する時間（ミリ秒） */
+const WORKING_BLINK_MS = 1200;
+
+/** エージェントの状態のアイコン。working は砂時計を点滅させる（Herdr app の側で動くので、点滅のたびに描き直さない）。ほかは文字のアイコン */
+function statusMark(row: AgentRow, color: Color) {
+  if (row.rawStatus !== "working") return label(row.icon, color);
+  return svg("mods/agent-board/hourglass.svg").flex_none().size(HOURGLASS_SIZE).text_color(color).loop("opacity", { from: 1, to: 0.25, period: WORKING_BLINK_MS });
+}
+
+/** 状態の文字。done（✔）と working（砂時計）はアイコンだけで分かるので出さない。blocked は理由だけ（無ければ出さない） */
+function statusText(row: AgentRow, color: Color) {
+  return row.status && row.rawStatus !== "done" && row.rawStatus !== "working" ? [label(row.status, color)] : [];
+}
+
 function toneColor(t: Theme, tone: Tag["tone"]) {
   return { strong: t.accent, muted: t.muted, danger: t.ansi1 }[tone];
 }
@@ -426,7 +441,7 @@ export default class AgentBoard extends View {
         return base
           .pl(PROCESS_INDENT)
           .on_click((_e, cx) => this.clickRow(row, cx))
-          .child(this.info([div().child(row.label), label(row.icon, color), ...(row.status ? [label(row.status, color)] : []), ...this.contextPie(row, t), this.tags(row.tags, t)]))
+          .child(this.info([div().child(row.label), statusMark(row, color), ...statusText(row, color), ...this.contextPie(row, t), this.tags(row.tags, t)]))
           .when(row.canResume, (el) =>
             el.child(
               button({ id: `resume:${row.key}`, icon: "play", tooltip: "再開: claude --resume で会話を再開する（R）", look: "plain" }, t, (cx) =>
