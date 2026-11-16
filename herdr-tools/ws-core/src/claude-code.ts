@@ -5,6 +5,15 @@ export function claudeResumeCommand(claudeBin: string, sessionId: string) {
   return `${claudeBin} --resume ${shellQuote(sessionId)}`;
 }
 
+/**
+ * ユーザーと対話している Claude Code のセッションか。Claude Code は hook と statusLine のコマンドに CLAUDE_CODE_ENTRYPOINT を渡し、
+ * 対話のセッションは cli、`claude -p` などの対話でないセッションは sdk-cli などになる。変数が無ければ対話として扱う
+ */
+export function isInteractiveClaudeSession(env: Record<string, string | undefined>) {
+  return !env.CLAUDE_CODE_ENTRYPOINT || env.CLAUDE_CODE_ENTRYPOINT === "cli";
+}
+
+/** SessionStart hook と statusLine の入力（JSON）の session_id */
 export function sessionIdFromSessionStartHook(stdin: string) {
   try {
     const id = JSON.parse(stdin)?.session_id;
@@ -46,22 +55,28 @@ export function claudeTranscriptPath(home: string, cwd: string, sessionId: strin
   return `${home}/.claude/projects/${cwd.replace(/[^A-Za-z0-9]/g, "-")}/${sessionId}.jsonl`;
 }
 
-const AI_TITLE_MARK = '"type":"ai-title"';
-
-/**
- * 会話の記録（JSONL）から、Claude Code が自動で付けた最新のタイトル（最後の ai-title の行の aiTitle）を読む。
- * 記録の末尾だけを渡してもよい。途中で切れた行・壊れた行は飛ばして、その前の ai-title の行を探す
- */
-export function aiTitleFromTranscript(text: string) {
-  for (let at = text.lastIndexOf(AI_TITLE_MARK); at >= 0; at = at === 0 ? -1 : text.lastIndexOf(AI_TITLE_MARK, at - 1)) {
+/** type がこの種類の行のうち、最後の行の field の文字を読む。途中で切れた行・壊れた行・空の値は飛ばして、その前の行を探す */
+function lastTitleLine(text: string, type: string, field: string) {
+  const mark = `"type":"${type}"`;
+  for (let at = text.lastIndexOf(mark); at >= 0; at = at === 0 ? -1 : text.lastIndexOf(mark, at - 1)) {
     const start = text.lastIndexOf("\n", at) + 1;
     const end = text.indexOf("\n", at);
     try {
       const j = JSON.parse(text.slice(start, end < 0 ? undefined : end));
-      if (j?.type === "ai-title" && typeof j.aiTitle === "string" && j.aiTitle.trim()) return j.aiTitle.trim() as string;
+      if (j?.type === type && typeof j[field] === "string" && j[field].trim()) return j[field].trim() as string;
     } catch {
-      // 切れた行・壊れた行。前の ai-title の行を探す
+      // 切れた行・壊れた行。前の行を探す
     }
   }
   return undefined;
+}
+
+/**
+ * 会話の記録（JSONL）から、セッションのタイトルを読む。記録の末尾だけを渡してもよい。
+ * ユーザーが /rename で付けた名前（最後の custom-title の行の customTitle）があればそれを、
+ * 無ければ Claude Code が自動で付けたタイトル（最後の ai-title の行の aiTitle）を返す。
+ * /rename の後は、custom-title の行が依頼のたびに追記される（ai-title の行と同じ）
+ */
+export function sessionTitleFromTranscript(text: string) {
+  return lastTitleLine(text, "custom-title", "customTitle") ?? lastTitleLine(text, "ai-title", "aiTitle");
 }

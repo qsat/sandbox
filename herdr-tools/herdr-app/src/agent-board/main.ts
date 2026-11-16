@@ -110,9 +110,12 @@ function statusMark(row: AgentRow, color: Color) {
   return svg("mods/agent-board/hourglass.svg").flex_none().size(HOURGLASS_SIZE).text_color(color).loop("opacity", { from: 1, to: 0.25, period: WORKING_BLINK_MS });
 }
 
-/** 状態の文字。done（✔）と working（砂時計）はアイコンだけで分かるので出さない。blocked は理由だけ（無ければ出さない） */
+/** 状態の文字を出さず、アイコンだけで示す状態（done は ✔、working は砂時計、idle は ○） */
+const ICON_ONLY_STATUSES = ["done", "working", "idle"];
+
+/** 状態の文字。アイコンだけで示す状態では出さない。blocked は理由だけ（無ければ出さない） */
 function statusText(row: AgentRow, color: Color) {
-  return row.status && row.rawStatus !== "done" && row.rawStatus !== "working" ? [label(row.status, color)] : [];
+  return row.status && !ICON_ONLY_STATUSES.includes(row.rawStatus) ? [label(row.status, color)] : [];
 }
 
 function toneColor(t: Theme, tone: Tag["tone"]) {

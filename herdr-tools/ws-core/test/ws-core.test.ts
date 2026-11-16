@@ -124,6 +124,29 @@ describe("WsCore", () => {
     expect(rt.agents[0]!.claudeSessionId).toBe("s1");
   });
 
+  test("hook: 対話でないセッション（claude -p など）の会話IDは記録しない", async () => {
+    const rt = new InMemoryRuntime();
+    const core = new WsCore(rt, source());
+    await core.startAgent(WT);
+    expect(await core.recordClaudeSessionFromHook('{"session_id":"main"}', { FAKE_AGENT: "a1", CLAUDE_CODE_ENTRYPOINT: "cli" })).toEqual({ recorded: true });
+    expect(await core.recordClaudeSessionFromHook('{"session_id":"child"}', { FAKE_AGENT: "a1", CLAUDE_CODE_ENTRYPOINT: "sdk-cli" })).toEqual({ recorded: false, reason: "not-interactive" });
+    expect(rt.agents[0]!.claudeSessionId).toBe("main");
+  });
+
+  test("statusLine: 記録と違う会話IDなら記録し直し、同じなら書かない", async () => {
+    const rt = new InMemoryRuntime();
+    const core = new WsCore(rt, source());
+    await core.startAgent(WT);
+    rt.agents[0]!.claudeSessionId = "child";
+    const env = { FAKE_AGENT: "a1", CLAUDE_CODE_ENTRYPOINT: "cli" };
+    expect(await core.recordClaudeSessionFromStatusLine('{"session_id":"main"}', env)).toEqual({ recorded: true });
+    expect(rt.agents[0]!.claudeSessionId).toBe("main");
+    expect(await core.recordClaudeSessionFromStatusLine('{"session_id":"main"}', env)).toEqual({ recorded: false, reason: "unchanged" });
+    expect(await core.recordClaudeSessionFromStatusLine('{"session_id":"main"}', {})).toEqual({ recorded: false, reason: "not-in-runtime" });
+    expect(await core.recordClaudeSessionFromStatusLine("{}", env)).toEqual({ recorded: false, reason: "no-session-id" });
+    expect(await core.recordClaudeSessionFromStatusLine('{"session_id":"x"}', { FAKE_AGENT: "a1", CLAUDE_CODE_ENTRYPOINT: "sdk-cli" })).toEqual({ recorded: false, reason: "not-interactive" });
+  });
+
   test("resume は再開できるときだけ送り、2回目は何もしない", async () => {
     const rt = new InMemoryRuntime();
     const core = new WsCore(rt, source(), { resumeWaitMs: 500 });

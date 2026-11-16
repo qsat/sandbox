@@ -1,8 +1,8 @@
 import { open } from "node:fs/promises";
-import { aiTitleFromTranscript, claudeTranscriptPath } from "./claude-code";
+import { sessionTitleFromTranscript, claudeTranscriptPath } from "./claude-code";
 import type { SessionTitles } from "./ports";
 
-/** まず読む末尾の大きさ。ai-title の行は依頼のたびに追記されるので、たいていはここに入っている */
+/** まず読む末尾の大きさ。タイトルの行（ai-title・custom-title）は依頼のたびに追記されるので、たいていはここに入っている */
 const TAIL_BYTES = 64 * 1024;
 /** 末尾に無かったときに読む大きさ。道具の出力が長く続いた依頼の途中でも、前のタイトルを出し続けるため */
 const WIDE_BYTES = 32 * 1024 * 1024;
@@ -29,9 +29,9 @@ export class ClaudeSessionTitles implements SessionTitles {
     try {
       const path = claudeTranscriptPath(this.home, cwd, claudeSessionId);
       const tail = await readTail(path, TAIL_BYTES);
-      const title = aiTitleFromTranscript(tail.text);
+      const title = sessionTitleFromTranscript(tail.text);
       if (title || tail.whole) return title;
-      return aiTitleFromTranscript((await readTail(path, WIDE_BYTES)).text);
+      return sessionTitleFromTranscript((await readTail(path, WIDE_BYTES)).text);
     } catch {
       return undefined;
     }

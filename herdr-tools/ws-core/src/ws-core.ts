@@ -1,6 +1,6 @@
 import { basename } from "@herdr-tools/utils/basename";
 import { mapLimit } from "@herdr-tools/utils/map-limit";
-import { claudeResumeCommand, contextUsedPercentageFromStatusLine, sessionIdFromSessionStartHook, usageFromStatusLine } from "./claude-code";
+import { claudeResumeCommand, contextUsedPercentageFromStatusLine, isInteractiveClaudeSession, sessionIdFromSessionStartHook, usageFromStatusLine } from "./claude-code";
 import { resumable, type AgentNode } from "./domain/agent";
 import { makeLocator } from "./domain/locate";
 import { buildTree, mainRepositoryOf, pathsToInspect, type PathInspection } from "./domain/tree";
@@ -133,11 +133,33 @@ export class WsCore {
     return this.runtime.start({ workspace, worktree, repo: basename(workspace), branch: inspection.branch ?? null, command: [this.claudeBin, ...claudeArgs] });
   }
 
+  /**
+   * SessionStart の hook から、エージェントの Claude のセッション ID を記録する。
+   * エージェントの端末の中で動いた対話でないセッション（スクリプトが呼ぶ `claude -p` など）も同じ hook を呼ぶので、
+   * 対話のセッションのときだけ記録する（記録すると、エージェントのセッション ID が子のセッションの ID に書き換わり、
+   * タイトルが読めず、再開で別の会話が開く）
+   */
   async recordClaudeSessionFromHook(stdin: string, env: Record<string, string | undefined>) {
     const id = this.runtime.agentIdOfCurrentProcess(env);
     if (!id) return { recorded: false, reason: "not-in-runtime" } as const;
+    if (!isInteractiveClaudeSession(env)) return { recorded: false, reason: "not-interactive" } as const;
     const sessionId = sessionIdFromSessionStartHook(stdin);
     if (!sessionId) return { recorded: false, reason: "no-session-id" } as const;
+    await this.runtime.recordClaudeSession(id, sessionId);
+    return { recorded: true } as const;
+  }
+
+  /**
+   * statusLine から、エージェントの Claude のセッション ID を記録し直す（記録と違うときだけ）。
+   * statusLine は対話のセッションだけが呼ぶので、hook で子のセッションの ID に書き換わった記録が、ここで元に戻る
+   */
+  async recordClaudeSessionFromStatusLine(stdin: string, env: Record<string, string | undefined>) {
+    const id = this.runtime.agentIdOfCurrentProcess(env);
+    if (!id) return { recorded: false, reason: "not-in-runtime" } as const;
+    if (!isInteractiveClaudeSession(env)) return { recorded: false, reason: "not-interactive" } as const;
+    const sessionId = sessionIdFromSessionStartHook(stdin);
+    if (!sessionId) return { recorded: false, reason: "no-session-id" } as const;
+    if ((await this.runtime.get(id))?.claudeSessionId === sessionId) return { recorded: false, reason: "unchanged" } as const;
     await this.runtime.recordClaudeSession(id, sessionId);
     return { recorded: true } as const;
   }

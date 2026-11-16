@@ -3,26 +3,35 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { ClaudeSessionTitles, WsCore, type AgentRecord, type AgentRuntime, type WorkspaceSource } from "../src";
-import { aiTitleFromTranscript, claudeTranscriptPath } from "../src/claude-code";
+import { sessionTitleFromTranscript, claudeTranscriptPath } from "../src/claude-code";
 
 const title = (t: string) => JSON.stringify({ type: "ai-title", aiTitle: t, sessionId: "s1" });
 const reply = (text: string) => JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text }] } });
 
-describe("aiTitleFromTranscript", () => {
+describe("sessionTitleFromTranscript", () => {
   test("最後の ai-title の行のタイトルを読む", () => {
-    expect(aiTitleFromTranscript([title("古い題"), reply("a"), title("新しい題"), reply("b")].join("\n"))).toBe("新しい題");
+    expect(sessionTitleFromTranscript([title("古い題"), reply("a"), title("新しい題"), reply("b")].join("\n"))).toBe("新しい題");
   });
   test("ai-title の行が無ければ undefined", () => {
-    expect(aiTitleFromTranscript([reply("a"), ""].join("\n"))).toBeUndefined();
-    expect(aiTitleFromTranscript("")).toBeUndefined();
+    expect(sessionTitleFromTranscript([reply("a"), ""].join("\n"))).toBeUndefined();
+    expect(sessionTitleFromTranscript("")).toBeUndefined();
   });
   test("途中で切れた行・返答の文中の文字列は飛ばして、前の ai-title の行を読む", () => {
     const cut = title("切れた題").slice(8);
-    expect(aiTitleFromTranscript([title("前の題"), reply('"type":"ai-title" と書いた返答'), cut].join("\n"))).toBe("前の題");
-    expect(aiTitleFromTranscript(cut)).toBeUndefined();
+    expect(sessionTitleFromTranscript([title("前の題"), reply('"type":"ai-title" と書いた返答'), cut].join("\n"))).toBe("前の題");
+    expect(sessionTitleFromTranscript(cut)).toBeUndefined();
+  });
+  test("/rename で付けた名前（custom-title の行）があれば、ai-title より優先する", () => {
+    const renamed = (t: string) => JSON.stringify({ type: "custom-title", customTitle: t, sessionId: "s1" });
+    // /rename の直後: ai-title の後に custom-title が 1 行ある
+    expect(sessionTitleFromTranscript([title("自動の題"), renamed("付けた名前")].join("\n"))).toBe("付けた名前");
+    // その後に ai-title の行が続いても、付けた名前を出す
+    expect(sessionTitleFromTranscript([renamed("付けた名前"), title("自動の題")].join("\n"))).toBe("付けた名前");
+    // 名前を付け直したら、最後の名前を出す
+    expect(sessionTitleFromTranscript([renamed("前の名前"), renamed("新しい名前")].join("\n"))).toBe("新しい名前");
   });
   test("空のタイトルは無いものとして扱う", () => {
-    expect(aiTitleFromTranscript([title("前の題"), title("  ")].join("\n"))).toBe("前の題");
+    expect(sessionTitleFromTranscript([title("前の題"), title("  ")].join("\n"))).toBe("前の題");
   });
 });
 

@@ -256,6 +256,7 @@ async function main(argv: string[]) {
       const [r] = await Promise.all([
         core.recordClaudeUsageFromStatusLine(stdin).catch(() => undefined),
         core.recordContextUsageFromStatusLine(stdin, process.env).catch(() => undefined),
+        core.recordClaudeSessionFromStatusLine(stdin, process.env).catch(() => undefined),
       ]);
       if (!has(p, "--quiet")) process.stdout.write(usageLine(r?.usage ?? {}, true) + "\n");
       return 0;
