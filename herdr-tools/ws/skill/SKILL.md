@@ -38,7 +38,7 @@ which ws && ws list --json
 | `ws destroy <worktree> --force` | ユーザーが、未コミットの変更を捨てることを承知して頼んだとき | 未コミットの変更と追跡されていないファイルごと消す。戻せない |
 | `ws resume <agent>` | ユーザーが再開を頼んだとき | 再開できるエージェントに `claude --resume` を送る |
 | `ws stop <agent>` | ユーザーがそのエージェントの停止を頼んだとき | エージェントを止めて一覧から消す |
-| `ws close [<ref>]` | ユーザーが頼んだとき | worktree の tmux セッションを閉じる。エージェントは止まらない |
+| `ws close [<ref>] [--stop-agents]` | ユーザーが頼んだとき | worktree の tmux セッションを閉じる。エージェントは止まらない。`--stop-agents` を付けると、その worktree のエージェントをすべて止めてから閉じる |
 | `ws prune --yes` | ユーザーが `--dry-run` の結果を見て頼んだとき | セッションとエージェントを片付ける |
 | `ws hunk ...` / `ws edit ...` | ユーザーが「開いて」と頼んだとき | ユーザーの画面が hunk・エディタへ移る |
 | `--dry-run` の無い `ws go`、`--list` の無い `ws next`・`ws step`、`ws panes`、`ws ui` | 呼ばない | ユーザーのキー操作用。ユーザーの画面が移る |

@@ -22,7 +22,8 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
                                                    未コミットの変更・追跡されていないファイル・submodule があれば --force が要る。本体の worktree は消さない
   ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
   ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す（<agent> は id か名前）
-  ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは止めない
+  ws close [<ref>] [--stop-agents]                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは止めない。
+                                                   --stop-agents を付けると、その worktree のエージェントをすべて止めて一覧から消してから閉じる
   ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる（他の場所の会話ペインは移して集める）
   ws next [--prev] [--client <name> | --from-app] [--list]
                                                    blocked → done → idle の順の列を巡回（3 秒以内に続けて押すと前回の続き、間が空くと先頭から。--prev で後ろへ。--list は移動せず列を順に出す。--from-app は移動後に Ghostty を前に出す）
@@ -155,7 +156,8 @@ async function main(argv: string[]) {
     }
     case "close": {
       const ref = p.positional[0] ?? ".";
-      const r = await nav.closeSessionOf(looksLikePath(ref) ? absolutePathFromCwd(ref) : ref);
+      const r = await nav.closeSessionOf(looksLikePath(ref) ? absolutePathFromCwd(ref) : ref, { stopAgents: has(p, "--stop-agents") });
+      for (const id of r.stopped) process.stdout.write(`stopped ${id}\n`);
       process.stdout.write(r.closed ? `closed ${r.session}\n` : `skip ${ref}: ${r.reason}\n`);
       return 0;
     }

@@ -151,7 +151,7 @@ describe("wsArgsFor", () => {
   test("tmux セッションを閉じる → ws close <worktree>（セッションのある worktree の行だけ）", () => {
     const main = rows[1]!;
     expect(main).toMatchObject({ hasSession: true });
-    expect(wsArgsFor(main, "close")).toEqual(["close", "/g/o/api"]);
+    expect(wsArgsFor(main, "close")).toEqual(["close", "/g/o/api", "--stop-agents"]);
     expect(wt).toMatchObject({ hasSession: false });
     expect(wsArgsFor(wt, "close")).toBeNull();
     expect(wsArgsFor(find(rows, "t1"), "close")).toBeNull();

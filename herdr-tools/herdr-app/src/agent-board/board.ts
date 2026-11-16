@@ -95,7 +95,7 @@ export function wsArgsFor(row: BoardRow, action: BoardAction): string[] | null {
     case "stop":
       return row.kind === "agent" ? ["stop", row.key] : null;
     case "close":
-      return row.kind === "worktree" && row.hasSession ? ["close", row.key] : null;
+      return row.kind === "worktree" && row.hasSession ? ["close", row.key, "--stop-agents"] : null;
   }
 }
 

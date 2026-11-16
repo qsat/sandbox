@@ -97,7 +97,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | worktree を作って、そこでエージェントを起動する | `ws create <branch>`（今いる worktree の HEAD から分ける。`--attach` で agents ウィンドウへ移る、`--here` で今のペインで会話、`--no-agent` で起動しない） | — |
 | プルリクエストのブランチの worktree を用意する | `ws pr <番号>`（無ければ作り、あれば最新にして、その tmux セッションへ移る。エージェントは起動しない） | pull-requests の行の worktree のアイコン |
 | その worktree に入る | `C-e`（tm）で選ぶ（今までどおり） | 一覧で worktree をクリック → Ghostty が前に出る |
-| エージェントを起動する | `cc`（`ws new --here`。今のペインで会話）か `ws new --attach`（agents ウィンドウへ移る） | worktree の「＋ claude」ボタン |
+| エージェントを起動する | `cc`（`ws new --here`。今のペインで会話）か `ws new --attach`（agents ウィンドウへ移る） | worktree の行の、＋ とエージェントのアイコン（ロボットの顔）のボタン |
 | workspace を絞り込んで選び、ボードに出す | — | `ctrl-e`（`keys.json` の `layout:agents` に `"ctrl-e": "mod.open:workspace-picker"` を足す。agents のレイアウトはターミナルを持たないので、ターミナルの `ctrl-e` は奪わない）か、agent-board の題名の帯の ＋ ボタンで workspace-picker を開く。ghq のすべての worktree（`ws list --json --all`）を、打った文字で fzf のように絞り込み（空白で区切った語はすべてに当てはまるもの）、`ctrl-j` / `ctrl-k`（↓ / ↑）で選び、`Enter` かクリックで決める。ボードにもう出ている worktree（印「ボード」）は、起動せずに agent-board でその行を選ぶ（畳んだ workspace は開く。共有値 `agent-board.reveal` で頼む）。出ていなければ `ws new <worktree> --attach --from-app` で claude を起動してボードに出す。`Esc` で閉じる |
 | 待っているエージェントを探す | `prefix a`（blocked が先頭） | 一覧を見る（常時表示） |
 | エージェントが何の作業をしているかを知る | `ws list` と `ws ui` のエージェントの行は、Claude Code がセッションに付けたタイトル（会話の記録 `~/.claude/projects/<cwd>/<claudeSessionId>.jsonl` の最後の `ai-title` の行）を、エージェントの名前の代わりに出す。`ws list --json` ではエージェントの `title`。タイトルがまだ無いエージェントは、今までどおり名前を出す。`ws go`・`ws stop` に渡す名前と、停止の確認の文は、タイトルではなく名前のまま | agent-board のエージェントの行も同じ（アドレスとタイトル） |
@@ -111,7 +111,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | worktree のエージェントを全部並べる | `prefix A`（`ws panes`）。会話ペインが無ければ開き、別のウィンドウ・セッションにあればそのペインを agents ウィンドウへ集める | — |
 | 再起動後に続きをやる | 一覧で `R`（再開できる行に「R で再開」と出る）か `ws resume <agent>`。移動では再開しない | エージェントの再開ボタン（▶ のアイコン） |
 | エージェントを止める | `ws stop <agent>`（止めて一覧から消す。`<agent>` は `ws go` と同じく id か名前）。claude の中なら `/exit` | エージェントの停止ボタン（■ のアイコン。確認のダイアログで「停止する」か Enter で止める。「キャンセル」か Esc で取りやめる）。終了済みなら「削除」。再開できる行には停止ボタンを出さない（`s` では止められる） |
-| worktree の tmux セッションを閉じる（エージェントは止めない） | 一覧で `x` → `y`。または `ws close [<worktree>]` | worktree の「閉じる」ボタン（tmux セッションがある行に出る。確認のダイアログで「閉じる」か Enter） |
+| worktree の tmux セッションを閉じる | 一覧で `x` → `y`。または `ws close [<worktree>]`。どちらもエージェントは止めない。`ws close <worktree> --stop-agents` は、その worktree のエージェントをすべて止めて一覧から消してから閉じる | worktree の行の x ボタンか `x` キー（tmux セッションがある行に出る。確認のダイアログで「閉じる」か Enter）。その worktree のエージェントもすべて止めて一覧から消す（`ws close <worktree> --stop-agents`） |
 | 未コミットの変更のファイルを $EDITOR で開く | `ws edit <worktree> --file <path>`（tmux のグローバルな環境の EDITOR が nvim なら、worktree の tmux セッションごとに 1 つの nvim（`edit` ウィンドウ）に開かせて移る。nvim でなければファイルごとのウィンドウ） | worktree-changes のファイルの行を押す（または選んで `Enter`） |
 | 片付ける | `ws destroy <worktree>`（エージェントを止め、worktree とマージ済みのブランチを消し、tmux セッションを閉じる）。または claude を `/exit` → `gwq remove` → 必要なら `ws prune` | — |
 
@@ -127,7 +127,7 @@ ws create <branch> [<worktree>] [--from <rev>] [--no-agent] [--here | --attach] 
 ws destroy <worktree> [--force] [--dry-run]      worktree のエージェントを止め、worktree とマージ済みのブランチを消し、tmux セッションを閉じる（下の「ws create / ws destroy」を参照）
 ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
 ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す（<agent> は id か名前。エージェントでない端末は触らない）
-ws close [<ref>]                                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは herdr-core で動き続ける
+ws close [<ref>] [--stop-agents]                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは herdr-core で動き続ける。--stop-agents を付けると、その worktree のエージェントをすべて止めて一覧から消してから閉じる（呼び出したエージェント自身がその worktree にいるときは、何も止めずに失敗する）
 ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる（会話ペインが無ければ開き、他の場所にあれば移して集める）
 ws next [--prev] [--client <name> | --from-app] [--list]
                                                  blocked → done → idle の順の列（同じ status の中は status になった時刻が新しい順。working と動いていないものは除く）を巡回し、エージェントの会話ペインへ移動。3 秒以内に続けて押すと、前回の列の順のまま前回移った先の次へ進む（--prev で後ろへ。前回の列のエージェントが 1 つも列に残っていなければ、今の列の端から回り直す）。3 秒以上空くと今いる場所は数えず、列の先頭（--prev なら最後）へ移る。前回の列と移った先は `~/.cache/herdr-tools/next-last.json` に記録する（--list は移動せず、列を「ID・名前・status・status になった時刻・workspace・worktree」で順に出す。--from-app は移動後に Ghostty を前に出し、候補が無いときは標準エラーにも出す）
@@ -195,7 +195,7 @@ nvim を止めると保存していない編集を失うので、`ws edit` は�
 ### `ws pr`: プルリクエストのブランチの worktree を用意する
 
 `ws pr <番号> [<worktree>]` は、`<worktree>`（既定は今のディレクトリ）のリポジトリのプルリクエスト `<番号>` のブランチを、レビューや手直しのために手元に用意する。
-エージェントは起動しない（起動は今までどおり `ws new` や agent-board の「＋ claude」）。用意したあと、その worktree の tmux セッションへ `ws go` と同じ仕組みで移る（`--no-go` なら移らない）。
+エージェントは起動しない（起動は今までどおり `ws new` や agent-board の worktree の行の、＋ とエージェントのアイコンのボタン）。用意したあと、その worktree の tmux セッションへ `ws go` と同じ仕組みで移る（`--no-go` なら移らない）。
 
 1. `gh pr view <番号> --json number,headRefName,isCrossRepository` でブランチを調べる。フォークからのプルリクエスト（ブランチが origin に無い）は、まだ扱わずに断る
 2. 本体のリポジトリで `git fetch origin +refs/heads/<ブランチ>:refs/remotes/origin/<ブランチ>` を取ってくる

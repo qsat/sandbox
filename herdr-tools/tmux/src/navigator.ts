@@ -262,14 +262,29 @@ export class TmuxNavigator {
     return { rows, current, moved: target, message: undefined };
   }
 
-  async closeSessionOf(ref: string) {
+  /**
+   * worktree の tmux セッションを閉じる（ws close）。stopAgents なら、先にその worktree のエージェントをすべて止めて一覧から消す。
+   * 呼び出したエージェント自身がその worktree にいるときは、自分を止めることになるので、何も止めずに断る。
+   * セッションを最後に閉じるのは、セッションの中から呼んだとき、閉じた時点でこのプロセスも終わるため
+   */
+  async closeSessionOf(ref: string, opts: { stopAgents?: boolean } = {}) {
     const view = await this.view({ alsoShow: looksLikePath(ref) ? [ref] : [] });
     const target = resolveRef(view.snap, ref);
     if (!target) throw new Error(`見つかりません: ${ref}`);
+    const stopped: string[] = [];
+    if (opts.stopAgents) {
+      const agents = target.worktree.agents;
+      const caller = this.core.currentAgentId(this.env);
+      if (caller && agents.some((a) => a.id === caller)) throw new Error(`呼び出したエージェント（${caller}）がこの worktree にいるので、エージェントを止められません: ${target.worktree.path}`);
+      for (const a of agents) {
+        await this.core.stopAgent(a.id);
+        stopped.push(a.id);
+      }
+    }
     const session = view.idx.sessionOf(target.worktree.path);
-    if (!session) return { closed: false, reason: "no-session" } as const;
+    if (!session) return { closed: false, reason: "no-session", stopped } as const;
     await this.tmux.killSession(session.name);
-    return { closed: true, session: session.name } as const;
+    return { closed: true, session: session.name, stopped } as const;
   }
 
   /**

@@ -54,6 +54,8 @@ interface ButtonSpec {
   id: string;
   icon?: "plus" | "play" | "square" | "x";
   text?: string;
+  /** icon の右に並べる 2 つ目のアイコン（「＋」と「エージェント」のように、2 つのアイコンで意味を表すとき） */
+  secondIcon?: "bot";
   tooltip: string;
   look: ButtonLook;
 }
@@ -128,7 +130,8 @@ function button(spec: ButtonSpec, t: Theme, onClick: (cx: Context) => void) {
     .flex()
     .flex_none()
     .items_center()
-    .gap(4)
+    // 2 つのアイコンを並べるときは、間隔を詰めて 1 つの印に見せる
+    .gap(spec.secondIcon === undefined ? 4 : 1)
     .h(ROW_HEIGHT - 2)
     .px(spec.text === undefined ? 4 : 8)
     .rounded(6)
@@ -140,6 +143,7 @@ function button(spec: ButtonSpec, t: Theme, onClick: (cx: Context) => void) {
       onClick(cx);
     })
     .when(spec.icon !== undefined, (el) => el.child(svg(`mods/agent-board/${spec.icon}.svg`).size(12)))
+    .when(spec.secondIcon !== undefined, (el) => el.child(svg(`mods/agent-board/${spec.secondIcon}.svg`).size(14)))
     .when(spec.text !== undefined, (el) => el.child(spec.text!));
   return styled(base, spec.look, t);
 }
@@ -299,8 +303,8 @@ export default class AgentBoard extends View {
 
   closeSessionRequest(row: WorktreeRow): ConfirmRequest {
     return {
-      title: `${row.label} の tmux セッションを閉じますか？`,
-      body: "セッションの中のペインもすべて閉じます。エージェントは herdr-core で動き続けます。",
+      title: `${row.label} のエージェントを止めて、tmux セッションを閉じますか？`,
+      body: "この worktree のエージェントをすべて止めて一覧から消し、セッションの中のペインもすべて閉じます。",
       busy: "閉じています…",
       icon: "x",
       action: "閉じる",
@@ -321,7 +325,7 @@ export default class AgentBoard extends View {
   }
 
   closeSessionButton(row: WorktreeRow, t: Theme) {
-    return button({ id: `close:${row.key}`, icon: "x", tooltip: "この worktree の tmux セッションを閉じる。エージェントは止めない（x）", look: "quiet" }, t, () =>
+    return button({ id: `close:${row.key}`, icon: "x", tooltip: "この worktree のエージェントをすべて止めて、tmux セッションを閉じる（x）", look: "plain" }, t, () =>
       this.askConfirm(this.closeSessionRequest(row)),
     );
   }
@@ -378,8 +382,16 @@ export default class AgentBoard extends View {
           .when(row.waiting > 0, (el) => el.child(label(`!! ${row.waiting}`, t.blocked)));
       case "worktree":
         return base
-          .pl(16)
+          .pl(0)
           .on_click((_e, cx) => this.clickRow(row, cx))
+          // エージェントを起動するボタンは、worktree の名前の左に置く
+          .when(row.exists, (el) =>
+            el.child(
+              button({ id: `new:${row.key}`, icon: "plus", secondIcon: "bot", tooltip: "この worktree で claude を起動する（n）", look: "plain" }, t, (cx) =>
+                this.runRow(row, "new", cx),
+              ),
+            ),
+          )
           .child(
             this.info([
               div().text_color(row.hasSession ? BRANCH_COLOR : t.dim).when(row.isMain, (el) => el.font_semibold()).child(row.label),
@@ -387,23 +399,16 @@ export default class AgentBoard extends View {
               ...this.changeAmount(row, t),
             ]),
           )
-          .when(row.hasSession, (el) => el.child(this.closeSessionButton(row, t)))
-          .when(row.exists, (el) =>
-            el.child(
-              button({ id: `new:${row.key}`, icon: "plus", text: "claude", tooltip: "この worktree で claude を起動する（n）", look: "outline" }, t, (cx) =>
-                this.runRow(row, "new", cx),
-              ),
-            ),
-          );
+          .when(row.hasSession, (el) => el.child(this.closeSessionButton(row, t)));
       case "pane":
         return base
-          .pl(28)
+          .pl(16)
           .on_click((_e, cx) => this.clickRow(row, cx))
           .child(this.info([div().text_color(t.muted).child(row.label)]));
       case "agent": {
         const color = statusColor(t, row.rawStatus);
         return base
-          .pl(28)
+          .pl(16)
           .on_click((_e, cx) => this.clickRow(row, cx))
           .child(this.info([div().child(row.label), label(row.icon, color), ...(row.status ? [label(row.status, color)] : []), ...this.contextPie(row, t), this.tags(row.tags, t)]))
           .when(row.canResume, (el) =>
