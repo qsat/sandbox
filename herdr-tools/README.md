@@ -18,9 +18,10 @@ herdr-tools/
 │   │   ├── pr-worktree.ts        プルリクエストの worktree を作るか・最新にするか（ws pr）の判断
 │   │   ├── worktree-lifecycle.ts worktree を作るときに分ける元（ws create）、消すのを断る条件（ws destroy）の判断と文面
 │   │   └── usage.ts              Claude の利用上限（5h / 週）の枠、期限切れの扱い
-│   ├── ports.ts                  AgentRuntime / WorkspaceSource / UsageStore（単体テストで偽物に差し替える継ぎ目）
+│   ├── ports.ts                  AgentRuntime / WorkspaceSource / UsageStore / SessionTitles（単体テストで偽物に差し替える継ぎ目）
 │   ├── ws-core.ts                WsCore: snapshot / resume / startAgent / stopAgent / recordClaudeSessionFromHook / removeAgents / 利用上限と context 使用率の記録
-│   ├── claude-code.ts            会話の再開コマンド、SessionStart hook と statusLine の入力
+│   ├── claude-code.ts            会話の再開コマンド、SessionStart hook と statusLine の入力、会話の記録の場所とセッションのタイトル（ai-title の行）の読み取り
+│   ├── claude-session-titles.ts  SessionTitles の実装（会話の記録の末尾 64KB から、無ければ末尾 32MB からタイトルを読む）
 │   ├── ghq-workspace-source.ts   WorkspaceSource の実装（ghq と git worktree list で worktree を見つける）
 │   ├── git-cli.ts                git の呼び出し（-C <worktree>、.git に書かない読み取り、失敗を例外にする）
 │   ├── git-change-amounts.ts     ws changes の実行（worktree の変更量を git で数える）
@@ -99,6 +100,7 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 | エージェントを起動する | `cc`（`ws new --here`。今のペインで会話）か `ws new --attach`（agents ウィンドウへ移る） | worktree の「＋ claude」ボタン |
 | workspace を絞り込んで選び、ボードに出す | — | `ctrl-e`（`keys.json` の `layout:agents` に `"ctrl-e": "mod.open:workspace-picker"` を足す。agents のレイアウトはターミナルを持たないので、ターミナルの `ctrl-e` は奪わない）か、agent-board の題名の帯の ＋ ボタンで workspace-picker を開く。ghq のすべての worktree（`ws list --json --all`）を、打った文字で fzf のように絞り込み（空白で区切った語はすべてに当てはまるもの）、`ctrl-j` / `ctrl-k`（↓ / ↑）で選び、`Enter` かクリックで決める。ボードにもう出ている worktree（印「ボード」）は、起動せずに agent-board でその行を選ぶ（畳んだ workspace は開く。共有値 `agent-board.reveal` で頼む）。出ていなければ `ws new <worktree> --attach --from-app` で claude を起動してボードに出す。`Esc` で閉じる |
 | 待っているエージェントを探す | `prefix a`（blocked が先頭） | 一覧を見る（常時表示） |
+| エージェントが何の作業をしているかを知る | `ws list` と `ws ui` のエージェントの行は、Claude Code がセッションに付けたタイトル（会話の記録 `~/.claude/projects/<cwd>/<claudeSessionId>.jsonl` の最後の `ai-title` の行）を、エージェントの名前の代わりに出す。`ws list --json` ではエージェントの `title`。タイトルがまだ無いエージェントは、今までどおり名前を出す。`ws go`・`ws stop` に渡す名前と、停止の確認の文は、タイトルではなく名前のまま | agent-board のエージェントの行も同じ（アドレスとタイトル） |
 | 待っている・終わったエージェントを通知で知る | — | agent-board が、エージェントが blocked（ユーザーを待っている）か done（見ていない間に終わった）に変わったとき、または working から idle に変わったとき（作業が終わった）に macOS の通知を出す。done から idle（見たので Herdr が戻した）と、起動直後に idle で現れたときは出さない。題名は「リポジトリ (ブランチ) が終わりました／待っています」、副題は最後の依頼、本文は返答の冒頭の 3 行（Claude Code の会話の記録 `~/.claude/projects/<cwd>/<claudeSessionId>.jsonl` の末尾から読む）。`terminal-notifier`（`brew install terminal-notifier`。システム設定 > 通知で許可し、スタイルを持続にすると消えずに残る）があれば、通知のクリックで `ws go <エージェント> --from-app` を実行し、tmux の会話ペインへ移る。無いか失敗したときは `osascript` で出す（スクリプトエディタからの通知になり、クリックしても移らない）。最後の通知で試したコマンドと結果は `~/.cache/herdr-tools/notify.log` に残す。Herdr app のウィンドウが前にあるときは、Herdr app のトーストに任せて出さない。agent-board が画面にあるときだけ動く |
 | 注意が要るエージェントを次へ巡回する | `prefix b`、または Ghostty の `ctrl+alt+shift+j`（`ws next`）。列は blocked → done → idle の順で、同じ status の中は status になった時刻が新しい順（working は入れない）。3 秒以内に続けて押すと前回の続き（前回の列のエージェントが全員外れていたら今の列の先頭から）、間が空くと先頭から。無ければステータス行に表示 | `ctrl+alt+shift+j`（`ws next --from-app`） |
 | サイドバーの並び順でペインを移る | skhd の `shift+alt+j`（1 つ下）と `shift+alt+k`（1 つ上）（`ws step --from-app`、`ws step --prev --from-app`）。エージェントとペインの行が対象で、worktree の行（tmux セッション）と、mod で畳んだ workspace の中は飛ばす | 同じ（skhd のキー） |

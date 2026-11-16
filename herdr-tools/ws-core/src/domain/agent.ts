@@ -11,6 +11,8 @@ export function toAgentStatus(state: string | null | undefined): AgentStatus {
 export interface AgentRecord {
   id: string;
   name: string;
+  /** Claude Code がセッションに付けたタイトル。まだ付いていなければ無い */
+  title?: string;
   cwd: string;
   status: AgentStatus;
   blockedReason?: string;

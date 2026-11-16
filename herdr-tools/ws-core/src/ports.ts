@@ -31,6 +31,11 @@ export interface WorkspaceSource {
   worktrees(repo: string): Promise<string[]>;
 }
 
+/** エージェントの Claude Code のセッションに付いたタイトル（何の作業かの要約）を読む */
+export interface SessionTitles {
+  titleOf(cwd: string, claudeSessionId: string): Promise<string | undefined>;
+}
+
 export interface UsageStore {
   read(): Promise<ClaudeUsage | undefined>;
   write(usage: ClaudeUsage): Promise<void>;

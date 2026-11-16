@@ -1,4 +1,4 @@
-import { agentDisplayName } from "@herdr-tools/utils/agent-display-name";
+import { agentRowLabel } from "@herdr-tools/utils/agent-row-label";
 import { agentTags } from "@herdr-tools/utils/agent-tags";
 import { contextUsage } from "@herdr-tools/utils/context-usage";
 import { basename } from "@herdr-tools/utils/basename";
@@ -59,13 +59,13 @@ function hintTags(a: AgentNode, keyHints: boolean): Tag[] {
 export function agentLabel(a: AgentNode, idx: TmuxIndex, color: boolean, keyHints = false) {
   const sc = STATUS_COLOR[a.status] ?? GRAY;
   const tags = tagsText([...contextTags(a), ...agentTags(a, idx.isAttached(a.id)), ...hintTags(a, keyHints)], color);
-  return `${paint(color, sc, statusIcon(a.status))} ${a.id.padEnd(4)} ${a.name}  ${paint(color, sc, statusLabel(a))}${tags ? "  " + tags : ""}`;
+  return `${paint(color, sc, statusIcon(a.status))} ${a.id.padEnd(4)} ${a.title ?? a.name}  ${paint(color, sc, statusLabel(a))}${tags ? "  " + tags : ""}`;
 }
 
 function boardAgentLabel(a: AgentNode, idx: TmuxIndex, color: boolean, keyHints = false) {
   const sc = STATUS_COLOR[a.status] ?? GRAY;
   const tags = tagsText([...contextTags(a), ...agentTags(a, idx.isAttached(a.id)), ...hintTags(a, keyHints)], color);
-  return joinParts([paint(color, BOLD, agentDisplayName(a)), paint(color, sc, statusIcon(a.status)), paint(color, sc, statusLabel(a)), tags], " ");
+  return joinParts([paint(color, BOLD, agentRowLabel(a)), paint(color, sc, statusIcon(a.status)), paint(color, sc, statusLabel(a)), tags], " ");
 }
 
 function paneLabel(command: string, color: boolean) {

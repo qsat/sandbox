@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { agentDisplayName } from "../src/agent-display-name";
+import { agentRowLabel } from "../src/agent-row-label";
 import { agentTags } from "../src/agent-tags";
 import { shellQuote } from "../src/shell-quote";
 import { statusIcon } from "../src/status-icon";
@@ -33,7 +34,12 @@ describe("表示の部品", () => {
     expect(agentDisplayName({ id: "t3", name: "t3" })).toBe("agent-3");
     expect(agentDisplayName({ id: "t5", name: "api-feat" })).toBe("t5 api-feat");
   });
-  test("worktreeDisplayName: ブランチ名、無ければディレクトリ名", () => {
+  test("agentRowLabel: セッションのタイトルがあればアドレスとタイトル、無ければ agentDisplayName と同じ", () => {
+    expect(agentRowLabel({ id: "t5", name: "api-feat", title: "ログインの不具合の調査" })).toBe("t5 ログインの不具合の調査");
+    expect(agentRowLabel({ id: "t5", name: "api-feat" })).toBe("t5 api-feat");
+    expect(agentRowLabel({ id: "t3", name: "t3" })).toBe("agent-3");
+  });
+  test("worktreeDisplayName:ブランチ名、無ければディレクトリ名", () => {
     expect(worktreeDisplayName({ path: "/g/o/api=feat", branch: "feat" })).toBe("feat");
     expect(worktreeDisplayName({ path: "/Users/me", branch: null })).toBe("me");
   });

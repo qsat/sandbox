@@ -5,7 +5,7 @@ import { resumable, type AgentNode } from "./domain/agent";
 import { makeLocator } from "./domain/locate";
 import { buildTree, mainRepositoryOf, pathsToInspect, type PathInspection } from "./domain/tree";
 import { openWindows, sameUsage } from "./domain/usage";
-import type { AgentRuntime, UsageStore, WorkspaceSource } from "./ports";
+import type { AgentRuntime, SessionTitles, UsageStore, WorkspaceSource } from "./ports";
 
 interface WsCoreOptions {
   home?: string;
@@ -13,6 +13,7 @@ interface WsCoreOptions {
   resumeWaitMs?: number;
   stopWaitMs?: number;
   usageStore?: UsageStore;
+  sessionTitles?: SessionTitles;
   nowEpochSec?: () => number;
 }
 
@@ -29,7 +30,7 @@ export class WsCore {
 
   async snapshot(opts: { allEntries?: boolean; alwaysShow?: string[] } = {}) {
     const ghqRoot = await this.source.root();
-    const [agents, entries] = await Promise.all([this.runtime.list(), opts.allEntries ? this.source.entries(ghqRoot) : []]);
+    const [agents, entries] = await Promise.all([this.agentsWithTitles(), opts.allEntries ? this.source.entries(ghqRoot) : []]);
     const requested = [...(opts.alwaysShow ?? []), ...entries];
     const requestedInspections = await this.source.inspect(pathsToInspect(agents, requested));
     const siblings = await this.siblingWorktreesOf(requestedInspections);
@@ -38,6 +39,17 @@ export class WsCore {
     const alwaysShow = [...requested, ...siblings];
     const tree = buildTree({ agents, inspections, alwaysShow, ghqRoot, home: this.opts.home });
     return { tree, locate: makeLocator(tree, inspections), usage: await this.claudeUsage() };
+  }
+
+  /** 実行環境のエージェントに、Claude Code のセッションのタイトルを付ける。会話 ID が無い・タイトルが読めないエージェントはそのまま */
+  private async agentsWithTitles() {
+    const agents = await this.runtime.list();
+    const titles = this.opts.sessionTitles;
+    if (!titles) return agents;
+    return mapLimit(agents, 16, async (a) => {
+      const title = a.claudeSessionId ? await titles.titleOf(a.cwd, a.claudeSessionId).catch(() => undefined) : undefined;
+      return title ? { ...a, title } : a;
+    });
   }
 
   private now() {

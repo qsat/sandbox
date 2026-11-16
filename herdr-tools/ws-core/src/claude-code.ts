@@ -40,3 +40,28 @@ export function contextUsedPercentageFromStatusLine(stdin: string) {
     return undefined;
   }
 }
+
+/** Claude Code の会話の記録（JSONL）のパス。フォルダー名は cwd の英数字以外を - に置き換えたもの */
+export function claudeTranscriptPath(home: string, cwd: string, sessionId: string) {
+  return `${home}/.claude/projects/${cwd.replace(/[^A-Za-z0-9]/g, "-")}/${sessionId}.jsonl`;
+}
+
+const AI_TITLE_MARK = '"type":"ai-title"';
+
+/**
+ * 会話の記録（JSONL）から、Claude Code が自動で付けた最新のタイトル（最後の ai-title の行の aiTitle）を読む。
+ * 記録の末尾だけを渡してもよい。途中で切れた行・壊れた行は飛ばして、その前の ai-title の行を探す
+ */
+export function aiTitleFromTranscript(text: string) {
+  for (let at = text.lastIndexOf(AI_TITLE_MARK); at >= 0; at = at === 0 ? -1 : text.lastIndexOf(AI_TITLE_MARK, at - 1)) {
+    const start = text.lastIndexOf("\n", at) + 1;
+    const end = text.indexOf("\n", at);
+    try {
+      const j = JSON.parse(text.slice(start, end < 0 ? undefined : end));
+      if (j?.type === "ai-title" && typeof j.aiTitle === "string" && j.aiTitle.trim()) return j.aiTitle.trim() as string;
+    } catch {
+      // 切れた行・壊れた行。前の ai-title の行を探す
+    }
+  }
+  return undefined;
+}

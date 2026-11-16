@@ -1,4 +1,4 @@
-import { agentDisplayName } from "@herdr-tools/utils/agent-display-name";
+import { agentRowLabel } from "@herdr-tools/utils/agent-row-label";
 import { worktreeDisplayName } from "@herdr-tools/utils/worktree-display-name";
 import { byAttention, toAgentStatus, type AgentStatus } from "@herdr-tools/ws-core/domain/agent";
 import type { ListedAgent, ListedTree } from "./list-json";
@@ -76,7 +76,7 @@ export function itemLabel(item: SidebarItem) {
     case "worktree":
       return worktreeDisplayName(item.wt);
     case "agent":
-      return agentDisplayName(item.agent);
+      return agentRowLabel(item.agent);
     case "pane":
       return item.pane.command;
   }

@@ -1,6 +1,6 @@
 import { agentTags } from "@herdr-tools/utils/agent-tags";
 import { contextUsage } from "@herdr-tools/utils/context-usage";
-import { agentDisplayName } from "@herdr-tools/utils/agent-display-name";
+import { agentRowLabel } from "@herdr-tools/utils/agent-row-label";
 import { statusIcon } from "@herdr-tools/utils/status-icon";
 import { statusLabel } from "@herdr-tools/utils/status-label";
 import { worktreeDisplayName } from "@herdr-tools/utils/worktree-display-name";
@@ -39,7 +39,7 @@ function toRow(item: SidebarItem) {
       return {
         kind: "agent" as const,
         key: item.key,
-        label: agentDisplayName(a),
+        label: agentRowLabel(a),
         icon: statusIcon(a.status),
         status: statusLabel(a),
         rawStatus: a.status,
