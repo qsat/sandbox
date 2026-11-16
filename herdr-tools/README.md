@@ -434,9 +434,9 @@ Claude Code は statusLine のコマンドに `rate_limits.five_hour` / `rate_li
 先頭に、消費した割合とリセットまでの残り時間を出す。
 並びは 5時間枠 → 週の枠で、ラベルは付けない。週の残り時間は分を省く。
 - `ws list`・popup（`prefix a`）: `24% 0d 2h 14m  41% 3d 5h`
-- Herdr app の mod: `◔ 0d 2h 14m  ◕ 3d 5h` のように、% の代わりに円グラフ（1px のグレーの枠の上に消費した割合の扇形）。
+- Herdr app の mod: `◔ 0d 2h 14m  ◕ 3d 5h` のように、% の代わりに円グラフ（太さ 2px のグレーの輪の上に、消費した割合ぶんの弧を重ねる。輪の内側は塗らない）。
   マウスを乗せると「5時間枠 24% 使用」と出る。
-  扇形は `bun run build:mod` が 1〜100% の SVG を `dist/mods/agent-board/pie/` に生成する
+  弧は `bun run build:mod` が 1〜100% の SVG を `dist/mods/agent-board/pie/` に生成する
 
 消費が 70% 以上で強調、90% 以上で警告の色。リセット時刻を過ぎた枠は出さない。
 

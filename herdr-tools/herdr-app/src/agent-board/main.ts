@@ -6,7 +6,7 @@ import { COLLAPSED_KEY, readReveal, REVEAL_KEY } from "../shared/board-reveal";
 import { shownError } from "../shared/errors";
 import { ROW_HEIGHT, label, type Theme as RowTheme } from "../shared/row-view";
 import { execWs } from "../shared/ws-exec";
-import { BRANCH_COLOR, REPOSITORY_COLOR, SELECTED_BG } from "../shared/colors";
+import { BRANCH_COLOR, REPOSITORY_COLOR } from "../shared/colors";
 import { TITLE_BAR_HEIGHT } from "../shared/title-bar";
 import { watchTmuxFocus } from "../shared/tmux-focus";
 import type { Tag } from "@herdr-tools/utils/tag";
@@ -20,9 +20,18 @@ const LIST_REFRESH_MS = 2000;
 const CHANGES_REFRESH_MS = 10000;
 const CONFIRM_DIALOG_WIDTH = 360;
 const CONFIRM_DIALOG_HEIGHT = 160;
+/** リポジトリの card と card の間の余白 */
 const REPOSITORY_SPACING = ROW_HEIGHT * 0.5;
-const CURRENT_PANE_BG: Color = "#e6ff0014";
+/** リポジトリの card（枠で囲んだ、1 つのリポジトリの行のまとまり）の角丸 */
+const CARD_RADIUS = 4;
+/** 行の左端の、選択中の印（>）を出す欄の幅 */
+const SELECTION_MARK_WIDTH = 8;
+/** card の先頭の、リポジトリ名の行の背景 */
+const REPOSITORY_HEADER_BG: Color = "#b48cff26";
+const CURRENT_PANE_BG: Color = "#2dd4bf33";
 const PIE_SIZE = 12;
+/** 円グラフの下地のグレーの輪の不透明度（テーマの dim の色を 40% 薄くする） */
+const TRACK_OPACITY = 0.6;
 
 type Theme = RowTheme & Record<"solid" | "solid_foreground" | "popover" | "unknown", Color>;
 
@@ -60,8 +69,11 @@ function liveTerminals(): LiveTerminal[] {
   }));
 }
 
+/** done（見ていない間に終わった）のエージェントの色。テーマの done は青で、card の紫の中で浮くので、紫にそろえる */
+const DONE_COLOR: Color = "#c4a3ff";
+
 function statusColor(t: Theme, status: string) {
-  return status === "error" ? t.ansi1 : ((t as Record<string, Color>)[status] ?? t.unknown);
+  return status === "error" ? t.ansi1 : status === "done" ? DONE_COLOR : ((t as Record<string, Color>)[status] ?? t.unknown);
 }
 
 function toneColor(t: Theme, tone: Tag["tone"]) {
@@ -72,14 +84,23 @@ function pieColor(t: Theme, tone: Tag["tone"]) {
   return { strong: t.blocked, muted: t.accent, danger: t.ansi1 }[tone];
 }
 
+/** 変更量（+ 行数・− 行数）のラベルの背景。文字はテーマの緑・赤で、背景は同じ系統の薄い色 */
+const ADDED_BADGE_BG: Color = "#3fb95033";
+const DELETED_BADGE_BG: Color = "#f8514933";
+
+/** 変更量を、薄い背景と角丸の付いたラベルで出す */
+function amountBadge(text: string, color: Color, bg: Color) {
+  return div().flex_none().px(4).rounded(3).bg(bg).text_color(color).child(text);
+}
+
+/** 消費した割合を、輪の上の弧で出す。グレーの輪（100% の SVG）を下に敷き、その上に割合ぶんの弧を重ねる。内側は塗らない */
 function pie(usedPercentage: number, fill: Color, t: Theme) {
   return div()
+    .relative()
     .flex_none()
     .size(PIE_SIZE)
-    .rounded(PIE_SIZE / 2)
-    .border_1()
-    .border_color(t.dim)
-    .when(usedPercentage > 0, (el) => el.child(svg(`mods/agent-board/pie/${usedPercentage}.svg`).size(PIE_SIZE - 2).text_color(fill)));
+    .child(svg("mods/agent-board/pie/100.svg").size(PIE_SIZE).text_color(t.dim).opacity(TRACK_OPACITY))
+    .when(usedPercentage > 0, (el) => el.child(svg(`mods/agent-board/pie/${usedPercentage}.svg`).absolute().top_0().left_0().size(PIE_SIZE).text_color(fill)));
 }
 
 function styled(el: Element, look: ButtonLook, t: Theme) {
@@ -245,8 +266,8 @@ export default class AgentBoard extends View {
         .gap(4)
         .text_size(11)
         .tooltip("ベースブランチから分かれた点と作業ツリーの差（未コミット・新しいファイルも含む）")
-        .when(a.added > 0, (el) => el.child(label(`+${a.added}`, t.ansi2)))
-        .when(a.deleted > 0, (el) => el.child(label(`−${a.deleted}`, t.ansi1))),
+        .when(a.added > 0, (el) => el.child(amountBadge(`+${a.added}`, t.ansi2, ADDED_BADGE_BG)))
+        .when(a.deleted > 0, (el) => el.child(amountBadge(`−${a.deleted}`, t.ansi1, DELETED_BADGE_BG))),
     ];
   }
 
@@ -313,7 +334,28 @@ export default class AgentBoard extends View {
     return div().flex().flex_1().min_w(0).items_center().gap(6).overflow_hidden().whitespace_nowrap().children(children);
   }
 
-  renderRow(row: BoardRow, t: Theme, first: boolean, selected: boolean): Element {
+  /** リポジトリごとに行を枠で囲んで card にする。workspace の行が card の先頭になる */
+  renderCards(rows: BoardRow[], t: Theme): Element[] {
+    const groups: BoardRow[][] = [];
+    for (const row of rows) {
+      if (row.kind === "workspace" || groups.length === 0) groups.push([]);
+      groups[groups.length - 1]!.push(row);
+    }
+    return groups.map((group, i) =>
+      div()
+        .flex()
+        .flex_col()
+        .border_1()
+        .border_color(t.border)
+        .rounded(CARD_RADIUS)
+        // 枠の内側に余白を空けず、行の背景を枠まで届かせる。角は枠の角丸で切り取る
+        .overflow_hidden()
+        .when(i > 0, (el) => el.mt(REPOSITORY_SPACING))
+        .children(group.map((r) => this.renderRow(r, t, rowId(r) === this.selected))),
+    );
+  }
+
+  renderRow(row: BoardRow, t: Theme, selected: boolean): Element {
     const base = div()
       .id(rowId(row))
       .flex()
@@ -321,15 +363,15 @@ export default class AgentBoard extends View {
       .gap(6)
       .min_h(ROW_HEIGHT)
       .px(4)
-      .rounded(6)
       .cursor_pointer()
       .when((row.kind === "agent" || row.kind === "pane") && row.isCurrentPane, (el) => el.bg(CURRENT_PANE_BG))
-      .when(selected, (el) => el.bg(SELECTED_BG))
-      .hover((s) => s.bg(t.hover));
+      .hover((s) => s.bg(t.hover))
+      // 選択中の行は、背景ではなく左端の > で示す。選んでいない行も同じ幅を空けて、行の中身の位置をそろえる
+      .child(div().w(SELECTION_MARK_WIDTH).flex_none().font_semibold().text_color(t.foreground).child(selected ? ">" : ""));
     switch (row.kind) {
       case "workspace":
         return base
-          .when(!first, (el) => el.mt(REPOSITORY_SPACING))
+          .bg(REPOSITORY_HEADER_BG)
           .on_click(() => setShared(COLLAPSED_KEY, toggleCollapsed(collapsedState(), row.key)))
           .child(label(row.collapsed ? "▸" : "▾", t.muted))
           .child(div().font_semibold().text_color(REPOSITORY_COLOR).child(row.label))
@@ -531,7 +573,7 @@ export default class AgentBoard extends View {
           .p(8)
           .overflow_y_scrollbar()
           .when(rows.length === 0, (el) => el.child(label("エージェントもセッションもありません", t.muted)))
-          .children(rows.map((r, i) => this.renderRow(r, t, i === 0, rowId(r) === this.selected)))
+          .children(this.renderCards(rows, t))
           .when(error !== "", (el) => el.child(label(error, t.ansi1))),
       );
   }
