@@ -31,6 +31,8 @@ const SELECTION_MARK_LEFT = 2;
 const REPOSITORY_INDENT = 18;
 const WORKTREE_INDENT = 12;
 const PROCESS_INDENT = 42;
+/** エージェントの行の状態のアイコンを置く位置（行の左端から）。名前（PROCESS_INDENT）の左の字下げの中に、> の右に並べる */
+const STATUS_MARK_LEFT = 24;
 /** card の先頭の、リポジトリ名の行の背景 */
 const REPOSITORY_HEADER_BG: Color = "#b48cff26";
 const CURRENT_PANE_BG: Color = "#2dd4bf33";
@@ -91,6 +93,8 @@ const DONE_NOTICE_COLOR: Color = "#ffffff";
 const DONE_NOTICE_FRAME_MS = 300;
 /** done になった直後の点滅を止めるために、描き直しが要るかを確かめる間隔（ミリ秒） */
 const DONE_NOTICE_CHECK_MS = 1000;
+/** done のアイコンの不透明度（直後の 10 秒間の点滅が終わった後） */
+const DONE_OPACITY = 0.3;
 const HOURGLASS_SIZE = 12;
 /** working の砂時計が、濃い → 薄い → 濃いと 1 往復する時間（ミリ秒） */
 const WORKING_BLINK_MS = 1200;
@@ -106,6 +110,8 @@ function statusMark(row: AgentRow, color: Color) {
       .child(label(row.icon, color))
       .child(div().absolute().top_0().left_0().text_color(DONE_NOTICE_COLOR).frames([row.icon, ""], DONE_NOTICE_FRAME_MS));
   }
+  // done は、直後の点滅が終わったら薄くして、ほかの状態より目立たせない
+  if (row.rawStatus === "done") return label(row.icon, color).opacity(DONE_OPACITY);
   if (row.rawStatus !== "working") return label(row.icon, color);
   return svg("mods/agent-board/hourglass.svg").flex_none().size(HOURGLASS_SIZE).text_color(color).loop("opacity", { from: 1, to: 0.25, period: WORKING_BLINK_MS });
 }
@@ -465,7 +471,9 @@ export default class AgentBoard extends View {
         return base
           .pl(PROCESS_INDENT)
           .on_click((_e, cx) => this.clickRow(row, cx))
-          .child(this.info([div().child(row.label), statusMark(row, color), ...statusText(row, color), ...this.contextPie(row, t), this.tags(row.tags, t)]))
+          // 状態のアイコンは、名前の左の字下げの中に重ねて置く。行の中身の並びには入れないので、名前が始まる位置はペインの行と同じまま
+          .child(div().absolute().top_0().left(STATUS_MARK_LEFT).h_full().flex().items_center().child(statusMark(row, color)))
+          .child(this.info([div().child(row.label), ...statusText(row, color), ...this.contextPie(row, t), this.tags(row.tags, t)]))
           .when(row.canResume, (el) =>
             el.child(
               button({ id: `resume:${row.key}`, icon: "play", tooltip: "再開: claude --resume で会話を再開する（R）", look: "plain" }, t, (cx) =>
