@@ -24,8 +24,12 @@ const CONFIRM_DIALOG_HEIGHT = 160;
 const REPOSITORY_SPACING = ROW_HEIGHT * 0.5;
 /** リポジトリの card（枠で囲んだ、1 つのリポジトリの行のまとまり）の角丸 */
 const CARD_RADIUS = 4;
-/** 行の左端の、選択中の印（>）を出す欄の幅 */
-const SELECTION_MARK_WIDTH = 8;
+/** 選択中の印（>）を置く位置（行の左端から） */
+const SELECTION_MARK_LEFT = 2;
+/** 行の種類ごとの左の字下げ。印（>）の幅（約 8px）より右から中身を始める */
+const REPOSITORY_INDENT = 18;
+const WORKTREE_INDENT = 12;
+const PROCESS_INDENT = 42;
 /** card の先頭の、リポジトリ名の行の背景 */
 const REPOSITORY_HEADER_BG: Color = "#b48cff26";
 const CURRENT_PANE_BG: Color = "#2dd4bf33";
@@ -56,6 +60,8 @@ interface ButtonSpec {
   text?: string;
   /** icon の右に並べる 2 つ目のアイコン（「＋」と「エージェント」のように、2 つのアイコンで意味を表すとき） */
   secondIcon?: "bot";
+  /** 左右の余白。省くと、文字が無ければ 4、あれば 8 */
+  padX?: number;
   tooltip: string;
   look: ButtonLook;
 }
@@ -133,7 +139,7 @@ function button(spec: ButtonSpec, t: Theme, onClick: (cx: Context) => void) {
     // 2 つのアイコンを並べるときは、間隔を詰めて 1 つの印に見せる
     .gap(spec.secondIcon === undefined ? 4 : 1)
     .h(ROW_HEIGHT - 2)
-    .px(spec.text === undefined ? 4 : 8)
+    .px(spec.padX ?? (spec.text === undefined ? 4 : 8))
     .rounded(6)
     .text_size(12)
     .cursor_pointer()
@@ -366,15 +372,17 @@ export default class AgentBoard extends View {
       .items_center()
       .gap(6)
       .min_h(ROW_HEIGHT)
+      .relative()
       .px(4)
       .cursor_pointer()
       .when((row.kind === "agent" || row.kind === "pane") && row.isCurrentPane, (el) => el.bg(CURRENT_PANE_BG))
       .hover((s) => s.bg(t.hover))
-      // 選択中の行は、背景ではなく左端の > で示す。選んでいない行も同じ幅を空けて、行の中身の位置をそろえる
-      .child(div().w(SELECTION_MARK_WIDTH).flex_none().font_semibold().text_color(t.foreground).child(selected ? ">" : ""));
+      // 選択中の行は、背景ではなく左端の > で示す。印は行の左端に重ねて置き、行の中身の並びには入れない（左の字下げは行の種類ごとに pl で決める）
+      .when(selected, (el) => el.child(div().absolute().top_0().left(SELECTION_MARK_LEFT).h_full().flex().items_center().font_semibold().text_color(t.foreground).child(">")));
     switch (row.kind) {
       case "workspace":
         return base
+          .pl(REPOSITORY_INDENT)
           .bg(REPOSITORY_HEADER_BG)
           .on_click(() => setShared(COLLAPSED_KEY, toggleCollapsed(collapsedState(), row.key)))
           .child(label(row.collapsed ? "▸" : "▾", t.muted))
@@ -382,12 +390,12 @@ export default class AgentBoard extends View {
           .when(row.waiting > 0, (el) => el.child(label(`!! ${row.waiting}`, t.blocked)));
       case "worktree":
         return base
-          .pl(0)
+          .pl(WORKTREE_INDENT)
           .on_click((_e, cx) => this.clickRow(row, cx))
           // エージェントを起動するボタンは、worktree の名前の左に置く
           .when(row.exists, (el) =>
             el.child(
-              button({ id: `new:${row.key}`, icon: "plus", secondIcon: "bot", tooltip: "この worktree で claude を起動する（n）", look: "plain" }, t, (cx) =>
+              button({ id: `new:${row.key}`, icon: "plus", secondIcon: "bot", padX: 0, tooltip: "この worktree で claude を起動する（n）", look: "plain" }, t, (cx) =>
                 this.runRow(row, "new", cx),
               ),
             ),
@@ -402,13 +410,13 @@ export default class AgentBoard extends View {
           .when(row.hasSession, (el) => el.child(this.closeSessionButton(row, t)));
       case "pane":
         return base
-          .pl(16)
+          .pl(PROCESS_INDENT)
           .on_click((_e, cx) => this.clickRow(row, cx))
           .child(this.info([div().text_color(t.muted).child(row.label)]));
       case "agent": {
         const color = statusColor(t, row.rawStatus);
         return base
-          .pl(16)
+          .pl(PROCESS_INDENT)
           .on_click((_e, cx) => this.clickRow(row, cx))
           .child(this.info([div().child(row.label), label(row.icon, color), ...(row.status ? [label(row.status, color)] : []), ...this.contextPie(row, t), this.tags(row.tags, t)]))
           .when(row.canResume, (el) =>
