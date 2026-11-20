@@ -83,7 +83,7 @@ describe("planEdit（nvim。セッションごとに 1 つのウィンドウを�
     expect(steps).toEqual([
       { op: "remoteEdit", bin: "nvim", socket: "/c/nvim/api-1.sock", file: "/w/api/src/a.ts" },
       { op: "switchClient", client: "/dev/ttys001", target: `api:${SHARED_EDIT_WINDOW}` },
-      { op: "focusGhostty" },
+      { op: "focusGhostty", client: "/dev/ttys001" },
     ]);
   });
 

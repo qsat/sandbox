@@ -59,10 +59,10 @@ export class TmuxServer {
   }
 
   async listClients() {
-    const lines = await this.linesOrNoneWhenServerIsDown(["list-clients", "-F", format("#{client_activity}", "#{client_name}", "#{client_session}")]);
+    const lines = await this.linesOrNoneWhenServerIsDown(["list-clients", "-F", format("#{client_activity}", "#{client_name}", "#{client_session}", "#{client_created}", "#{client_termname}")]);
     return lines.map((l) => {
-      const [activity = "0", name = "", session = ""] = fields(l);
-      return { activity: Number(activity), name, session };
+      const [activity = "0", name = "", session = "", created = "0", termname = ""] = fields(l);
+      return { activity: Number(activity), name, session, created: Number(created), termname };
     });
   }
 

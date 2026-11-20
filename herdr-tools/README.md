@@ -30,7 +30,7 @@ herdr-tools/
 │   └── herdr-core/               AgentRuntime の実装（hc-terminal: schema/hc.openrpc.json の Terminal、hc-client: JSON-RPC、herdr-runtime: 翻訳）
 ├── tmux/src/                     クライアント: tmux でエージェントへ移動し、会話する
 │   ├── facts.ts                  tmux のセッション・ペイン・クライアント
-│   ├── current-pane.ts           今いるペイン（最後に操作したクライアントが見ているペイン）の判定。I/O なし
+│   ├── current-pane.ts           今いるペイン（ws が --from-app で操作するクライアントが見ているペイン）の判定。I/O なし
 │   ├── tmux-index.ts             木の worktree → セッション、エージェント → 会話ペイン
 │   ├── plans/                    go（ws go の判断フロー）/ cycle（ws next の列と次に移る先）/ panes / prune / hunk（ws hunk の計画）/ edit（ws edit の計画）。I/O なし
 │   ├── navigator.ts              計画を TmuxServer と WsCore で実行する
@@ -82,11 +82,13 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
    keybind = ctrl+alt+shift+j=text:\x1bB
    keybind = ctrl+alt+shift+k=text:\x1bW
    ```
-   - （任意）手順 6・7 の代わりに skhd でキーを取ると、Herdr app と Ghostty のどちらが前にあっても同じ経路（`ws next --from-app` と `ws next --prev --from-app`）で巡回する。設定例は `tmux/config/skhdrc`（`ctrl + alt + shift - j` で次へ、`ctrl + alt + shift - k` で後ろへ）。skhd に寄せるなら、手順 6・7 と `tmux.conf` の `bind -n M-B` / `M-W` は要らない（`prefix b` / `prefix B` は残してよい）。skhd は PATH が短いので、`ws` と、`ws` が呼ぶ `tmux` / `hc` / `ghq` / `git` が見つかる PATH を設定例のように書く。tmux のクライアントが複数あるときは、最後に使ったクライアントが移動する
+   - （任意）手順 6・7 の代わりに skhd でキーを取ると、Herdr app と Ghostty のどちらが前にあっても同じ経路（`ws next --from-app` と `ws next --prev --from-app`）で巡回する。設定例は `tmux/config/skhdrc`（`ctrl + alt + shift - j` で次へ、`ctrl + alt + shift - k` で後ろへ）。skhd に寄せるなら、手順 6・7 と `tmux.conf` の `bind -n M-B` / `M-W` は要らない（`prefix b` / `prefix B` は残してよい）。skhd は PATH が短いので、`ws` と、`ws` が呼ぶ `tmux` / `hc` / `ghq` / `git` が見つかる PATH を設定例のように書く。Ghostty のウインドウが複数あるときは、最初に tmux につながったウインドウが移動する（手順 9）
    - skhd にはサイドバーの並び順で移るキーも書いてある（`shift + alt - j` で 1 つ下、`shift + alt - k` で 1 つ上。`ws step --from-app` と `ws step --prev --from-app`）。`tmux/config/skhdrc` の該当の 2 行も写す
 8. tmux の hook で、今いるペイン・ウィンドウ・セッションが変わったらすぐ mod に一覧を読み直させる。`tmux/config/tmux.conf` の `set-hook -g window-pane-changed[50]`、`session-window-changed[50]`、`client-session-changed[50]` の 3 行を `~/.tmux.conf` に写す（`[50]` は配列の番号なので、ほかの hook を上書きしない）。hook は `~/.cache/herdr-tools/tmux-focus/event` に `touch` するだけで、mod がそのフォルダーを見張り、変わったらすぐ読み直す。見張りが失敗しても mod は動き、2 秒ごとの読み直しが予備として残る。`ws list` が読めなかったとき（herdr-core に一時的につながらないなど）は、一覧を空にせず前の一覧のまま、理由を一覧の下に出す。`./install.sh` で mod を入れ直したあと、Herdr app を再読み込みする
    - mod の下に出す失敗の文は 2 種類ある。読み直しの失敗（`ws list`・git が読めない）は、読み直すたびに入れ替わり、読めたら消える。操作の失敗（行のクリックやボタンで呼んだ `ws go`・`ws new`・`ws hunk`・`ws edit`・`ws pr` の失敗、`ws next` の「巡回するエージェントはありません」）は、読み直しでは消さず、次の操作まで残す（`shared/errors.ts`。agent-board・commit-history・pull-requests・worktree-changes で同じ）
-9. Ghostty のウインドウが複数あるとき、Herdr app から移る先を最後に選んだウインドウにする。`tmux/config/tmux.conf` の `set -g focus-events on` を `~/.tmux.conf` に写し、`tmux source-file ~/.tmux.conf` のあと、開いている Ghostty のウインドウの tmux をつなぎ直す。off のままだと、tmux はキーを打ったクライアントしか「最後に使われた」と見なさないので、クリックで選んだだけのウインドウではなく前にキーを打ったウインドウの tmux が切り替わり、前に出るウインドウ（macOS が最後に選ばれたものを前に出す）と食い違う
+9. Ghostty のウインドウが複数あっても、skhd と Herdr app からの操作（`--from-app`）は、最初に tmux につながった Ghostty のウインドウ（`client_created` が一番小さく、`client_termname` が `xterm-ghostty` のクライアント）を切り替え、そのウインドウを前に出す。あとから開いたウインドウに操作の対象が移らない。そのウインドウを閉じると、次に古いウインドウが対象になり、Ghostty のウインドウが 1 つも無ければ新しく開く
+   - ウインドウを前に出すのに、yabai と tmux のタイトルを使う。`tmux/config/tmux.conf` の `set -g set-titles on` と `set -g set-titles-string '#S [#{client_tty}]'` を `~/.tmux.conf` に写し、`tmux source-file ~/.tmux.conf` を実行する。Ghostty のウインドウのタイトルに `[/dev/ttys013]` のような tty の印が入り、`ws` は `yabai -m query --windows` でその印のあるウインドウを探して `yabai -m window --focus` する。yabai が無いか、ウインドウが見つからなければ、今までどおり `open -a Ghostty` で Ghostty のアプリを前に出す（あとから開いたウインドウが前に出ることがある）
+   - `set -g focus-events on` も写す。Ghostty のクライアントが無いとき（Herdr app のターミナルの tmux だけのときなど）、`ws` は最後に操作したクライアント（`client_activity` が一番新しいもの）を「今いる場所」に使うため。off のままだと、tmux はキーを打ったクライアントしか「最後に使われた」と見なさない
 10. 一覧だけの画面にしたければ `mod.json` を `{"place": "none"}` にし、`ctrl-shift-l` か `herdr-app do layout.switch '{"name":"agents"}'` で切り替える
 
 ## 使い方
@@ -394,8 +396,8 @@ core のイベント（`events.subscribe`）で自動更新し、tmux 側の変�
 
 1. セッションを用意（無ければ tm 規則 = basename、`.`→`_` で作る。同名があればそれを使う）
 2. agent なら（移動では再開しない。再開は `ws resume`・ボタン・`R` だけで行う）: `@ws_agent` が一致する生きたペインがあればそれを選ぶ／無ければ `agents` ウィンドウに `hc attach` ペインを作る（無ければウィンドウごと）
-3. tmux クライアントを切り替える: `--client` 指定 > `--from-app` なら最後に使われたクライアント（`client_activity` が最も新しいもの。`focus-events on` ならフォーカスの出入りでも更新されるので、最後に選んだ Ghostty のウインドウになる）> tmux 内なら呼び出し元 > tmux の外ならその場で `tmux attach`
-4. app からなら Ghostty を前面へ（クライアントが1つも無ければ Ghostty の新しいウィンドウで attach）
+3. tmux クライアントを切り替える: `--client` 指定 > `--from-app` なら最初に tmux につながった Ghostty のクライアント（`client_created` が一番小さく、`client_termname` が `xterm-ghostty` のもの）> tmux 内なら呼び出し元 > tmux の外ならその場で `tmux attach`
+4. app からなら、切り替えたクライアントの Ghostty のウインドウを前面へ（タイトルの tty の印で yabai が探す。見つからなければ `open -a Ghostty`）。Ghostty のクライアントが1つも無ければ Ghostty の新しいウィンドウで attach
 
 ### `cc`: herdr-core で起動して、今の端末で会話する
 
