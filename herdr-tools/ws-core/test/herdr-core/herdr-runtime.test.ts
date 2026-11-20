@@ -52,6 +52,10 @@ describe("toAgentRecord（herdr-core の言葉 → ドメインの言葉）", ()
     expect(toAgentRecord(raw, "claude_sid").claudeSessionId).toBeUndefined();
     expect(toAgentRecord({ ...raw, labels: { claude_sid: "s" } }, "claude_sid").claudeSessionId).toBe("s");
   });
+  test("ラベル claude.theme → プロンプトの色のテーマ", () => {
+    expect(toAgentRecord({ ...raw, labels: { ...raw.labels, "claude.theme": "ws-1a2b3c4d" } }, L).promptColorTheme).toBe("ws-1a2b3c4d");
+    expect(toAgentRecord(raw, L).promptColorTheme).toBeUndefined();
+  });
   test("名乗っていない状態は unknown、名前が無ければアドレス", () => {
     expect(toAgentRecord({ ...raw, status: null, name: null }, L)).toMatchObject({ status: "unknown", name: "t7" });
   });

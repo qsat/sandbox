@@ -5,6 +5,23 @@ export function claudeResumeCommand(claudeBin: string, sessionId: string) {
   return `${claudeBin} --resume ${shellQuote(sessionId)}`;
 }
 
+/** Claude Code のカスタムのテーマが受け付ける色の書き方。受け付けない色は Claude Code が黙って無視する */
+const THEME_COLOR = /^(#[0-9a-f]{3}|#[0-9a-f]{6}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\)|ansi256\(\d{1,3}\)|ansi:[a-z]+)$/i;
+export const THEME_COLOR_FORMATS = "#rrggbb・#rgb・rgb(r,g,b)・ansi256(n)・ansi:<名前>";
+
+export function isClaudeThemeColor(color: string) {
+  return THEME_COLOR.test(color);
+}
+
+/** dark を元に、プロンプトの枠の線（promptBorder）の色だけを変えたカスタムのテーマ */
+export function promptColorTheme(name: string, color: string) {
+  return { name, base: "dark", overrides: { promptBorder: color } };
+}
+
+export function claudeThemeArgs(theme: string) {
+  return ["--settings", JSON.stringify({ theme: `custom:${theme}` })];
+}
+
 /**
  * ユーザーと対話している Claude Code のセッションか。Claude Code は hook と statusLine のコマンドに CLAUDE_CODE_ENTRYPOINT を渡し、
  * 対話のセッションは cli、`claude -p` などの対話でないセッションは sdk-cli などになる。変数が無ければ対話として扱う

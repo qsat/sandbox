@@ -7,6 +7,7 @@ export * from "./domain/worktree-lifecycle";
 export * from "./ports";
 export * from "./ws-core";
 export { ClaudeSessionTitles } from "./claude-session-titles";
+export { ClaudeThemeFiles } from "./claude-theme-files";
 export { GhqWorkspaceSource } from "./ghq-workspace-source";
 export { GitChangeAmounts } from "./git-change-amounts";
 export { GitCli } from "./git-cli";

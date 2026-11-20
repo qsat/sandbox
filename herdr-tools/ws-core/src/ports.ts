@@ -8,6 +8,7 @@ export interface AgentStartSpec {
   repo: string;
   branch: string | null;
   command: string[];
+  promptColorTheme?: string;
 }
 
 export interface AgentRuntime {
@@ -34,6 +35,12 @@ export interface WorkspaceSource {
 /** エージェントの Claude Code のセッションに付いたタイトル（何の作業かの要約）を読む */
 export interface SessionTitles {
   titleOf(cwd: string, claudeSessionId: string): Promise<string | undefined>;
+}
+
+/** エージェントごとの、プロンプトの枠の線の色だけを変えた Claude Code のテーマ。書き換えると、起動中のセッションに反映される */
+export interface PromptColorThemes {
+  create(color: string): Promise<string>;
+  recolor(theme: string, color: string): Promise<void>;
 }
 
 export interface UsageStore {

@@ -4,7 +4,7 @@ import type { AgentRuntime, AgentStartSpec } from "../ports";
 import type { HcClient } from "./hc-client";
 import type { HcTerminal } from "./hc-terminal";
 
-export const LABEL = { workspace: "ws", worktree: "wt", claudeSession: "claude.session", contextUsed: "claude.context" };
+export const LABEL = { workspace: "ws", worktree: "wt", claudeSession: "claude.session", contextUsed: "claude.context", promptColorTheme: "claude.theme" };
 
 const SHELLS = new Set(["bash", "zsh", "fish", "sh", "dash", "ksh", "mksh", "tcsh", "csh", "nu", "pwsh", "elvish", "xonsh"]);
 const TERMINAL_NAME_MAX = 32;
@@ -58,6 +58,7 @@ export function toAgentRecord(t: HcTerminal, claudeSessionLabel: string): AgentR
     claudeSessionId: t.labels[claudeSessionLabel] || undefined,
     programLost: t.foreground ? isShell(t.foreground.name) : undefined,
     contextUsedPercentage: percentageLabel(t.labels[LABEL.contextUsed]),
+    promptColorTheme: t.labels[LABEL.promptColorTheme] || undefined,
   };
 }
 
@@ -85,7 +86,7 @@ export class HerdrRuntime implements AgentRuntime {
   async start(spec: AgentStartSpec) {
     const liveNames = (await this.hc.listIncludingFinished()).flatMap((t) => (t.state === "live" && t.name ? [t.name] : []));
     const name = uniqueTerminalName(spec.repo, spec.branch, liveNames);
-    const labels = { [LABEL.workspace]: spec.workspace, [LABEL.worktree]: spec.worktree };
+    const labels = { [LABEL.workspace]: spec.workspace, [LABEL.worktree]: spec.worktree, ...(spec.promptColorTheme && { [LABEL.promptColorTheme]: spec.promptColorTheme }) };
     return { id: await this.hc.runKeptInBackground({ name, cwd: spec.worktree, labels, argv: spec.command }), name };
   }
 
