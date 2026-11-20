@@ -25,9 +25,10 @@ export interface AgentRecord {
   claudeSessionId?: string;
   programLost?: boolean;
   contextUsedPercentage?: number;
+  promptColorTheme?: string;
 }
 
-export type AgentNode = Omit<AgentRecord, "recordedWorkspace" | "recordedWorktree" | "programLost"> & {
+export type AgentNode = Omit<AgentRecord, "recordedWorkspace" | "recordedWorktree" | "programLost" | "promptColorTheme"> & {
   resumable: boolean;
   missingLocation: boolean;
 };
@@ -37,7 +38,7 @@ export function resumable(a: AgentRecord) {
 }
 
 export function toAgentNode(a: AgentRecord, worktreeExists: boolean): AgentNode {
-  const { recordedWorkspace: _ws, recordedWorktree, programLost: _lost, ...rest } = a;
+  const { recordedWorkspace: _ws, recordedWorktree, programLost: _lost, promptColorTheme: _theme, ...rest } = a;
   return { ...rest, resumable: resumable(a), missingLocation: !!recordedWorktree && !worktreeExists };
 }
 

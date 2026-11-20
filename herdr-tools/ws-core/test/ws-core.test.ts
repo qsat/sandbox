@@ -1,5 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { agentsInMissingWorktrees, WsCore, type AgentRecord, type AgentRuntime, type AgentStartSpec, type ClaudeUsage, type PathInspection, type UsageStore, type WorkspaceSource } from "../src";
+import { agentsInMissingWorktrees, WsCore, type AgentRecord, type AgentRuntime, type AgentStartSpec, type ClaudeUsage, type PathInspection, type PromptColorThemes, type UsageStore, type WorkspaceSource } from "../src";
+
+class InMemoryPromptColorThemes implements PromptColorThemes {
+  colors = new Map<string, string>();
+  async create(color: string) {
+    const theme = `ws-t${this.colors.size + 1}`;
+    this.colors.set(theme, color);
+    return theme;
+  }
+  async recolor(theme: string, color: string) {
+    this.colors.set(theme, color);
+  }
+}
 
 class InMemoryRuntime implements AgentRuntime {
   contextWrites = 0;
@@ -27,7 +39,7 @@ class InMemoryRuntime implements AgentRuntime {
   async start(spec: AgentStartSpec) {
     this.started.push(spec);
     const id = `a${this.agents.length + 1}`;
-    this.agents.push({ id, name: spec.repo, cwd: spec.worktree, status: "working", alive: true, parent: null, recordedWorktree: spec.worktree, recordedWorkspace: spec.workspace });
+    this.agents.push({ id, name: spec.repo, cwd: spec.worktree, status: "working", alive: true, parent: null, recordedWorktree: spec.worktree, recordedWorkspace: spec.workspace, promptColorTheme: spec.promptColorTheme });
     return { id, name: spec.repo };
   }
   async recordClaudeSession(id: string, claudeSessionId: string) {
@@ -88,7 +100,7 @@ describe("WsCore", () => {
   test("newAgent は worktree・本体・ブランチを実行環境に渡す", async () => {
     const rt = new InMemoryRuntime();
     const core = new WsCore(rt, source(), { claudeBin: "claude" });
-    const r = await core.startAgent(WT, ["--model", "x"]);
+    const r = await core.startAgent(WT, { claudeArgs: ["--model", "x"] });
     expect(r.id).toBe("a1");
     expect(rt.started[0]).toEqual({ workspace: REPO, worktree: WT, repo: "api", branch: "feat", command: ["claude", "--model", "x"] });
   });
@@ -294,5 +306,57 @@ describe("WsCore の context 使用率（statusLine で自分の端末に記録�
     expect(await core.recordContextUsageFromStatusLine(statusLine(null), { FAKE_AGENT: id })).toEqual({ recorded: false, reason: "no-context" });
     expect(await core.recordContextUsageFromStatusLine(statusLine(50), {})).toEqual({ recorded: false, reason: "not-in-runtime" });
     expect(rt.contextWrites).toBe(1);
+  });
+});
+
+describe("WsCore のプロンプトの枠の線の色", () => {
+  const setup = () => {
+    const rt = new InMemoryRuntime();
+    const themes = new InMemoryPromptColorThemes();
+    return { rt, themes, core: new WsCore(rt, source(), { claudeBin: "claude", promptColorThemes: themes }) };
+  };
+
+  test("色を付けて起動すると、エージェント専用のテーマを作って claude に選ばせ、テーマを実行環境に記録する", async () => {
+    const { rt, themes, core } = setup();
+    await core.startAgent(WT, { claudeArgs: ["--model", "x"], promptColor: "#ff0000" });
+    expect(themes.colors.get("ws-t1")).toBe("#ff0000");
+    expect(rt.started[0]).toMatchObject({ command: ["claude", "--settings", '{"theme":"custom:ws-t1"}', "--model", "x"], promptColorTheme: "ws-t1" });
+  });
+
+  test("色を付けずに起動すると、テーマを作らない", async () => {
+    const { rt, themes, core } = setup();
+    await core.startAgent(WT);
+    expect(themes.colors.size).toBe(0);
+    expect(rt.started[0]!.command).toEqual(["claude"]);
+  });
+
+  test("id か名前で指したエージェントのテーマの色を書き換える", async () => {
+    const { themes, core } = setup();
+    const { id, name } = await core.startAgent(WT, { promptColor: "#ff0000" });
+    expect(await core.setPromptColor(id, "#00ff00")).toEqual({ changed: true });
+    expect(await core.setPromptColor(name, "ansi256(21)")).toEqual({ changed: true });
+    expect(themes.colors.get("ws-t1")).toBe("ansi256(21)");
+  });
+
+  test("色を付けずに起動したエージェントと、いないエージェントの色は変えない", async () => {
+    const { themes, core } = setup();
+    const { id } = await core.startAgent(WT);
+    expect(await core.setPromptColor(id, "#00ff00")).toEqual({ changed: false, reason: "started-without-color" });
+    expect(await core.setPromptColor("nobody", "#00ff00")).toEqual({ changed: false, reason: "not-found" });
+    expect(themes.colors.size).toBe(0);
+  });
+
+  test.each(["#f00", "#FF0000", "rgb(255, 0, 0)", "ansi256(196)", "ansi:red"])("Claude Code の書き方の色 %s を受け付ける", async (color) => {
+    const { themes, core } = setup();
+    await core.startAgent(WT, { promptColor: color });
+    expect(themes.colors.get("ws-t1")).toBe(color);
+  });
+
+  test.each(["red", "#ff00", "ff0000", "rgb(255,0)"])("Claude Code が無視する色 %s は、テーマを作る前に拒む", async (color) => {
+    const { rt, themes, core } = setup();
+    await expect(core.startAgent(WT, { promptColor: color })).rejects.toThrow("色の書き方が違います");
+    await expect(core.setPromptColor("a1", color)).rejects.toThrow("色の書き方が違います");
+    expect(themes.colors.size).toBe(0);
+    expect(rt.started).toEqual([]);
   });
 });

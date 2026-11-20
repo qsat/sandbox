@@ -1,11 +1,11 @@
 import { basename } from "@herdr-tools/utils/basename";
 import { mapLimit } from "@herdr-tools/utils/map-limit";
-import { claudeResumeCommand, contextUsedPercentageFromStatusLine, isInteractiveClaudeSession, sessionIdFromSessionStartHook, usageFromStatusLine } from "./claude-code";
+import { claudeResumeCommand, claudeThemeArgs, contextUsedPercentageFromStatusLine, isClaudeThemeColor, isInteractiveClaudeSession, sessionIdFromSessionStartHook, THEME_COLOR_FORMATS, usageFromStatusLine } from "./claude-code";
 import { resumable, type AgentNode } from "./domain/agent";
 import { makeLocator } from "./domain/locate";
 import { buildTree, mainRepositoryOf, pathsToInspect, type PathInspection } from "./domain/tree";
 import { openWindows, sameUsage } from "./domain/usage";
-import type { AgentRuntime, SessionTitles, UsageStore, WorkspaceSource } from "./ports";
+import type { AgentRuntime, PromptColorThemes, SessionTitles, UsageStore, WorkspaceSource } from "./ports";
 
 interface WsCoreOptions {
   home?: string;
@@ -14,7 +14,18 @@ interface WsCoreOptions {
   stopWaitMs?: number;
   usageStore?: UsageStore;
   sessionTitles?: SessionTitles;
+  promptColorThemes?: PromptColorThemes;
   nowEpochSec?: () => number;
+}
+
+export interface AgentLaunch {
+  claudeArgs?: string[];
+  /** プロンプトの枠の線の色。付けると、エージェント専用のテーマで起動し、あとから setPromptColor で変えられる */
+  promptColor?: string;
+}
+
+function assertThemeColor(color: string) {
+  if (!isClaudeThemeColor(color)) throw new Error(`色の書き方が違います: ${color}（${THEME_COLOR_FORMATS} のどれか）`);
 }
 
 export class WsCore {
@@ -125,12 +136,36 @@ export class WsCore {
     }
   }
 
-  async startAgent(path: string, claudeArgs: string[] = []) {
+  async startAgent(path: string, launch: AgentLaunch = {}) {
+    if (launch.promptColor) assertThemeColor(launch.promptColor);
     const [inspection] = await this.source.inspect([path]);
     if (!inspection?.exists) throw new Error(`ディレクトリがありません: ${path}`);
     const worktree = inspection.toplevel ?? path;
     const workspace = inspection.commonDir ? mainRepositoryOf(inspection.commonDir) : worktree;
-    return this.runtime.start({ workspace, worktree, repo: basename(workspace), branch: inspection.branch ?? null, command: [this.claudeBin, ...claudeArgs] });
+    const promptColorTheme = launch.promptColor ? await this.promptColorThemes().create(launch.promptColor) : undefined;
+    const command = [this.claudeBin, ...(promptColorTheme ? claudeThemeArgs(promptColorTheme) : []), ...(launch.claudeArgs ?? [])];
+    return this.runtime.start({ workspace, worktree, repo: basename(workspace), branch: inspection.branch ?? null, command, promptColorTheme });
+  }
+
+  /** ref は id か名前。色を変えられるのは、startAgent に promptColor を渡して起動したエージェントだけ */
+  async setPromptColor(ref: string, color: string) {
+    assertThemeColor(color);
+    const agent = await this.findAgent(ref);
+    if (!agent) return { changed: false, reason: "not-found" } as const;
+    if (!agent.promptColorTheme) return { changed: false, reason: "started-without-color" } as const;
+    await this.promptColorThemes().recolor(agent.promptColorTheme, color);
+    return { changed: true } as const;
+  }
+
+  private promptColorThemes() {
+    if (!this.opts.promptColorThemes) throw new Error("プロンプトの色のテーマを書く場所が設定されていません");
+    return this.opts.promptColorThemes;
+  }
+
+  /** ws go と同じく id を先に引く。エージェントでない端末は一覧に無いので触らない */
+  private async findAgent(ref: string) {
+    const agents = await this.runtime.list();
+    return agents.find((a) => a.id === ref) ?? agents.find((a) => a.name === ref);
   }
 
   /**
@@ -164,10 +199,9 @@ export class WsCore {
     return { recorded: true } as const;
   }
 
-  /** ref は id か名前（ws go と同じく id を先に引く）。エージェントでない端末は一覧に無いので触らない */
+  /** ref は id か名前 */
   async stopAgent(ref: string) {
-    const agents = await this.runtime.list();
-    const agent = agents.find((a) => a.id === ref) ?? agents.find((a) => a.name === ref);
+    const agent = await this.findAgent(ref);
     if (!agent) return { stopped: false, reason: "not-found" } as const;
     await this.stopAndRemove(agent);
     return { stopped: true } as const;

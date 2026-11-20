@@ -175,7 +175,7 @@ export async function runPopup(nav: TmuxNavigator, opts: { client?: string }) {
         case "n":
           if (!isSelectable(r) || r.kind === "pane") return;
           return void act(async () => {
-            await nav.startAgentAndGo(r.worktree.path, [], { client: opts.client });
+            await nav.startAgentAndGo(r.worktree.path, {}, { client: opts.client });
           }, true);
         case "x": {
           if (!isSelectable(r) || r.kind === "pane") return;

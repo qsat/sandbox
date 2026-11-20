@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { run } from "@herdr-tools/utils/run";
 import { runInteractive } from "@herdr-tools/utils/run-interactive";
-import { branchRemovalMessage, destroyRefusal, looksLikePath, resolveRef, type Resolved, type Worktrees, type WsCore } from "@herdr-tools/ws-core";
+import { branchRemovalMessage, destroyRefusal, looksLikePath, resolveRef, type AgentLaunch, type Resolved, type Worktrees, type WsCore } from "@herdr-tools/ws-core";
 import { focusGhostty, openGhosttyWindowRunning } from "./ghostty";
 import { AGENTS_WINDOW, chooseClient, ensureSession, planGo, workingDir, type PaneTarget, type Step } from "./plans/go";
 import { chooseCycleTarget, continuingRecord, cycleCandidates, decideCurrentPane, MESSAGE_WHEN_NO_CANDIDATE } from "./plans/cycle";
@@ -153,8 +153,8 @@ export class TmuxNavigator {
     return this.go(target, view, opts);
   }
 
-  async startAgentAndTalkHere(path: string, claudeArgs: string[]) {
-    const agent = await this.core.startAgent(path, claudeArgs);
+  async startAgentAndTalkHere(path: string, launch: AgentLaunch) {
+    const agent = await this.core.startAgent(path, launch);
     const pane = this.env.TMUX ? this.env.TMUX_PANE : undefined;
     if (pane) await this.tmux.markPaneAsConversation(pane, agent.id);
     try {
@@ -165,8 +165,8 @@ export class TmuxNavigator {
     return agent;
   }
 
-  async startAgentAndGo(path: string, claudeArgs: string[], opts: GoOptions = {}) {
-    const agent = await this.core.startAgent(path, claudeArgs);
+  async startAgentAndGo(path: string, launch: AgentLaunch, opts: GoOptions = {}) {
+    const agent = await this.core.startAgent(path, launch);
     return { ...agent, steps: await this.goRef(agent.id, opts) };
   }
 

@@ -13,15 +13,17 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
   ws list [--json] [--all]                         一覧（--all で ghq の全エントリ）
   ws go <ref> [--client <name> | --from-app] [--dry-run]
                                                    移動。ref は worktree のパスかエージェントの id／名前
-  ws new [<worktree>] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
-                                                   エージェント起動。--here は今の端末で会話、--attach は agents ウィンドウへ移動
-  ws create <branch> [<worktree>] [--from <rev>] [--no-agent] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
-                                                   ブランチの worktree を本体の横に作り、そこでエージェントを起動する（--no-agent で起動しない。--here・--attach は ws new と同じ）。
+  ws new [<worktree>] [--color <色>] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
+                                                   エージェント起動。--here は今の端末で会話、--attach は agents ウィンドウへ移動。
+                                                   --color は、プロンプトの枠の線の色（#rrggbb・#rgb・rgb(r,g,b)・ansi256(n)・ansi:<名前>）。付けたエージェントは ws color で色を変えられる
+  ws create <branch> [<worktree>] [--from <rev>] [--no-agent] [--color <色>] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
+                                                   ブランチの worktree を本体の横に作り、そこでエージェントを起動する（--no-agent で起動しない。--color・--here・--attach は ws new と同じ）。
                                                    新しいブランチは --from、origin の同じ名前のブランチ、<worktree>（既定は今いる場所）の HEAD の順で分ける元を決める
   ws destroy <worktree> [--force] [--dry-run]      worktree のエージェントを止め、worktree とブランチ（マージ済みのときだけ）を消し、tmux セッションを閉じる。
                                                    未コミットの変更・追跡されていないファイル・submodule があれば --force が要る。本体の worktree は消さない
   ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
   ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す（<agent> は id か名前）
+  ws color <agent> <色>                            --color を付けて起動したエージェントの、プロンプトの枠の線の色を変える（起動中のセッションに反映される）
   ws close [<ref>] [--stop-agents]                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは止めない。
                                                    --stop-agents を付けると、その worktree のエージェントをすべて止めて一覧から消してから閉じる
   ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる（他の場所の会話ペインは移して集める）
@@ -44,7 +46,7 @@ const USAGE = `ws - エージェントを workspace > worktree > agent で一覧
   ws prune [--dry-run] [--yes]                     場所が消えた worktree のセッション・エージェントを片付ける
 `;
 
-const VALUE_FLAGS = new Set(["--client", "--pane", "--max", "--commit", "--file", "--pr", "--gh-commit", "--range", "--against", "--from"]);
+const VALUE_FLAGS = new Set(["--client", "--pane", "--max", "--commit", "--file", "--pr", "--gh-commit", "--range", "--against", "--from", "--color"]);
 
 function parseArgs(argv: string[]) {
   const positional: string[] = [];
@@ -106,12 +108,13 @@ async function main(argv: string[]) {
   const goOpts = { client: str(p, "--client"), fromApp: has(p, "--from-app") };
   /** path でエージェントを起動する（ws new と ws create で同じ）。--here は今の端末で会話、--attach は agents ウィンドウへ移動、どちらも無ければ起動だけして id と名前を出す */
   const startAgentIn = async (path: string) => {
+    const launch = { claudeArgs: p.rest, promptColor: str(p, "--color") };
     if (has(p, "--here")) {
-      await nav.startAgentAndTalkHere(path, p.rest);
+      await nav.startAgentAndTalkHere(path, launch);
     } else if (has(p, "--attach")) {
-      await nav.startAgentAndGo(path, p.rest, goOpts);
+      await nav.startAgentAndGo(path, launch, goOpts);
     } else {
-      const r = await core.startAgent(path, p.rest);
+      const r = await core.startAgent(path, launch);
       process.stdout.write(`${r.id}\t${r.name}\n`);
     }
   };
@@ -168,6 +171,13 @@ async function main(argv: string[]) {
       const r = await core.stopAgent(ref);
       process.stdout.write(r.stopped ? `stopped ${ref}\n` : `skip ${ref}: ${r.reason}\n`);
       return r.stopped ? 0 : 1;
+    }
+    case "color": {
+      const [ref, color] = p.positional;
+      if (!ref || !color) throw new Error("ws color <agent> <色>");
+      const r = await core.setPromptColor(ref, color);
+      process.stdout.write(r.changed ? `colored ${ref} ${color}\n` : `skip ${ref}: ${r.reason}\n`);
+      return r.changed ? 0 : 1;
     }
     case "panes": {
       const pane = str(p, "--pane") ?? process.env.TMUX_PANE;

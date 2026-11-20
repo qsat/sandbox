@@ -121,12 +121,14 @@ mod は TypeScript で書き、`bun build` で `herdr` / `gpui-kit` だけを外
 ws list [--json] [--all]                         Workspace > Worktree > Agent の木（--all で ghq の全エントリ）
 ws go <ref> [--client <name> | --from-app] [--dry-run]
                                                  移動。ref は worktree のパス（配下でも可）かアドレス／端末名
-ws new [<worktree>] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
-ws create <branch> [<worktree>] [--from <rev>] [--no-agent] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
+ws new [<worktree>] [--color <色>] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
+                                                 --color はプロンプトの枠の線の色（下の「エージェントごとのプロンプトの枠の色」を参照）
+ws create <branch> [<worktree>] [--from <rev>] [--no-agent] [--color <色>] [--here | --attach] [--client <name> | --from-app] [-- <claude の引数>]
                                                  ブランチの worktree を本体の横に作り、そこでエージェントを起動する（下の「ws create / ws destroy」を参照）
 ws destroy <worktree> [--force] [--dry-run]      worktree のエージェントを止め、worktree とマージ済みのブランチを消し、tmux セッションを閉じる（下の「ws create / ws destroy」を参照）
 ws resume <agent>                                再開できるなら claude --resume <id> を送る（何度呼んでも安全）
 ws stop <agent>                                  エージェントを止め、終了を待って一覧から消す（<agent> は id か名前。エージェントでない端末は触らない）
+ws color <agent> <色>                            --color を付けて起動したエージェントの、プロンプトの枠の線の色を変える（下の「エージェントごとのプロンプトの枠の色」を参照）
 ws close [<ref>] [--stop-agents]                 ref（既定は今いる worktree）の tmux セッションを閉じる。エージェントは herdr-core で動き続ける。--stop-agents を付けると、その worktree のエージェントをすべて止めて一覧から消してから閉じる（呼び出したエージェント自身がその worktree にいるときは、何も止めずに失敗する）
 ws panes [-a] [--pane <pane_id>] [--max <n>]     今の worktree のエージェントを agents ウィンドウに並べる（会話ペインが無ければ開き、他の場所にあれば移して集める）
 ws next [--prev] [--client <name> | --from-app] [--list]
@@ -451,6 +453,27 @@ bind-key -n 'C-\' if-shell "$is_vim" 'send-keys C-\\' 'select-pane -l'
 利用上限と同じく、70% 以上で強調、90% 以上で警告の色。セッションの開始直後（値が null）、終了した端末、
 claude が落ちて要再開になった端末（値が古い）には出さない。statusLine に `ws statusline` を設定したセッションだけが対象。
 
+### エージェントごとのプロンプトの枠の色
+
+どのチャットがどのエージェントかを見分けるために、Claude Code の入力欄（プロンプト）の枠の線の色だけを、エージェントごとに変える。
+ほかの配色は dark のまま。
+
+```sh
+ws new . --color '#ff0000'          # 起動するときに色を付ける（ws create も同じ）
+ws color <agent> '#0000ff'          # 起動中のセッションの色を変える（<agent> は id か名前）
+```
+
+| 項目 | 内容 |
+| --- | --- |
+| 書ける色 | `#rrggbb`・`#rgb`・`rgb(r,g,b)`・`ansi256(n)`・`ansi:<名前>`（Claude Code のカスタムのテーマと同じ）。ほかの書き方は、Claude Code が黙って無視するので、ws が断る |
+| 起動するとき | `~/.claude/themes/ws-<8 桁の 16 進>.json` に、dark を元に `promptBorder` だけを変えたテーマを書き（フォルダーが無ければ作る）、claude に `--settings '{"theme":"custom:ws-…"}'` を渡す。テーマの名前は端末のラベル `claude.theme` に記録する |
+| 色を変えるとき | `ws color` がそのテーマのファイルを書き換える。Claude Code は `~/.claude/themes/` を見張っていて、起動中のセッションにすぐ反映する |
+| 変えられないエージェント | `--color` を付けずに起動したエージェント（`skip <agent>: started-without-color`）。テーマを持たないため |
+
+- 色を付けたセッションの中で `/theme` を使わない。`/theme` で選んだテーマは、そのセッションの `--settings` より優先されるうえ、`~/.claude/settings.json` の `theme` を書き換え、これから起こすセッションすべてに影響する
+- `ws resume` で再開したセッションは、既定のテーマ（色なし）に戻る。`claude --resume <id>` に元の引数を付けないため
+- エージェントを止めても、テーマのファイルは `~/.claude/themes/` に残る。`/theme` の一覧に `ws-…` が並ぶので、要らなくなったら消す
+
 ### tmux のセッション内のウィンドウを1つのウィンドウのペインにまとめる
 
 `join-pane` で他のウィンドウのペインを今のウィンドウへ移す。ペインが無くなったウィンドウは自動で閉じる。
@@ -498,6 +521,7 @@ Claude Code は statusLine のコマンドに `rate_limits.five_hour` / `rate_li
 | `wt` | worktree のパス | `ws new` |
 | `claude.session` | Claude のセッションID | SessionStart hook（起動・再開・/clear・compact のたびに最新を指す）。対話のセッション（`CLAUDE_CODE_ENTRYPOINT` が `cli`）のときだけ記録する。エージェントの端末の中でスクリプトが呼ぶ `claude -p` などのセッションも同じ hook を呼ぶが、記録しない。statusLine（`ws statusline`）も、渡されたセッションID が記録と違えば記録し直す |
 | `claude.context` | context の使用率（整数の %） | `ws statusline`（自分の端末に、値が変わったときだけ） |
+| `claude.theme` | エージェント専用の Claude Code のテーマの名前（`ws-<8 桁の 16 進>`） | `ws new --color`・`ws create --color`。`ws color` がこれでテーマのファイルを引く |
 
 ラベル無しで手で起動したエージェントは cwd から対応を推定する（git の toplevel で判定するので `repo` と `repo=branch` は混ざらない）。
 
