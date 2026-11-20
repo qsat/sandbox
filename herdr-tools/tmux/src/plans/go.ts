@@ -11,7 +11,7 @@ export type Step =
   | { op: "switchClient"; client: string; target: string }
   | { op: "attachHere"; target: string }
   | { op: "newGhosttyWindow"; target: string }
-  | { op: "focusGhostty" }
+  | { op: "focusGhostty"; client: string }
   | { op: "openHunkWindow"; session: string; cwd: string; argv: string[]; sidebar?: true }
   | { op: "respawnHunkWindow"; session: string; cwd: string; argv: string[]; sidebar?: true }
   | { op: "openEditWindow"; session: string; window: string; cwd: string; argv: string[] }
@@ -19,8 +19,15 @@ export type Step =
   | { op: "hunkReload"; cwd: string; hunkBin: string; args: string[] }
   | { op: "hunkNavigate"; cwd: string; file: string; wait: boolean };
 
+const GHOSTTY_TERMNAME = "xterm-ghostty";
+
 export function mostRecentClient(clients: TmuxClient[]) {
   return [...clients].sort((a, b) => b.activity - a.activity)[0];
+}
+
+/** 最初に tmux につながった Ghostty のウインドウ。あとから開いたウインドウに、ws が操作する対象を移さないため */
+export function firstGhosttyClient(clients: TmuxClient[]) {
+  return clients.filter((c) => c.termname === GHOSTTY_TERMNAME).sort((a, b) => a.created - b.created)[0];
 }
 
 function isUnexpandedFormat(s: string) {
@@ -31,7 +38,7 @@ export function chooseClient(opts: { explicit?: string; fromApp: boolean; caller
   const switchTo = (name: string) => ({ kind: "switch" as const, name });
   if (opts.explicit && !isUnexpandedFormat(opts.explicit)) return switchTo(opts.explicit);
   if (opts.fromApp) {
-    const c = mostRecentClient(opts.clients);
+    const c = firstGhosttyClient(opts.clients);
     return c ? switchTo(c.name) : { kind: "newGhosttyWindow" as const };
   }
   if (opts.callerClient) return switchTo(opts.callerClient);
@@ -78,7 +85,7 @@ function enterConversation(agent: AgentNode, session: string, cwd: string, idx: 
 export function bringClientTo(target: string, ctx: GoContext): Step[] {
   switch (ctx.client.kind) {
     case "switch":
-      return [{ op: "switchClient", client: ctx.client.name, target }, ...(ctx.fromApp ? [{ op: "focusGhostty" } as const] : [])];
+      return [{ op: "switchClient", client: ctx.client.name, target }, ...(ctx.fromApp ? [{ op: "focusGhostty", client: ctx.client.name } as const] : [])];
     case "attachHere":
       return [{ op: "attachHere", target }];
     case "newGhosttyWindow":

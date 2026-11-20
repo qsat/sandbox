@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { run } from "@herdr-tools/utils/run";
 import { runInteractive } from "@herdr-tools/utils/run-interactive";
 import { branchRemovalMessage, destroyRefusal, looksLikePath, resolveRef, type AgentLaunch, type Resolved, type Worktrees, type WsCore } from "@herdr-tools/ws-core";
-import { focusGhostty, openGhosttyWindowRunning } from "./ghostty";
+import { focusGhosttyWindowOf, openGhosttyWindowRunning } from "./ghostty";
 import { AGENTS_WINDOW, chooseClient, ensureSession, planGo, workingDir, type PaneTarget, type Step } from "./plans/go";
 import { chooseCycleTarget, continuingRecord, cycleCandidates, decideCurrentPane, MESSAGE_WHEN_NO_CANDIDATE } from "./plans/cycle";
 import { planPanes } from "./plans/panes";
@@ -185,7 +185,7 @@ export class TmuxNavigator {
       case "newGhosttyWindow":
         return openGhosttyWindowRunning(this.tmux.attachArgv(step.target));
       case "focusGhostty":
-        return focusGhostty();
+        return focusGhosttyWindowOf(step.client);
       case "openHunkWindow":
         await this.tmux.openWindowRunning(step.session, HUNK_WINDOW, step.cwd, step.argv);
         return this.markHunkSidebar(step.session, !!step.sidebar);

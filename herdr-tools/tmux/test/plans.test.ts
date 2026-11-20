@@ -93,7 +93,7 @@ describe("ペイン", () => {
     expect(planGo({ kind: "pane", paneId: "%7" }, idx, { ...ctx, fromApp: true })).toEqual([
       { op: "selectPane", paneId: "%7" },
       { op: "switchClient", client: "c1", target: "%7" },
-      { op: "focusGhostty" },
+      { op: "focusGhostty", client: "c1" },
     ]);
   });
   test("ペインの宛先は %数字 の形で、死んだペインは見つからない", () => {
@@ -106,12 +106,20 @@ describe("ペイン", () => {
 
 describe("chooseClient", () => {
   const clients = [
-    { name: "/dev/ttys001", activity: 100, session: "api" },
-    { name: "/dev/ttys002", activity: 200, session: "web" },
+    { name: "/dev/ttys001", activity: 100, created: 10, termname: "xterm-ghostty", session: "api" },
+    { name: "/dev/ttys002", activity: 200, created: 20, termname: "xterm-ghostty", session: "web" },
   ];
   test("明示が最優先", () => expect(chooseClient({ explicit: "c", fromApp: true, clients })).toEqual({ kind: "switch", name: "c" }));
-  test("app からは最後に使われたもの", () => expect(chooseClient({ fromApp: true, clients })).toEqual({ kind: "switch", name: "/dev/ttys002" }));
-  test("app からでクライアントが無ければ Ghostty 新規", () => expect(chooseClient({ fromApp: true, clients: [] })).toEqual({ kind: "newGhosttyWindow" }));
+  test("app からは、あとから開いたウインドウを最近使っていても、最初につながった Ghostty のウインドウ", () =>
+    expect(chooseClient({ fromApp: true, clients })).toEqual({ kind: "switch", name: "/dev/ttys001" }));
+  test("app からは、Ghostty でない端末（Herdr app・VS Code など）のクライアントを選ばない", () => {
+    const herdrFirst = [{ name: "/dev/ttys009", activity: 300, created: 1, termname: "xterm-256color", session: "api" }, ...clients];
+    expect(chooseClient({ fromApp: true, clients: herdrFirst })).toEqual({ kind: "switch", name: "/dev/ttys001" });
+  });
+  test("app からで Ghostty のクライアントが無ければ Ghostty 新規", () => {
+    expect(chooseClient({ fromApp: true, clients: [] })).toEqual({ kind: "newGhosttyWindow" });
+    expect(chooseClient({ fromApp: true, clients: [{ name: "/dev/ttys009", activity: 300, created: 1, termname: "xterm-256color", session: "api" }] })).toEqual({ kind: "newGhosttyWindow" });
+  });
   test("tmux 内からは呼び出し元", () => expect(chooseClient({ fromApp: false, callerClient: "me", clients })).toEqual({ kind: "switch", name: "me" }));
   test("tmux の外のシェルからはその場で attach", () => expect(chooseClient({ fromApp: false, clients })).toEqual({ kind: "attachHere" }));
   test("tmux が展開しなかった明示（#{client_name} のまま）は無視して呼び出し元へ", () =>
@@ -148,7 +156,7 @@ describe("planGo（判断フローの全分岐）", () => {
     ]);
   });
   test("app から → Ghostty を前面へ", () => {
-    expect(planGo(r(API), idx, { ...ctx, fromApp: true }).at(-1)).toEqual({ op: "focusGhostty" });
+    expect(planGo(r(API), idx, { ...ctx, fromApp: true }).at(-1)).toEqual({ op: "focusGhostty", client: "c1" });
   });
   test("app から・クライアント無し → Ghostty の新しいウィンドウ", () => {
     expect(planGo(r(API), idx, { ...ctx, fromApp: true, client: { kind: "newGhosttyWindow" } })).toEqual([{ op: "newGhosttyWindow", target: "api" }]);
