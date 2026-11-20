@@ -1,0 +1,37 @@
+# source = dbt の外側から来るデータの「宣言」。
+# TS でいえば外部 API のレスポンス型を declare する .d.ts、Java でいえば外部システムとの境界インタフェース。
+sources:
+  - name: shop                  # source('shop', 'orders') のように参照する名前
+    description: 業務アプリ（EC サイト）の DB を EL ツールが raw スキーマへ同期したもの
+    schema: raw
+    config:
+      loaded_at_field: _loaded_at   # 鮮度チェック（dbt source freshness）で見る列
+      freshness:
+        warn_after: { count: 24, period: hour }
+        error_after: { count: 48, period: hour }
+    tables:
+      - name: customers
+        description: 会員。住所（都道府県）が変わると updated_at が更新される
+        columns:
+          - name: id
+            data_tests: [unique, not_null]
+      - name: products
+        description: 商品（コーヒー豆）。価格改定で updated_at が更新される
+        columns:
+          - name: id
+            data_tests: [unique, not_null]
+      - name: orders
+        description: 注文ヘッダ。ステータスは placed → shipped → completed と遷移する
+        columns:
+          - name: id
+            data_tests: [unique, not_null]
+      - name: order_items
+        description: 注文明細（1注文に複数行）
+        columns:
+          - name: id
+            data_tests: [unique, not_null]
+      - name: payments
+        description: 決済。失敗した決済も記録される。併用払いのため 1注文に複数行ありうる
+        columns:
+          - name: id
+            data_tests: [unique, not_null]

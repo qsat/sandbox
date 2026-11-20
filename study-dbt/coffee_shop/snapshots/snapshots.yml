@@ -1,0 +1,19 @@
+# snapshot = 「上書きされてしまう業務データ」の変更履歴を残す仕組み（SCD Type 2）。
+# 実行するたびに source を見て、変化した行に dbt_valid_from / dbt_valid_to を付けて履歴化する。
+# 実行: dbt snapshot
+snapshots:
+  - name: snap_customers
+    description: 会員の履歴（引っ越しによる都道府県の変化を追える）
+    relation: source('shop', 'customers')
+    config:
+      unique_key: id
+      strategy: timestamp      # updated_at が進んだら「変化あり」とみなす
+      updated_at: updated_at
+
+  - name: snap_products
+    description: 商品の価格・販売状況の履歴
+    relation: source('shop', 'products')
+    config:
+      unique_key: id
+      strategy: check          # 指定列の値が変わったら「変化あり」とみなす
+      check_cols: ["price", "is_active"]

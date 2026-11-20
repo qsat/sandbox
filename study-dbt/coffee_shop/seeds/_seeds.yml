@@ -1,0 +1,20 @@
+seeds:
+  - name: prefecture_regions
+    description: 都道府県 → 地方区分のマスタ。変更頻度が極めて低い小さな参照データなので seed で管理する。
+    config:
+      column_types:
+        prefecture: varchar
+        region: varchar
+    columns:
+      - name: prefecture
+        description: 都道府県名（「東京都」のように接尾辞つき）
+        data_tests:
+          - unique
+          - not_null
+      - name: region
+        description: 地方区分（8区分）
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["北海道", "東北", "関東", "中部", "近畿", "中国", "四国", "九州・沖縄"]

@@ -1,0 +1,207 @@
+models:
+  - name: fct_orders
+    description: |
+      注文ファクト。**1行 = 1注文**。
+      キャンセルを含む全注文を持ち、`is_valid_order` で有効な注文を判定する。
+    config:
+      contract:
+        enforced: true     # 列名・型が下の宣言と一致しないとビルドが失敗する（＝公開 interface）
+    columns:
+      - name: order_id
+        data_type: bigint
+        description: 注文ID（主キー）
+        constraints:
+          - type: not_null
+        data_tests: [unique, not_null]
+      - name: customer_id
+        data_type: bigint
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_id
+      - name: ordered_on
+        data_type: date
+      - name: ordered_at
+        data_type: timestamp
+      - name: order_status
+        data_type: varchar
+        description: '{{ doc("order_status") }}'
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["placed", "shipped", "completed", "returned", "cancelled"]
+      - name: is_valid_order
+        data_type: boolean
+        description: キャンセル以外なら true
+      - name: line_count
+        data_type: bigint
+      - name: item_quantity
+        data_type: bigint
+      - name: items_subtotal_jpy
+        data_type: bigint
+        description: 商品小計（税込・送料抜き）
+      - name: shipping_fee_jpy
+        data_type: bigint
+      - name: order_total_jpy
+        data_type: bigint
+        description: 注文合計 = 商品小計 + 送料
+        data_tests: [not_null, positive_value]
+      - name: credit_card_amount_jpy
+        data_type: bigint
+      - name: konbini_amount_jpy
+        data_type: bigint
+      - name: bank_transfer_amount_jpy
+        data_type: bigint
+      - name: gift_card_amount_jpy
+        data_type: bigint
+      - name: paid_amount_jpy
+        data_type: bigint
+        description: 成功した決済の合計
+      - name: updated_at
+        data_type: timestamp
+        description: 業務アプリ側の最終更新日時（incremental の判定に使う）
+
+  - name: fct_order_lines
+    description: 注文明細ファクト。**1行 = 1注文明細**
+    columns:
+      - name: order_line_id
+        data_tests: [unique, not_null]
+      - name: order_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('fct_orders')
+                field: order_id
+      - name: product_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_products')
+                field: product_id
+
+  - name: dim_products
+    description: 商品ディメンション。**1行 = 1商品（現在の状態）**。価格履歴は snap_products を参照
+    columns:
+      - name: product_id
+        data_tests: [unique, not_null]
+
+  - name: dim_customers
+    description: 会員ディメンション + 購買サマリ。**1行 = 1会員**（購入実績ゼロの会員も含む）
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: customer_id
+        data_type: bigint
+        constraints:
+          - type: not_null
+        data_tests: [unique, not_null]
+      - name: customer_name
+        data_type: varchar
+      - name: email
+        data_type: varchar
+      - name: prefecture
+        data_type: varchar
+      - name: region
+        data_type: varchar
+        data_tests: [not_null]
+      - name: registered_at
+        data_type: timestamp
+      - name: first_ordered_on
+        data_type: date
+      - name: last_ordered_on
+        data_type: date
+      - name: lifetime_order_count
+        data_type: bigint
+        description: 有効な（キャンセル以外の）注文数
+      - name: lifetime_value_jpy
+        data_type: bigint
+        description: 有効な注文の合計金額（LTV）
+      - name: customer_segment
+        data_type: varchar
+        description: '{{ doc("customer_segment") }}'
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["prospect", "new", "repeat", "loyal"]
+
+# ---------------------------------------------------------------------------
+# unit test: 入力（given）をモックし、期待する出力（expect）と比較する。
+# JUnit / Jest のテストケースそのもの。実データに依存せず「ロジックの仕様」を固定できる。
+# 実行: dbt test --select "test_type:unit"
+# ---------------------------------------------------------------------------
+unit_tests:
+  - name: test_dim_customers_segment_classification
+    description: 注文回数に応じて prospect / new / repeat / loyal に分類される。キャンセルは数えない
+    model: dim_customers
+    given:
+      - input: ref('stg_shop__customers')
+        rows:
+          - { customer_id: 1, prefecture: "東京都" }
+          - { customer_id: 2, prefecture: "東京都" }
+          - { customer_id: 3, prefecture: "大阪府" }
+          - { customer_id: 4, prefecture: "大阪府" }
+          - { customer_id: 5, prefecture: "北海道" }
+      - input: ref('prefecture_regions')
+        rows:
+          - { prefecture: "東京都", region: "関東" }
+          - { prefecture: "大阪府", region: "近畿" }
+          - { prefecture: "北海道", region: "北海道" }
+      - input: ref('fct_orders')
+        rows:
+          # customer 1: 注文なし → prospect
+          # customer 2: 1回 → new
+          - { order_id: 10, customer_id: 2, is_valid_order: true,  order_total_jpy: 2000 }
+          # customer 3: 有効2回 + キャンセル1回 → repeat（キャンセルは数えない）
+          - { order_id: 20, customer_id: 3, is_valid_order: true,  order_total_jpy: 1000 }
+          - { order_id: 21, customer_id: 3, is_valid_order: true,  order_total_jpy: 1500 }
+          - { order_id: 22, customer_id: 3, is_valid_order: false, order_total_jpy: 9999 }
+          # customer 4: 5回 → loyal（境界値）
+          - { order_id: 40, customer_id: 4, is_valid_order: true, order_total_jpy: 1000 }
+          - { order_id: 41, customer_id: 4, is_valid_order: true, order_total_jpy: 1000 }
+          - { order_id: 42, customer_id: 4, is_valid_order: true, order_total_jpy: 1000 }
+          - { order_id: 43, customer_id: 4, is_valid_order: true, order_total_jpy: 1000 }
+          - { order_id: 44, customer_id: 4, is_valid_order: true, order_total_jpy: 1000 }
+          # customer 5: 4回 → repeat（境界値の一つ手前）
+          - { order_id: 50, customer_id: 5, is_valid_order: true, order_total_jpy: 1000 }
+          - { order_id: 51, customer_id: 5, is_valid_order: true, order_total_jpy: 1000 }
+          - { order_id: 52, customer_id: 5, is_valid_order: true, order_total_jpy: 1000 }
+          - { order_id: 53, customer_id: 5, is_valid_order: true, order_total_jpy: 1000 }
+    expect:
+      rows:
+        - { customer_id: 1, region: "関東",  lifetime_order_count: 0, lifetime_value_jpy: 0,    customer_segment: "prospect" }
+        - { customer_id: 2, region: "関東",  lifetime_order_count: 1, lifetime_value_jpy: 2000, customer_segment: "new" }
+        - { customer_id: 3, region: "近畿",  lifetime_order_count: 2, lifetime_value_jpy: 2500, customer_segment: "repeat" }
+        - { customer_id: 4, region: "近畿",  lifetime_order_count: 5, lifetime_value_jpy: 5000, customer_segment: "loyal" }
+        - { customer_id: 5, region: "北海道", lifetime_order_count: 4, lifetime_value_jpy: 4000, customer_segment: "repeat" }
+
+  - name: test_fct_orders_totals_and_payment_pivot
+    description: 注文合計 = 明細小計 + 送料。決済は手段別に横持ちされ、決済のない注文は 0 円になる
+    model: fct_orders
+    overrides:
+      macros:
+        is_incremental: false   # incremental モデルは「初回ビルド」として検証する
+    given:
+      - input: ref('stg_shop__orders')
+        rows:
+          - { order_id: 1, customer_id: 1, order_status: "completed", shipping_fee_jpy: 550 }
+          - { order_id: 2, customer_id: 1, order_status: "cancelled", shipping_fee_jpy: 0 }
+      - input: ref('int_order_lines__joined_products')
+        format: sql   # ephemeral モデルを入力にするときは sql 形式で与える
+        rows: |
+          select 1 as order_id, 2 as quantity, 1000 as line_amount_jpy union all
+          select 1 as order_id, 1 as quantity, 1500 as line_amount_jpy union all
+          select 2 as order_id, 3 as quantity, 6000 as line_amount_jpy
+      - input: ref('int_payments__pivoted_to_orders')
+        format: sql
+        rows: |
+          select 1 as order_id, 2050 as credit_card_amount_jpy, 0 as konbini_amount_jpy,
+                 0 as bank_transfer_amount_jpy, 1000 as gift_card_amount_jpy, 3050 as paid_amount_jpy
+    expect:
+      rows:
+        - { order_id: 1, is_valid_order: true,  line_count: 2, item_quantity: 3, items_subtotal_jpy: 2500, order_total_jpy: 3050,
+            credit_card_amount_jpy: 2050, gift_card_amount_jpy: 1000, paid_amount_jpy: 3050 }
+        - { order_id: 2, is_valid_order: false, line_count: 1, item_quantity: 3, items_subtotal_jpy: 6000, order_total_jpy: 6000,
+            credit_card_amount_jpy: 0, gift_card_amount_jpy: 0, paid_amount_jpy: 0 }

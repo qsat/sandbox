@@ -1,0 +1,58 @@
+# GitHub Actions による dbt の CI サンプル（第12章）。
+# 使うときは .github/workflows/dbt-ci.yml としてリポジトリ直下に置く。
+#
+# やっていること（Slim CI）:
+#   1. 使い捨ての DuckDB を作り、raw データをロード
+#   2. main ブランチのコードで「本番相当（prod target）」をビルドし、その manifest.json を保存
+#   3. PR のコードでは「変更されたモデルとその下流（state:modified+）」だけを dev target にビルド
+#      変更されていない上流モデルは --defer で本番相当のテーブルを参照する
+name: dbt CI
+
+on:
+  pull_request:
+    paths: ["study-dbt/**"]
+
+env:
+  DBT_DUCKDB_PATH: /tmp/ci.duckdb   # profiles.yml の env_var() で参照される
+
+jobs:
+  dbt-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: study-dbt
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        working-directory: study-dbt/coffee_shop
+        run: sqlfluff lint models tests analyses
+
+      - name: Load raw data (EL ツールの代わり)
+        run: python scripts/load_raw.py --day day1 --db "$DBT_DUCKDB_PATH"
+
+      - name: Build production-like state from main
+        run: |
+          git worktree add /tmp/main origin/main
+          if [ -d /tmp/main/study-dbt/coffee_shop ]; then
+            cd /tmp/main/study-dbt/coffee_shop
+            dbt build --target prod --target-path /tmp/main-state
+          fi
+
+      - name: dbt build (Slim CI)
+        working-directory: study-dbt/coffee_shop
+        run: |
+          if [ -f /tmp/main-state/manifest.json ]; then
+            dbt build --select state:modified+ --defer --state /tmp/main-state
+          else
+            dbt build   # main にまだプロジェクトが無い初回はフルビルド
+          fi

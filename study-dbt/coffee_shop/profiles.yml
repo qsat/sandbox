@@ -1,0 +1,17 @@
+# profiles.yml は「接続設定」。Spring の application-{profile}.yml に相当する。
+# path は環境変数 DBT_DUCKDB_PATH で上書きできる（CI で使い捨て DB を指定するため / 第12・13章）
+# 本来は ~/.dbt/profiles.yml に置き、Git 管理しない（パスワード等を含むため）。
+# DuckDB はローカルファイルなので秘密情報がなく、教材ではプロジェクト直下に置いている。
+coffee_shop:
+  target: dev                 # デフォルトで使う target（--target prod で切り替え）
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('DBT_DUCKDB_PATH', 'coffee_shop.duckdb') }}"
+      schema: dev             # 開発者ごとのサンドボックス。dev_staging, dev_marts ... に作られる
+      threads: 4
+    prod:
+      type: duckdb
+      path: "{{ env_var('DBT_DUCKDB_PATH', 'coffee_shop.duckdb') }}"
+      schema: prod            # 本番は staging, marts ... にそのまま作られる（generate_schema_name 参照）
+      threads: 4

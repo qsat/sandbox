@@ -1,0 +1,11 @@
+# group = モデルの「所有チーム」。access（public / protected / private）と組み合わせて
+# 他チームから参照できる範囲を制御する。Java のパッケージ + アクセス修飾子に相当。
+groups:
+  - name: commerce
+    owner:
+      name: Commerce Analytics Team
+      email: commerce-analytics@example.com
+  - name: finance
+    owner:
+      name: Finance Analytics Team
+      email: finance-analytics@example.com

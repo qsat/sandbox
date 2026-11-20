@@ -1,0 +1,16 @@
+models:
+  - name: fct_monthly_revenue
+    description: 月次 × 地方の売上（完了した注文のみ）。経営会議用ダッシュボードのデータソース
+    config:
+      group: finance
+      access: public
+    data_tests:
+      # 複合キーの一意性: (revenue_month, region) の組が重複しないこと
+      - unique_combination:
+          arguments:
+            columns: ["revenue_month", "region"]
+    columns:
+      - name: revenue_month
+        data_tests: [not_null]
+      - name: revenue_jpy
+        data_tests: [positive_value]

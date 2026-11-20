@@ -1,0 +1,15 @@
+# exposure = dbt の外側にある「利用者」の宣言（ダッシュボード、ML モデル、アプリ等）。
+# リネージグラフの終端に表示され、「このモデルを変えると誰が困るか」が分かる。
+exposures:
+  - name: monthly_sales_dashboard
+    label: 月次売上ダッシュボード
+    type: dashboard
+    maturity: high
+    url: https://bi.example.com/dashboards/monthly-sales
+    description: 経営会議で毎月参照する売上ダッシュボード（地方別・顧客セグメント別）
+    depends_on:
+      - ref('fct_monthly_revenue')
+      - ref('dim_customers')
+    owner:
+      name: Finance Analytics Team
+      email: finance-analytics@example.com

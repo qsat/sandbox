@@ -1,0 +1,27 @@
+# SQLFluff = SQL 用の ESLint / Checkstyle。dbt テンプレータで Jinja を展開してから lint する。
+# 実行: (coffee_shop/ で) sqlfluff lint models
+[sqlfluff]
+dialect = duckdb
+templater = dbt
+max_line_length = 120
+# ST06: select 列の並び順ルールは教材の読みやすさを優先して無効化
+exclude_rules = ST06
+
+[sqlfluff:templater:dbt]
+project_dir = .
+profiles_dir = .
+
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.functions]
+extended_capitalisation_policy = lower
+
+[sqlfluff:rules:aliasing.table]
+aliasing = explicit
+
+# select 句の "as" を縦に揃える書き方を許可する
+[sqlfluff:layout:type:alias_expression]
+spacing_before = align
+align_within = select_clause
+align_scope = bracketed

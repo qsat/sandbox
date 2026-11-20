@@ -1,0 +1,42 @@
+# dbt_project.yml は「ビルド設定ファイル」。Gradle の build.gradle / npm の package.json に相当する。
+name: coffee_shop
+version: "1.0.0"
+profile: coffee_shop          # profiles.yml のどの接続設定を使うか
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+snapshot-paths: ["snapshots"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+analysis-paths: ["analyses"]
+
+clean-targets: ["target", "dbt_packages"]
+
+# 変数（Spring の @Value / process.env 的に、実行時 --vars で上書きできる）
+vars:
+  free_shipping_threshold_jpy: 5000
+  loyal_customer_min_orders: 5
+
+# ディレクトリ単位のデフォルト設定（"+" はディレクトリ配下へ継承される設定を意味する）
+models:
+  coffee_shop:
+    +group: commerce              # 既定の所有チーム（finance 配下は YAML で上書き）
+    staging:
+      +materialized: view
+      +schema: staging
+      +access: protected          # 同じプロジェクト内からは ref できる（既定値）
+    intermediate:
+      +materialized: ephemeral    # テーブルを作らず、参照先に CTE として埋め込まれる
+      +access: private            # 同じ group のモデルからしか ref できない
+    marts:
+      +materialized: table
+      +schema: marts
+      +access: public             # 他プロジェクト(dbt Mesh)からも ref できる公開 API
+
+seeds:
+  coffee_shop:
+    +schema: seeds
+
+snapshots:
+  coffee_shop:
+    +schema: snapshots
