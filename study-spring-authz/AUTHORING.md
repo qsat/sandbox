@@ -70,6 +70,11 @@
 - public client (認証方式 `NONE`) には、認可コード交換でリフレッシュトークンが発行されない。
 - UserInfo エンドポイントはアクセストークンを JWT として検証する。参照型 (opaque) のアクセストークンでは 401 になる。
 - 同梱スキーマ SQL は authorization-server の jar の `org/springframework/security/oauth2/server/authorization/` 配下にある。
+- 独自の `UserDetails` を JDBC の認可サービスと組み合わせるには 3 点が要る: Jackson の許可リスト + Mixin、`CredentialsContainer` (無いとパスワードハッシュが DB に残る)、内部 ID による `equals` / `hashCode` (無いと ID トークンから `sid` と `auth_time` が消える)。`samples/ch08-integration/idp` の `UserAccountDetails` を参照。
+- `oauth2Login` は client_secret を持つクライアントにも既定で PKCE (S256) を付ける。`DefaultOAuth2AuthorizedClientManager` は期限の 60 秒前からリフレッシュする。
+- クライアント側のプロパティは `spring.security.oauth2.client.{registration,provider}.<id>.*`、リソースサーバーは `spring.security.oauth2.resourceserver.jwt.{issuer-uri,jwk-set-uri}`。`issuer-uri` だけだと起動時に IdP のディスカバリを取りに行く。
+- Cookie はポートを区別しない。同じホスト名で IdP とクライアントを動かすときは、セッション Cookie 名をアプリごとに変える (8 章は `IDP_SESSION` / `WEBCLIENT_SESSION`)。
+- 応用編のサンプルは `samples/ch08-integration/` を丸ごとコピーして始める。`idp/keys/`、`idp/target/`、`spa/node_modules/` はコピーしない。テストのインメモリ DB 名 (`ch08-test`) は章に合わせて変える。
 - 既定のエンドポイント: `/oauth2/authorize`、`/oauth2/token`、`/oauth2/jwks`、`/oauth2/revoke`、`/oauth2/introspect`、`/userinfo`、`/connect/logout`、`/.well-known/openid-configuration`。
 
 ここに無い API は、記憶ではなく実物で確かめます。

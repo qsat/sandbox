@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Web クライアント</title>
+  <style>
+    body { font-family: sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1rem; }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { border: 1px solid #ccc; padding: .25rem .5rem; text-align: left; word-break: break-all; }
+    button { padding: .5rem 1rem; font-size: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Web クライアント</h1>
+
+  <div th:if="${claims == null}">
+    <p id="status">ログインしていません。</p>
+    <!-- 認可コードフローの入口。ここから IdP (localhost:9000) へリダイレクトされる -->
+    <p><a id="login" href="/oauth2/authorization/idp">IdP でログイン</a></p>
+  </div>
+
+  <div th:if="${claims != null}">
+    <p id="status"><strong id="user-name" th:text="${claims['name']}">Alice</strong> としてログイン中です。</p>
+    <h2>ID トークンのクレーム</h2>
+    <table id="claims">
+      <tr th:each="entry : ${claims}"><th th:text="${entry.key}">key</th><td th:text="${entry.value}">value</td></tr>
+    </table>
+    <p><a id="call-api" href="/api-call">リソースサーバーを呼ぶ</a></p>
+    <!-- このアプリのセッションだけを消す。IdP にはログインが残る -->
+    <form method="post" th:action="@{/logout}"><button id="logout" type="submit">ログアウト (このアプリだけ)</button></form>
+  </div>
+</body>
+</html>
