@@ -36,19 +36,19 @@ Spring Authorization Server は Spring Security 7 で本体に統合されまし
 
 ### 応用編: 実務要件を実装する
 
-| 章 | テーマ |
-|---|---|
-| 9 | トークンのカスタマイズ |
-| 10 | client_id ごとのユーザーセッション分離 |
-| 11 | クライアント別の認証ポリシー |
-| 12 | ログアウト設計 |
-| 13 | 多要素認証 |
-| 14 | 外部 IdP 連携 |
-| 15 | マルチテナント |
-| 16 | 追加のグラントとクライアント管理 |
-| 17 | セキュリティ強化 |
-| 18 | 運用と可観測性 |
-| 19 | テストと仕上げ |
+| 章 | テーマ | 本文 | サンプル |
+|---|---|---|---|
+| 9 | トークンのカスタマイズ | [docs/advanced/09-token-customization.md](docs/advanced/09-token-customization.md) | [samples/ch09-token-customization](samples/ch09-token-customization) |
+| 10 | client_id ごとのユーザーセッション分離 | [docs/advanced/10-session-partitioning.md](docs/advanced/10-session-partitioning.md) | [samples/ch10-session-partitioning](samples/ch10-session-partitioning) |
+| 11 | クライアント別の認証ポリシー | [docs/advanced/11-client-auth-policy.md](docs/advanced/11-client-auth-policy.md) | [samples/ch11-client-auth-policy](samples/ch11-client-auth-policy) |
+| 12 | ログアウト設計 | [docs/advanced/12-logout.md](docs/advanced/12-logout.md) | [samples/ch12-logout](samples/ch12-logout) |
+| 13 | 多要素認証 | [docs/advanced/13-mfa.md](docs/advanced/13-mfa.md) | [samples/ch13-mfa](samples/ch13-mfa) |
+| 14 | 外部 IdP 連携 | [docs/advanced/14-federation.md](docs/advanced/14-federation.md) | [samples/ch14-federation](samples/ch14-federation) |
+| 15 | マルチテナント | [docs/advanced/15-multi-tenancy.md](docs/advanced/15-multi-tenancy.md) | [samples/ch15-multi-tenancy](samples/ch15-multi-tenancy) |
+| 16 | 追加のグラントとクライアント管理 | [docs/advanced/16-grants-and-client-management.md](docs/advanced/16-grants-and-client-management.md) | [samples/ch16-grants-and-client-management](samples/ch16-grants-and-client-management) |
+| 17 | セキュリティ強化 | [docs/advanced/17-security-hardening.md](docs/advanced/17-security-hardening.md) | [samples/ch17-security-hardening](samples/ch17-security-hardening) |
+| 18 | 運用と可観測性 | [docs/advanced/18-operations.md](docs/advanced/18-operations.md) | [samples/ch18-operations](samples/ch18-operations) |
+| 19 | テストと仕上げ | [docs/advanced/19-testing-and-release.md](docs/advanced/19-testing-and-release.md) | [samples/ch19-testing-and-release](samples/ch19-testing-and-release) |
 
 ## サンプルコードの持ち方
 
