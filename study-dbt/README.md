@@ -3,7 +3,7 @@
 dbt（data build tool）を、**アプリケーション開発の経験はあるがデータ基盤は初めて**という中級プログラマ向けに、いちから学ぶ教材です。
 
 - 題材: 架空のコーヒー豆 EC「**Bean Voyage**」の売上分析基盤
-- 環境: **DuckDB**（ローカルファイルDB）+ dbt Core v1.12 — クラウドアカウント不要・無料
+- 環境: **dbt v2**（Rust 製の新エンジン）+ **DuckDB**（ローカルファイルDB）— クラウドアカウント不要・無料
 - スタイル: 各章で dbt の概念を **TS / Java の知っている概念にたとえて** から手を動かす
 
 ## ゴール（逆算の起点）
@@ -49,7 +49,7 @@ dbt（data build tool）を、**アプリケーション開発の経験はある
 | 10 | [マテリアライゼーションと incremental](docs/10-materializations.md) | どう実体化するか | 遅延評価 / キャッシュ / 差分ビルド |
 | 11 | [スナップショット](docs/11-snapshots.md) | 上書きされる値の履歴を残す | イベントソーシング / 監査ログ |
 | | **Part V — チーム開発と運用** | | |
-| 12 | [チーム開発と CI](docs/12-ci.md) | Lint と Slim CI | ESLint / 影響範囲だけテスト（Nx affected） |
+| 12 | [チーム開発と CI](docs/12-ci.md) | `dbt lint` / `dbt fmt` と Slim CI | ESLint・Prettier / 影響範囲だけテスト（Nx affected） |
 | 13 | [本番運用](docs/13-production.md) | 環境・スケジュール・監視 | Spring プロファイル / cron / ヘルスチェック |
 | 14 | [総仕上げと発展](docs/14-capstone-next.md) | 新ドメイン追加の課題と dbt v2 | 機能追加の PR を 1 本出す |
 
@@ -57,25 +57,44 @@ dbt（data build tool）を、**アプリケーション開発の経験はある
 
 ## セットアップ
 
-前提: Python 3.10 以上、make、git。（Windows は WSL を推奨）
+前提: macOS または Linux（Windows は WSL を推奨）、Python 3.10 以上、make、git、curl。
+
+### 1. dbt v2 をインストール
+
+dbt v2 は Python パッケージではなく、**単体のバイナリ** です。公式のインストーラで `~/.local/bin/dbt` に入ります。
+
+```bash
+curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update --version 2.0.12
+exec $SHELL          # PATH を読み直す
+dbt --version        # dbt 2.0.12 と表示されれば OK
+```
+
+`make install-dbt` でも同じコマンドが実行されます。`--version` を外すと最新の安定版が入ります。
+
+### 2. ロードスクリプトの準備とビルド
 
 ```bash
 cd study-dbt
-make setup        # .venv を作って dbt-core / dbt-duckdb をインストール
+make setup        # .venv を作り、ロードスクリプト用の duckdb（Python）をインストール
 make load-day1    # 生データを DuckDB の raw スキーマへロード
-make build        # 完成版 coffee_shop をビルド（76 ノードが PASS すれば OK）
+make build        # 完成版 coffee_shop をビルド
 ```
+
+最後に `Summary: 77 total | 75 success | 2 no-op` と出れば成功です。
 
 `make` を使わない場合:
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python scripts/load_raw.py --day day1
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python scripts/load_raw.py --day day1
 cd coffee_shop && dbt build
 ```
 
-> 以降の章では `source .venv/bin/activate` 済みで `dbt` コマンドが使える前提で書いています。
+> ⚠️ **DuckDB のバージョンをそろえる**
+> dbt v2 は DuckDB を内蔵しています（2.0.12 では DuckDB 1.5.4）。ロードスクリプトが使う Python 版の DuckDB は、`requirements.txt` で同じ 1.5.4 に固定しています。
+> 別のバージョンで作った DB ファイルは、dbt から読めないことがあります（`Trying to read a database file with version number ...` というエラー）。
+> dbt v2 を上げたら、`dbt show --inline "select version()"` で内蔵の DuckDB のバージョンを確かめ、`requirements.txt` もそろえてください。
 
 ## 学び方
 
@@ -94,17 +113,16 @@ study-dbt/
 │   └── load_raw.py           ← なんちゃって EL ツール（CSV → raw スキーマ）
 ├── ci/dbt-ci.yml             ← GitHub Actions サンプル（第12章）
 ├── Makefile
-└── requirements*.txt
+└── requirements.txt          ← ロードスクリプト用（duckdb のみ）
 ```
 
 ## 動作確認済みのバージョン
 
 | ソフトウェア | バージョン |
 |---|---|
-| dbt-core | 1.12.7 |
-| dbt-duckdb | 1.11.1 |
-| sqlfluff / sqlfluff-templater-dbt | 4.5.0（第12章のみ） |
+| dbt（v2） | 2.0.12（内蔵 DuckDB 1.5.4） |
+| duckdb（Python、ロードスクリプト用） | 1.5.4 |
 | Python | 3.13 |
 
-2026年時点の dbt には、Python 製の **dbt v1（dbt Core）** と、Rust 製の新エンジンによる **dbt v2**（旧称 Fusion。新規インストールの既定）があります。
-本教材のコードは v1.12 で非推奨警告ゼロ、かつ `dbt parse --use-v2-parser` が通る書き方に揃えてあります。違いは[第1章](docs/01-what-is-dbt.md)と[第14章](docs/14-capstone-next.md)で扱います。
+2026年時点の dbt には、Rust 製の新エンジンによる **dbt v2**（旧称 Fusion。新規インストールの既定）と、Python 製の **dbt v1（dbt Core）** があります。
+この教材は **v2** で書いています。v1 との違いは[第1章](docs/01-what-is-dbt.md)と[第14章](docs/14-capstone-next.md)で扱います。

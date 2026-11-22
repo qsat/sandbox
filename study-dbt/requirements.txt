@@ -1,3 +1,5 @@
-# 教材は dbt Core v1 系 (Python) で動作確認しています
-dbt-core==1.12.7
-dbt-duckdb==1.11.1
+# dbt 本体（v2）は Python パッケージではなく単体のバイナリ。README の手順でインストールする。
+# ここにあるのは、生データをロードするスクリプト（scripts/*.py）用のライブラリだけ。
+# DuckDB のバージョンは、dbt v2 に内蔵の DuckDB（2.0.12 時点で 1.5.4）と揃えること。
+# 揃っていないと「Trying to read a database file with version number ...」で読めなくなる。
+duckdb==1.5.4

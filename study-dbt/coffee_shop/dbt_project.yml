@@ -20,6 +20,8 @@ vars:
 # ディレクトリ単位のデフォルト設定（"+" はディレクトリ配下へ継承される設定を意味する）
 models:
   coffee_shop:
+    # dbt v2 の静的解析を最も厳しく。存在しない列や型の不一致を、DB に SQL を投げる前に検出する（第2・3章）
+    +static_analysis: strict
     +group: commerce              # 既定の所有チーム（finance 配下は YAML で上書き）
     staging:
       +materialized: view

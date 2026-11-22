@@ -144,12 +144,13 @@ dbt run
 ```
 
 ```text
-1 of 3 OK created sql view model dev.stg_shop__customers ...
-2 of 3 OK created sql view model dev.stg_shop__orders ...
-3 of 3 OK created sql view model dev.order_status_summary ...
+ Succeeded model dev.stg_shop__orders (view) [1 of 3 in 0.06s]
+ Succeeded model dev.stg_shop__customers (view) [2 of 3 in 0.04s]
+ Succeeded model dev.order_status_summary (view) [3 of 3 in 0.02s]
 ```
 
 **依存先（staging）が先に、依存元（summary）が後に** 実行されます。順序はどこにも書いていません。
+依存関係の無い2つの staging モデルは、`threads` の数まで **並列に** 実行されます（だから、終わる順番は実行のたびに変わることがあります）。
 
 ### ref の正体
 
@@ -176,6 +177,7 @@ flowchart LR
 都道府県から地方区分を引くマスタを、seed として追加します。
 
 ```bash
+mkdir -p seeds
 cp ../coffee_shop/seeds/prefecture_regions.csv seeds/
 dbt seed
 ```

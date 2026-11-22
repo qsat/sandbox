@@ -1,4 +1,0 @@
-# 第12章（CI / Lint）で使う開発ツール
--r requirements.txt
-sqlfluff==4.5.0
-sqlfluff-templater-dbt==4.5.0

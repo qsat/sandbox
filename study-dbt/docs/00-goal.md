@@ -84,19 +84,24 @@ make build       # dbt build を実行
 最後にこう表示されれば成功です。
 
 ```text
-Done. PASS=75 WARN=0 ERROR=0 SKIP=0 NO-OP=1 REUSED=0 TOTAL=76
+==================== Execution Summary =====================
+Finished 'build' successfully for target 'dev' [1.3s]
+Processed: 12 models | 60 tests | 2 snapshots | 1 seed | 2 unit tests
+Summary: 77 total | 75 success | 2 no-op
 ```
 
-76個の「ノード」が処理されました。内訳はこうです。
+77個の「ノード」が処理されました。内訳はこうです。
 
 | 種類 | 数 | 何をしたか |
 |---|---|---|
 | seed | 1 | CSV（都道府県→地方マスタ）をテーブルとしてロード |
 | model（view / table / incremental） | 10 | SELECT 文を実行し、テーブルやビューを作成 |
+| model（ephemeral） | 2 | テーブルを作らない「部品」。no-op（何もしない）と数えられる（第10章） |
 | snapshot | 2 | 顧客・商品の変更履歴を記録 |
 | data test | 60 | 「主キーが一意」「金額が正」など、データの不変条件を検証 |
 | unit test | 2 | モデルのロジックをモックデータで検証 |
-| exposure | 1 | 「このダッシュボードが使っている」という宣言（実行はしない） |
+
+このほかに exposure（「このダッシュボードが使っている」という宣言。実行はしない）が1つあります。
 
 ### 結果を覗いてみる
 
@@ -114,7 +119,10 @@ dbt show --inline "select customer_segment, count(*) from {{ ref('dim_customers'
 make docs        # study-dbt/ で実行。http://localhost:8080 が開く
 ```
 
-ブラウザでドキュメントサイトが開いたら、右下の **青いボタン（View Lineage Graph）** を押してください。
+ブラウザでドキュメントサイトを開き、左のツリーや上部の検索欄からモデル（たとえば `fct_monthly_revenue`）を開くと、そのモデルのリネージ（依存関係のグラフ）を見られます。
+全体像は次のとおりです。
+
+> 📝 dbt v2 のドキュメントサイトは、ブラウザ内で動く DuckDB（DuckDB-WASM）を CDN から読み込みます。インターネットにつながらない環境では、画面が「Loading…」のまま止まります。
 
 ```mermaid
 flowchart LR

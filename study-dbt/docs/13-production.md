@@ -138,8 +138,10 @@ dbt source freshness
 ```
 
 ```text
-1 of 5 PASS freshness of shop.customers ......... [PASS in 0.02s]
-...
+    Passed source shop.products (last updated 4s ago) [0.07s]
+    Passed source shop.orders (last updated 4s ago) [0.07s]
+    ...
+Successfully wrote sources.json
 ```
 
 ### 体験: 古いデータを検知させる
@@ -153,10 +155,18 @@ dbt source freshness
 ```
 
 ```text
-3 of 5 ERROR STALE freshness of shop.orders .......... [ERROR STALE in 0.05s]
+     Stale source shop.orders (last updated 10months 21days 8m 3s ago) [0.12s]
+    Passed source shop.order_items (last updated 14m 56s ago) [0.12s]
+    ...
+[warning] [Unexpected (dbt9002)]: Source 'source.coffee_shop.shop.orders' loaded_at_field has a timestamp type
+without a timezone, we will assume a UTC timezone
+[error] [StaleSource (dbt1063)]: Stale source source.coffee_shop.shop.orders
 ```
 
 最終更新から48時間以上たっているので、ERROR になりました。確認したら元に戻してください。
+
+警告も出ています。`created_at` はタイムゾーンの無い timestamp なので、dbt は UTC とみなして比較しています。
+ロード時刻の列は、タイムゾーン付き（完成版の `_loaded_at` は `timestamp with time zone`）にしておくと、こうした曖昧さがありません。
 
 > 💡 **どの列を `loaded_at_field` にするか**
 > 「EL ツールがロードした時刻」（`_loaded_at`、Fivetran なら `_fivetran_synced`）が理想です。
@@ -191,7 +201,8 @@ dbt retry                        # 失敗したノードとスキップされた
 ```
 
 ```text
-Done. PASS=10 WARN=0 ERROR=0 SKIP=0 NO-OP=1 REUSED=0 TOTAL=11
+==================== Execution Summary =====================
+Finished 'retry' successfully for target 'dev' [1.2s]
 ```
 
 前回の `run_results.json` を読み、**成功したノードは再実行しません**。

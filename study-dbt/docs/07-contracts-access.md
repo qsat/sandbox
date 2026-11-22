@@ -55,12 +55,12 @@ customers.created_at::date as registered_at,
 
 ```text
 $ dbt run -s dim_customers
-  This model has an enforced contract that failed.
-  Please ensure the name, data_type, and number of columns in your contract match the columns in your model's definition.
-
-  | column_name   | definition_type | contract_type | mismatch_reason    |
-  | ------------- | --------------- | ------------- | ------------------ |
-  | registered_at | DATE            | TIMESTAMP     | data type mismatch |
+    Failed model dev_marts.dim_customers (table) [1 of 1 in 0.14s]
+[error] ... This model has an enforced contract that failed.
+ Please ensure the name, data_type, and number of columns in your contract match the columns in your model's definition.
+|   column_name | definition_type | contract_type |    mismatch_reason |
+| ------------- | --------------- | ------------- | ------------------ |
+| registered_at | date            | timestamp     | data type mismatch |
 ```
 
 TS で `interface` に合わない値を返したときのコンパイルエラーと、まったく同じ体験です。
@@ -141,9 +141,10 @@ select * from {{ ref('int_payments__pivoted_to_orders') }}
 
 ```text
 $ dbt parse
-Parsing Error
-  Node model.coffee_shop.bad_ref attempted to reference node model.coffee_shop.int_payments__pivoted_to_orders,
-  which is not allowed because the referenced node is private to the 'commerce' group.
+[error] [AccessDenied (dbt1066)]: Node 'model.coffee_shop.bad_ref' attempted to reference node
+'model.coffee_shop.int_payments__pivoted_to_orders', which is not allowed because the referenced node
+is private to the 'commerce' group
+  --> models/marts/finance/bad_ref.sql:2:15
 ```
 
 DB に接続する前の **パース時点** でエラーになります。Java で `private` メソッドを呼ぶとコンパイルエラーになるのと同じです。
@@ -184,8 +185,8 @@ models:
 - v1 を参照しているモデルは、ビルド時に **非推奨の警告** が出る
 
 ```text
-[WARNING]: While compiling 'fct_monthly_revenue': Found a reference to dim_customers.v1,
-which is slated for deprecation on '2027-03-31T00:00:00+00:00'.
+[warning] [UpcomingReferenceDeprecation (dbt1073)]: While compiling 'fct_monthly_revenue':
+Found a reference to dim_customers.v1, which is slated for deprecation on '2027-03-31T00:00:00+00:00'.
 ```
 
 ### 移行の流れ

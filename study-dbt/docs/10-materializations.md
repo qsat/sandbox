@@ -84,7 +84,7 @@ with orders as (
     {% if is_incremental() %}
         -- 前回ビルド以降に更新された注文だけを対象にする
         where updated_at > (
-            select coalesce(max(this_model.updated_at), '1900-01-01')
+            select coalesce(max(this_model.updated_at), timestamp '1900-01-01')
             from {{ this }} as this_model
         )
     {% endif %}
@@ -92,6 +92,11 @@ with orders as (
 ),
 ...
 ```
+
+> 💡 `timestamp '1900-01-01'` と型を明示しているのは、静的解析（strict）のためです。
+> `coalesce(max(updated_at), '1900-01-01')` と書くと、v2 は「timestamp と文字列を混ぜている」としてエラーにします
+> （`Failed to resolve function coalesce: Argument type mismatch: actual: (timestamp, varchar)`）。
+> DB によっては暗黙の型変換で動いてしまう書き方ですが、型を明示する方が安全です。TS の `strict: true` と同じ考え方です。
 
 ### `is_incremental()` が true になる条件
 
@@ -128,7 +133,7 @@ sequenceDiagram
 | `insert_overwrite` | パーティション単位で置き換え | BigQuery / Spark などのパーティション表 |
 | `microbatch` | 時間で区切ったバッチ単位で処理（dbt 1.9+） | 巨大な時系列データ、過去分の再処理 |
 
-使える戦略はアダプタによって違います。DuckDB アダプタ（このバージョン）では `append`、`delete+insert`、`merge`、`microbatch` が使えます。
+使える戦略はアダプタ（DWH）によって違います。完成版は、dbt v2 内蔵の DuckDB で `delete+insert` を使って動作を確認しています。
 
 ### `on_schema_change`: 列を追加したとき
 
@@ -158,8 +163,9 @@ dbt show --inline "
 ```
 
 ```text
-| orders | open_orders | last_updated        |
-| 1342   | 38          | 2025-12-30 23:47:00 |
+│ orders ┆ open_orders ┆ last_updated        │
+╞════════╪═════════════╪═════════════════════╡
+│ 1342   ┆ 38          ┆ 2025-12-30T23:47:00 │
 ```
 
 ### Step 2: day2 のデータをロード
@@ -170,20 +176,34 @@ day2 は、day1 の2週間後の状態です。
 - 2026年1月の **新規注文が67件** 増えた
 
 ```bash
-# study-dbt/ で
-python scripts/load_raw.py --day day2 --db my_coffee_shop/my_coffee_shop.duckdb
+cd ..                         # study-dbt/ に移動
+.venv/bin/python scripts/load_raw.py --day day2 --db my_coffee_shop/my_coffee_shop.duckdb
+cd my_coffee_shop
 ```
 
 ### Step 3: 差分ビルド
 
 ```bash
-dbt run -s fct_orders --debug 2>&1 | grep -A3 "updated_at >"   # 差分条件が付いていることを確認
+dbt compile -s fct_orders     # テーブルが既にあるので is_incremental() が true になる
+grep -A3 "updated_at >" target/compiled/my_coffee_shop/models/marts/core/fct_orders.sql
 dbt run -s fct_orders
 ```
 
+コンパイル結果に、差分の条件が入っていることが分かります。
+
+```sql
+        where updated_at > (
+            select coalesce(max(this_model.updated_at), timestamp '1900-01-01')
+            from "my_coffee_shop"."dev_marts"."fct_orders" as this_model
+        )
+```
+
+Step 1 と同じ `dbt show` を実行すると、次のようになります。
+
 ```text
-| orders | open_orders | last_updated        |
-| 1409   | 22          | 2026-01-14 04:50:51 |
+│ orders ┆ open_orders ┆ last_updated        │
+╞════════╪═════════════╪═════════════════════╡
+│ 1409   ┆ 22          ┆ 2026-01-14T04:50:51 │
 ```
 
 - 注文数: 1,342 → 1,409（新規 67件が **追加**）
@@ -196,10 +216,10 @@ dbt run -s fct_orders
 incremental の正しさは、「**差分で作った結果 == 全件で作り直した結果**」で検証できます。
 
 ```bash
-# 差分ビルドの結果を退避
-python -c "import duckdb; c=duckdb.connect('my_coffee_shop.duckdb'); c.execute('create or replace table main.fct_orders_incr as select * from dev_marts.fct_orders')"
+# 差分ビルドの結果を退避（my_coffee_shop/ で実行）
+../.venv/bin/python -c "import duckdb; c=duckdb.connect('my_coffee_shop.duckdb'); c.execute('create or replace table main.fct_orders_incr as select * from dev_marts.fct_orders')"
 dbt run -s fct_orders --full-refresh     # 全件作り直し
-python -c "
+../.venv/bin/python -c "
 import duckdb; c=duckdb.connect('my_coffee_shop.duckdb')
 print(c.sql('(select * from main.fct_orders_incr except select * from dev_marts.fct_orders) union all (select * from dev_marts.fct_orders except select * from main.fct_orders_incr)').fetchall())"
 # [] なら一致

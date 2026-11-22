@@ -241,8 +241,16 @@ dbt build --exclude-resource-type unit_test   # 本番では unit test を省略
 
 > ⚠️ **unit test は「上流のテーブルが DB に存在していること」が必要**
 > dbt は、モック入力の列の型を知るために、本物の上流テーブルの定義を参照します。
-> まっさらな環境で unit test だけを実行すると `Not able to get columns for unit test ... because the relation doesn't exist` になります。
-> CI では、先に **`dbt run --empty`**（データを0行にして構造だけを作る）を実行するのが定番です。
+> まっさらな環境で unit test だけを実行すると、`Could not find table 'coffee_shop.dev_staging.stg_shop__order_items' in the warehouse` のようなエラーになります。
+> CI では、先に **構造だけ** を作っておくのが定番です。
+>
+> ```bash
+> dbt seed                          # dbt run は seed を作らないので、先にロードしておく
+> dbt run --empty                   # すべてのモデルを0行で作る（構造だけ）
+> dbt test --select "test_type:unit"
+> ```
+>
+> `dbt build --empty` で一度に済ませたくなりますが、v2 では unit test のモック入力まで0行として扱われ、unit test が失敗します。分けて実行してください。
 
 ## 6.9 テスト戦略: どこに何を書くか
 
@@ -326,7 +334,7 @@ DB の外部キー制約は **書き込み時に** 違反を拒否します。db
 - **`accepted_values` が NULL を通してしまう** … `accepted_values` は NULL を検証しません。NULL も禁止したいときは `not_null` と併用します。
 - **テストが遅い** … 巨大なテーブルの `unique` はコストが高くつきます。`where` で直近だけに絞る、`severity: warn` にして頻度を下げる、などで調整します。
 - **unit test の `expect` で行の順序を気にする** … 順序は比較されません（集合として比較されます）。
-- **unit test が `relation doesn't exist` で失敗** … 6.8 節の注意を参照してください。`dbt run --empty` を先に実行します。
+- **unit test が `Could not find table ...` で失敗** … 6.8 節の注意を参照してください。`dbt run --empty` を先に実行します。
 
 ## まとめ
 

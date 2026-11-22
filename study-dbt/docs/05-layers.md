@@ -126,6 +126,7 @@ models/
 ```yaml
 models:
   my_coffee_shop:              # ← プロジェクト名
+    +static_analysis: strict   # 第2章で設定済み（プロジェクト全体に効く）
     staging:                   # ← models/staging/ 配下すべて
       +materialized: view
       +schema: staging

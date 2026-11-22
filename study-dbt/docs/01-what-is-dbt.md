@@ -99,19 +99,33 @@ dbt にはいくつかの呼び名があり、混乱しやすいので整理し�
 
 | 名前 | 何か | この教材では |
 |---|---|---|
-| **dbt v1（dbt Core）** | Python 製の OSS 版 CLI。`pip install dbt-core dbt-<adapter>` で入る | ✅ 使用（1.12） |
-| **dbt v2** | Rust 製の新エンジン（旧称 **dbt Fusion engine**）。高速なパースと、SQL を理解した静的解析が特徴。2026年時点では新規インストールの既定 | 第14章で紹介 |
+| **dbt v2** | Rust 製の新エンジン（旧称 **dbt Fusion engine**）。単体のバイナリで、高速なパースと、SQL を理解した静的解析が特徴。2026年時点では新規インストールの既定 | ✅ 使用（2.0.12） |
+| **dbt v1（dbt Core）** | Python 製の CLI。`pip install dbt-core dbt-<adapter>` で入る。サポートは続いているが、新機能は v2 に入る | 第14章で違いを紹介 |
 | **dbt platform**（旧 dbt Cloud） | dbt Labs の SaaS。Web IDE、ジョブスケジューラ、Semantic Layer、Mesh などを提供 | 第13・14章で紹介 |
-| **アダプタ** | DWH ごとの接続ドライバ（JDBC ドライバのようなもの）。`dbt-duckdb`、`dbt-snowflake` など | ✅ `dbt-duckdb` |
+| **アダプタ** | DWH ごとの接続部分（JDBC ドライバのようなもの）。v1 では `dbt-duckdb` などを別途インストールし、v2 では主要な DWH 向けのものが本体に組み込まれている | ✅ v2 内蔵の DuckDB |
 
-> 📝 **なぜ v1 で学ぶのか**
-> dbt v2 は既定のエンジンになりましたが、v1 も引き続きサポートされており、既存の現場では v1 のプロジェクトがまだ多く動いています。
-> v1 と v2 は **同じプロジェクト形式（YAML / SQL / Jinja）を扱う** ので、ここで学ぶ内容はほぼそのまま v2 でも通用します。
-> 本教材のコードは v1.12 で非推奨警告ゼロ、`dbt parse --use-v2-parser`（v2 パーサでの検証）も通る書き方にしてあります。
-> 最新のインストール方法や差分は [公式の移行ガイド](https://docs.getdbt.com/docs/dbt-versions/core-upgrade/upgrading-to-v2) を参照してください。
+> 📝 **v1 と v2 の関係**
+> v1 と v2 は **同じプロジェクト形式（YAML / SQL / Jinja）を扱います**。この教材で学ぶ内容の大半は、v1 の現場でもそのまま通用します。
+> 違いは、インストール方法（pip かバイナリか）、コマンドの出力の見た目、v2 だけの機能（静的解析、`dbt lint` / `dbt fmt` など）です。
+> 最新の情報は [公式の移行ガイド](https://docs.getdbt.com/docs/dbt-versions/core-upgrade/upgrading-to-v2) を参照してください。
 
 アダプタは、Java の **JDBC ドライバ** や TS の **Prisma の provider** にたとえられます。
-同じ dbt プロジェクトでも、アダプタを差し替えれば別の DWH で動きます（ただし SQL 方言の差は残ります）。
+同じ dbt プロジェクトでも、接続先の設定（`profiles.yml` の `type`）を変えれば別の DWH で動きます（ただし SQL 方言の差は残ります）。
+
+### v2 の目玉: SQL を「理解する」コンパイラ
+
+v1 は、SQL を **ただの文字列** として扱っていました。列名を打ち間違えても、DWH に SQL を投げて初めてエラーになります。
+v2 は SQL を **解析** し、列の存在や型をビルド前に検証できます（静的解析）。
+
+```text
+[error] [UnresolvedIdentifier (dbt0227)]: No column products.product_nam found.
+Available are products.product_name, order_items.product_id, ...
+  --> models/intermediate/int_order_lines__joined_products.sql:23:9
+```
+
+これは、**JavaScript から TypeScript に移ったときの変化** によく似ています。
+実行してみないと分からなかった間違いが、コンパイル時に「候補つきで」分かるようになります。
+第2章で、この機能を最も厳しい設定（`static_analysis: strict`）で有効にします。
 
 ## 1.6 DuckDB について
 
@@ -157,7 +171,7 @@ dbt ではそれぞれ data test / unit test（第6章）、CI（第12章）、m
 - dbt は ELT の **T** を担う「SQL のビルドツール」。SELECT 文から DDL・実行順・テスト・ドキュメントを生成する
 - ソフトウェアエンジニアリングのプラクティスをデータ変換に持ち込んだ点が革新的だった
 - Analytics Engineer ＝ 社内向けデータ API の設計者。ドメインモデリングの力が活きる
-- この教材は dbt v1.12 + DuckDB で学ぶ。内容はほぼそのまま v2 にも通用する
+- この教材は dbt v2 + DuckDB で学ぶ。v2 は SQL を解析する静的解析が強み（JS → TS のような変化）。プロジェクト形式は v1 と共通
 
 Sources: [Upgrading to v2 (dbt Docs)](https://docs.getdbt.com/docs/dbt-versions/core-upgrade/upgrading-to-v2), [Supported data platforms (dbt Docs)](https://docs.getdbt.com/docs/supported-data-platforms), [DuckDB Now Ships inside dbt v2 (DuckDB Blog)](https://duckdb.org/2026/09/22/dbt-fusion)
 

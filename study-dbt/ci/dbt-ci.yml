@@ -2,9 +2,10 @@
 # 使うときは .github/workflows/dbt-ci.yml としてリポジトリ直下に置く。
 #
 # やっていること（Slim CI）:
-#   1. 使い捨ての DuckDB を作り、raw データをロード
-#   2. main ブランチのコードで「本番相当（prod target）」をビルドし、その manifest.json を保存
-#   3. PR のコードでは「変更されたモデルとその下流（state:modified+）」だけを dev target にビルド
+#   1. dbt v2 をインストールし、Lint と整形チェック
+#   2. 使い捨ての DuckDB を作り、raw データをロード
+#   3. main ブランチのコードで「本番相当（prod target）」をビルドし、その manifest.json を保存
+#   4. PR のコードでは「変更されたモデルとその下流（state:modified+）」だけを dev target にビルド
 #      変更されていない上流モデルは --defer で本番相当のテーブルを参照する
 name: dbt CI
 
@@ -13,6 +14,7 @@ on:
     paths: ["study-dbt/**"]
 
 env:
+  DBT_VERSION: "2.0.12"
   DBT_DUCKDB_PATH: /tmp/ci.duckdb   # profiles.yml の env_var() で参照される
 
 jobs:
@@ -30,12 +32,17 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install
-        run: pip install -r requirements-dev.txt
+      - name: Install dbt v2 and loader dependencies
+        run: |
+          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update --version "$DBT_VERSION"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          pip install -r requirements.txt
 
-      - name: Lint
+      - name: Lint and format check
         working-directory: study-dbt/coffee_shop
-        run: sqlfluff lint models tests analyses
+        run: |
+          dbt lint
+          dbt fmt --check models
 
       - name: Load raw data (EL ツールの代わり)
         run: python scripts/load_raw.py --day day1 --db "$DBT_DUCKDB_PATH"

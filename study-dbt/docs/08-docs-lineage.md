@@ -72,28 +72,33 @@ models:
 ## 8.4 ドキュメントサイトを生成する
 
 ```bash
-dbt docs generate      # target/ に manifest.json と catalog.json を生成
-dbt docs serve --port 8080
+dbt docs generate             # target/ に静的なサイト（index.html など）を生成
+dbt docs serve --port 8080    # ローカルで表示
 ```
 
 `study-dbt/` で `make docs` を実行しても同じです。
+`dbt docs generate` が作るのは **静的なファイル一式** なので、`target/` の中身を任意の静的ホスティング（S3、GitHub Pages など）に置くだけで公開できます（コンパイル後の SQL なども一緒に公開される点には注意）。
+
+> 📝 dbt v2 のドキュメントサイトは、ブラウザ内で動く DuckDB（DuckDB-WASM）を CDN から読み込みます。インターネットにつながらない環境では「Loading…」のまま止まります。
 
 ### 画面の見方
 
 | 場所 | 内容 |
 |---|---|
-| 左ペイン Project タブ | ディレクトリ構成どおりのツリー |
-| 左ペイン Database タブ | DB のスキーマ構成どおりのツリー |
-| モデルのページ | 説明、列一覧（型・説明・テスト）、依存関係、SQL（ソースとコンパイル後） |
-| 右下の青いボタン | **リネージグラフ**（DAG） |
+| 上部の検索欄 | モデル・source・テストなどを名前で検索 |
+| 左ペイン Assets タブ | 種類別（Models / Sources / Tests / Seeds / Snapshots ...）のツリー |
+| 左ペイン Files タブ | ディレクトリ構成どおりのツリー |
+| 左ペイン Filter タブ | 種類・レイヤー（staging / intermediate / marts）・materialization で絞り込み |
+| モデルのページ | 説明、列一覧、テスト、依存関係（リネージ）、SQL |
 
-### リネージグラフの使い方
+### リネージで影響範囲を調べる
 
-グラフ画面の下部にある `--select` 欄には、第3章の選択構文がそのまま使えます。
+モデルのページでは、そのモデルの上流と下流をグラフで確認できます。コマンドラインでも、第3章の選択構文で同じことを調べられます。
 
-- `+fct_monthly_revenue` … 月次売上が **何から作られているか**（上流）
-- `stg_shop__payments+` … 決済の staging を変えると **どこに影響するか**（下流）
-- `+dim_customers+` … 顧客ディメンションを中心とした全体像
+```bash
+dbt ls -s +fct_monthly_revenue     # 月次売上が何から作られているか（上流）
+dbt ls -s stg_shop__payments+      # 決済の staging を変えると、どこに影響するか（下流）
+```
 
 **「この列の定義を変えたら、どのダッシュボードが壊れるか」に、コードを読まずに答えられる** のがリネージの価値です。
 IDE で「この関数の呼び出し元を検索」するのと同じ使い方をします。
@@ -120,7 +125,7 @@ exposures:
       email: finance-analytics@example.com
 ```
 
-- リネージグラフの終端に、オレンジ色のノードとして表示されます
+- dbt のリネージの「終端」として、`dbt ls` などの選択構文で扱えるようになります
 - `dbt build -s +exposure:monthly_sales_dashboard` で、**このダッシュボードに必要なものだけ** をビルド・テストできます
 
 ```bash
@@ -135,10 +140,10 @@ dbt ls -s +exposure:monthly_sales_dashboard
 
 | ファイル | 中身 | 使い道 |
 |---|---|---|
-| `manifest.json` | プロジェクトの完全な定義（全ノード、依存関係、設定、SQL） | Slim CI（第12章）、外部ツール連携、自作の Lint |
-| `catalog.json` | DB から取得した実際の列と型 | ドキュメントサイトの列情報 |
+| `manifest.json` | プロジェクトの完全な定義（全ノード、依存関係、設定、SQL） | Slim CI（第12章）、外部ツール連携、自作のチェック |
 | `run_results.json` | 直近の実行結果（成否、所要時間、行数） | 監視・通知（第13章）、`dbt retry` |
 | `sources.json` | source freshness の結果 | 鮮度の監視（第13章） |
+| `info_schema/v1/*.parquet` | **（v2）** プロジェクトのメタデータを表形式にしたもの。列単位のリネージも出力できる | SQL でメタデータを調べる（8.7 節） |
 
 `manifest.json` は、コンパイラが出力する AST やシンボルテーブルのようなものです。
 これを読めば「`description` が空のモデルを一覧する」「`ref` されていない孤立モデルを探す」といったチェックを自作できます。
@@ -157,12 +162,59 @@ for n in m['nodes'].values():
 > 💡 こうしたドキュメント品質のチェックを自動化するパッケージに **dbt-project-evaluator**（dbt Labs 製）があります。
 > 「主キーテストが無いモデル」「marts から source を直接参照している」などのアンチパターンを検出できます。
 
-## 8.7 ハンズオン
+## 8.7 メタデータを SQL で調べる（v2）
+
+dbt v2 は、プロジェクトのメタデータを **Parquet ファイルの表** として書き出せます。
+静的解析（strict）と組み合わせると、**列単位のリネージ** も含まれます。
+
+```bash
+dbt compile --static-analysis strict --generate-info-schema
+ls target/info_schema/v1/     # dbt.models.parquet, dbt.column_lineage.parquet, ...
+```
+
+この後に `dbt docs generate` を実行すると、ドキュメントサイトにも列単位のリネージが載ります。
+
+Parquet なので、DuckDB でそのまま SQL を書けます（`study-dbt/` の `.venv` の Python から実行する例）。
+
+```python
+import duckdb
+print(duckdb.sql("""
+    select replace(parent_node_unique_id, 'model.coffee_shop.', '') as parent_model,
+           parent_column_name,
+           evolution
+    from 'target/info_schema/v1/dbt.column_lineage.parquet'
+    where child_node_unique_id = 'model.coffee_shop.fct_orders'
+      and child_column_name = 'order_total_jpy'
+"""))
+```
+
+```text
+│ parent_model          │ parent_column_name │ evolution │
+│ stg_shop__order_items │ quantity           │ mod       │
+│ stg_shop__order_items │ unit_price_jpy     │ mod       │
+│ stg_shop__orders      │ shipping_fee_jpy   │ mod       │
+│ stg_shop__order_items │ product_id         │ scan      │
+│ ...                   │ ...                │ ...       │
+```
+
+`fct_orders.order_total_jpy`（注文合計）が、**ephemeral の intermediate を飛び越えて**、staging のどの列から計算されているかが分かります。
+`evolution` は、おおまかに `copy`（そのまま受け渡し）、`mod`（計算に使われた）、`scan`（JOIN や WHERE の条件で参照された）を表します。
+
+IDE の「この変数の値はどこから来たか（データフロー解析）」を、データ基盤全体に対して行えるイメージです。
+`dbt.models.parquet` を使えば、「contract が付いていない public モデル」のような一覧も SQL 一発で出せます。
+
+```sql
+select name, materialized, access, "group", contract_enforced
+from 'target/info_schema/v1/dbt.models.parquet'
+where access = 'public' and not contract_enforced
+```
+
+## 8.8 ハンズオン
 
 1. `my_coffee_shop` の marts すべてに `description` を書く。粒度を必ず含める
 2. `customer_segment` の doc block を作って参照する
 3. `models/marts/_exposures.yml` を作り、自分の考えたダッシュボードを1つ宣言する
-4. `dbt docs generate && dbt docs serve` で確認し、リネージグラフで `+exposure:<name>` を表示する
+4. `dbt docs generate && dbt docs serve` でドキュメントを確認し、`dbt ls -s +exposure:<name>` でそのダッシュボードが依存するモデルを一覧する
 
 ## 演習
 
@@ -198,7 +250,8 @@ for uid, n in m["nodes"].items():
 
 ## つまずきポイント
 
-- **`dbt docs serve` で列の型が表示されない** … `catalog.json` は DB を見て作られます。`dbt docs generate` の前に `dbt run` でテーブルを作っておく必要があります。
+- **ドキュメントサイトが「Loading…」のまま** … DuckDB-WASM を CDN から読み込めていません。インターネットにつながっているか、プロキシの設定を確認してください。
+- **列単位のリネージが出ない** … `dbt docs generate` に `no column lineage` と表示されていたら、8.7 節の `dbt compile --static-analysis strict --generate-info-schema` を先に実行してください。
 - **doc block が反映されない** … `.md` ファイルが `model-paths`（`models/`）配下にあるか確認してください。`{% docs 名前 %}` と `doc("名前")` の名前も一致させます。
 - **YAML で `{{ doc(...) }}` を書いたらパースエラー** … YAML の文字列として、`'{{ doc("x") }}'` のようにクオートで囲みます。
 

@@ -182,7 +182,7 @@ from orders
 inner join customer_history
     on  orders.customer_id = customer_history.id
     and orders.ordered_at >= customer_history.dbt_valid_from
-    and orders.ordered_at <  coalesce(customer_history.dbt_valid_to, '9999-12-31')
+    and orders.ordered_at <  coalesce(customer_history.dbt_valid_to, timestamp '9999-12-31')
 ```
 
 ```mermaid
@@ -225,7 +225,7 @@ from orders
 left join customer_history
     on  orders.customer_id = customer_history.id
     and orders.ordered_at >= customer_history.dbt_valid_from
-    and orders.ordered_at <  coalesce(customer_history.dbt_valid_to, '9999-12-31')
+    and orders.ordered_at <  coalesce(customer_history.dbt_valid_to, timestamp '9999-12-31')
 left join regions
     on trim(customer_history.prefecture) = regions.prefecture
 ```
@@ -259,7 +259,7 @@ source から消えた行について、snapshot の現行バージョンの `db
 ## つまずきポイント
 
 - **day2 をロードしてから初めて snapshot を取った** … 変化前の状態を知らないので、履歴は記録されません。snapshot は「変化する前」から取り始める必要があります。
-- **`dbt_valid_to` の NULL を範囲 JOIN で扱い忘れる** … 現行バージョンが JOIN から漏れます。`coalesce(dbt_valid_to, '9999-12-31')`、または `dbt_valid_to_current` 設定を使います。
+- **`dbt_valid_to` の NULL を範囲 JOIN で扱い忘れる** … 現行バージョンが JOIN から漏れます。`coalesce(dbt_valid_to, timestamp '9999-12-31')`、または `dbt_valid_to_current` 設定を使います。
 - **check 戦略で `check_cols: all` にしたら履歴が爆発した** … `_loaded_at` のように毎回変わる列があると、毎回「変化あり」と判定されます。監視対象の列を明示しましょう。
 - **staging に対して snapshot を取った** … staging のロジックを変えると、履歴の途中で値の意味が変わります。source に対して取ります。
 

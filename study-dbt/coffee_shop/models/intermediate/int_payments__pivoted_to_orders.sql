@@ -19,7 +19,7 @@ pivoted as (
                 as {{ method }}_amount_jpy,
         {% endfor -%}
 
-        sum(amount_jpy)::bigint as paid_amount_jpy
+        sum(amount_jpy)::bigint                                                               as paid_amount_jpy
 
     from payments
     group by order_id

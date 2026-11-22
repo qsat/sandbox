@@ -2,7 +2,7 @@
 
 > **この章のゴール**
 > - これまでの全章を使い、「要件 → 設計 → テスト → 実装 → ドキュメント → CI」の流れで新しい marts を追加する
-> - dbt v2、Semantic Layer、dbt Mesh など、この先に学ぶべき領域の地図を持つ
+> - dbt v1 との違い、Semantic Layer、dbt Mesh など、この先に学ぶべき領域の地図を持つ
 > - 第0章のチェックリストに、自分の言葉で答えられる
 
 ## 14.1 総仕上げの課題: 「日次売上ダッシュボード」の PR を出す
@@ -166,7 +166,7 @@ day2 のデータでビルドすると、378日分の行ができ、そのうち
 
 - `description` に粒度と「売上の定義（completed のみ）」を書く
 - `_exposures.yml` に「日次売上ダッシュボード」を追加する
-- `sqlfluff lint` を通し、`dbt build -s state:modified+ --defer --state prod-state` で影響範囲だけをテストする
+- `dbt lint` と `dbt fmt --check models` を通し、`dbt build -s state:modified+ --defer --state prod-state` で影響範囲だけをテストする
 
 #### ⑥ 完了の定義（Definition of Done）
 
@@ -174,8 +174,8 @@ day2 のデータでビルドすると、378日分の行ができ、そのうち
 - [ ] 新しいモデルの主キーに `unique` + `not_null`、unit test で「0 円の日」を検証
 - [ ] public モデルに contract
 - [ ] description に粒度と定義
-- [ ] exposure を追加し、リネージグラフで確認
-- [ ] `sqlfluff lint` が PASS
+- [ ] exposure を追加し、`dbt ls -s +exposure:<名前>` で依存関係を確認
+- [ ] `dbt lint` と `dbt fmt --check models` が通る
 - [ ] 余力があれば、`dim_dates` を使って `fct_monthly_revenue` も「売上の無い月 × 地方」を 0 で埋めるよう改修する
 
 ## 14.2 追加の課題（自由研究）
@@ -190,31 +190,34 @@ day2 のデータでビルドすると、378日分の行ができ、そのうち
 
 ## 14.3 この先の地図
 
-### dbt v2（新エンジン、旧称 Fusion）
+### dbt v1 との違い（既存の現場で v1 に出会ったら）
 
-2026年時点で、新規にインストールすると既定で入るのは、Rust で書き直された新エンジン **dbt v2** です。
+この教材は dbt v2 で書きましたが、既存の現場では Python 製の **dbt v1（dbt Core）** のプロジェクトもまだ多く動いています。
+プロジェクト形式（YAML / SQL / Jinja）は共通なので、この教材の知識はほぼそのまま通用します。主な違いは次のとおりです。
 
-| | dbt v1（この教材） | dbt v2 |
+| | dbt v2（この教材） | dbt v1 |
 |---|---|---|
-| 実装 | Python | Rust |
-| パース | 大規模プロジェクトでは数十秒〜数分 | 大幅に高速 |
-| SQL の理解 | SQL は文字列として扱う（DWH に投げて初めてエラーに気づく） | SQL を **解析** し、列の型や存在をビルド前に検証できる |
-| 開発体験 | CLI 中心 | エディタ拡張（言語サーバ）で、補完・エラー表示・列レベルのリネージ |
-| プロジェクト形式 | YAML / SQL / Jinja | 同じ（ただし非推奨の書き方は使えない） |
+| 実装・インストール | Rust 製の単体バイナリ。公式インストーラで入れる | Python 製。`pip install dbt-core dbt-<adapter>` |
+| アダプタ | 主要な DWH 向けが本体に組み込み（DuckDB は内蔵） | DWH ごとのパッケージを別途インストール |
+| SQL の理解 | SQL を **解析** し、列の存在や型をビルド前に検証（`static_analysis`） | SQL は文字列。DWH に投げて初めてエラーに気づく |
+| Lint / 整形 | `dbt lint` / `dbt fmt` が組み込み | SQLFluff を別途インストール |
+| 列単位のリネージ | `--generate-info-schema` で出力できる（第8章） | 標準では無い |
+| ドキュメントサイト | 静的サイト。ブラウザ内の DuckDB-WASM でメタデータを読む | `catalog.json` などを読む従来のサイト |
+| Python モデル | **DuckDB では使えない**（2.0.12 で確認。下記） | DuckDB などで使える |
+| 出力の見た目 | `Summary: 77 total \| 75 success \| 2 no-op` | `Done. PASS=75 WARN=0 ERROR=0 SKIP=0 ...` |
 
 アプリ開発でたとえるなら、**JavaScript から TypeScript に移ったときの変化** に近いものです。
-文字列として扱っていた SQL を、コンパイラが型レベルで理解するようになります。
+文字列として扱っていた SQL を、コンパイラが型レベルで理解するようになりました。
+実際、完成版を v2 の strict モードに通したところ、v1 では素通りしていた `coalesce(timestamp, '文字列')` という型の甘い書き方が2か所見つかりました（第10・11章）。
 
-**移行の準備**（公式ガイドの要点）:
+**v1 のプロジェクトを v2 に移行するとき**（公式ガイドの要点）:
 
 1. まず v1 の最新版（1.12 系）に上げ、**非推奨の警告をすべて解消** する
-2. `dbt parse --use-v2-parser` で、v2 のパーサで解析できるか確認する
+2. v1.12 の `dbt parse --use-v2-parser` で、v2 のパーサで解析できるか確認する
 3. 自動修正ツール **dbt-autofix** で、非推奨の書き方を機械的に直す
-4. 使っている DWH・パッケージが v2 に対応しているか確認する
+4. 使っている DWH・パッケージ・機能（Python モデルなど）が v2 に対応しているか確認する
 
-この教材のコードは、手順1・2をすでにクリアしています（非推奨警告ゼロ、`--use-v2-parser` で解析可能）。
-DuckDB も v2 でサポートされているので、手元で v2 を試すこともできます。
-インストール方法などは、[公式の移行ガイド](https://docs.getdbt.com/docs/dbt-versions/core-upgrade/upgrading-to-v2) で最新情報を確認してください。
+最新の情報は、[公式の移行ガイド](https://docs.getdbt.com/docs/dbt-versions/core-upgrade/upgrading-to-v2) で確認してください。
 
 ### Semantic Layer（MetricFlow）
 
@@ -225,7 +228,7 @@ DuckDB も v2 でサポートされているので、手元で v2 を試すこ�
 - BI ツールは SQL を書かずに「売上を月 × 地方で」と問い合わせ、MetricFlow が SQL を生成する
 - 日付の切り口のために、日付ディメンション（**time spine** モデル、14.1 節の `dim_dates` に相当）が必要になる
 
-> 📝 Semantic Layer の YAML 形式は、dbt v2 の時期に新しい形式へ更新されました（v1.12 で古い形式を書くと、v2 パーサが非推奨の警告を出します）。
+> 📝 Semantic Layer の YAML 形式は、dbt v2 の時期に新しい形式へ更新されました（古い形式で書くと、v2 は非推奨の警告を出します）。v2 には `dbt sl` コマンドも用意されています。
 > 書き方は [公式ドキュメント](https://docs.getdbt.com/docs/build/about-metricflow) の最新版を参照してください。
 
 BI ツールごとに「売上」の計算式が微妙に違う、という問題を解決します。
@@ -247,7 +250,10 @@ select * from {{ ref('commerce', 'fct_orders') }}
 
 ### Python モデル
 
-一部の DWH（Snowflake、Databricks、BigQuery、そして DuckDB）では、SQL の代わりに Python でモデルを書けます。
+一部の DWH（Snowflake、Databricks、BigQuery など）では、SQL の代わりに Python でモデルを書けます。
+
+> ⚠️ dbt v2（2.0.12）の DuckDB では、Python モデルは **使えません**（`Python models are not supported` というエラーになります）。
+> v1 の dbt-duckdb では使えていた機能なので、v1 から移行するときの注意点の一つです。
 
 ```python
 # models/marts/ml/customer_features.py

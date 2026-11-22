@@ -21,11 +21,11 @@ customers as (
 final as (
 
     select
-        date_trunc('month', orders.ordered_on)::date as revenue_month,
+        date_trunc('month', orders.ordered_on)::date                           as revenue_month,
         customers.region,
-        count(*)                                     as order_count,
-        count(distinct orders.customer_id)           as customer_count,
-        sum(orders.order_total_jpy)::bigint          as revenue_jpy,
+        count(*)                                                               as order_count,
+        count(distinct orders.customer_id)                                     as customer_count,
+        sum(orders.order_total_jpy)::bigint                                    as revenue_jpy,
         round({{ safe_divide('sum(orders.order_total_jpy)', 'count(*)') }}, 0)
             as average_order_value_jpy
 

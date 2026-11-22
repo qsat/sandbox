@@ -20,7 +20,7 @@ with orders as (
     {% if is_incremental() %}
         -- {{ this }} は「このモデル自身の既存テーブル」を指す
         where updated_at > (
-            select coalesce(max(this_model.updated_at), '1900-01-01')
+            select coalesce(max(this_model.updated_at), timestamp '1900-01-01')
             from {{ this }} as this_model
         )
     {% endif %}
@@ -68,7 +68,7 @@ final as (
         order_line_summary.items_subtotal_jpy + orders.shipping_fee_jpy       as order_total_jpy,
 
         {% for method in payment_methods() -%}
-            coalesce(payments.{{ method }}_amount_jpy, 0) as {{ method }}_amount_jpy, -- noqa: LT01
+            coalesce(payments.{{ method }}_amount_jpy, 0)                     as {{ method }}_amount_jpy, -- noqa: LT01
         {% endfor -%}
         coalesce(payments.paid_amount_jpy, 0)                                 as paid_amount_jpy,
 
