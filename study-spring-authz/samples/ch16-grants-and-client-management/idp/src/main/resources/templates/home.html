@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IdP</title>
+  <style>
+    body { font-family: sans-serif; max-width: 28rem; margin: 3rem auto; padding: 0 1rem; }
+    button { padding: .5rem 1rem; font-size: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>IdP</h1>
+  <p>
+    <strong id="display-name" th:text="${account.displayName}">Alice Example</strong>
+    (<code id="username" th:text="${account.username}">alice</code>) としてログイン中です。
+  </p>
+  <p>この画面は IdP 自身のものです。クライアントのアプリ (Web クライアント / SPA) から使うときは、この画面は通りません。</p>
+
+  <!-- POST /logout は CSRF 検査の対象。th:action で hidden フィールドが入る -->
+  <form method="post" th:action="@{/logout}">
+    <button type="submit">IdP からログアウト</button>
+  </form>
+</body>
+</html>

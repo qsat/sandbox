@@ -1,0 +1,18 @@
+server:
+  port: 8090
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # iss クレームがこの値と完全一致するトークンだけを受け付ける。IdP の issuer 設定と同じ値にする
+          issuer-uri: http://localhost:9000
+          # 署名検証用の公開鍵の置き場。issuer-uri と一緒に書くと、iss の検証だけに issuer-uri を使い、
+          # 起動時に IdP へ問い合わせない (IdP が止まっていても起動できる。ApiTests で確認)
+          jwk-set-uri: http://localhost:9000/oauth2/jwks
+
+# SPA (別オリジン) から呼ぶときに許可するオリジン (CorsConfig)
+resource-server:
+  cors:
+    allowed-origins: http://127.0.0.1:5173

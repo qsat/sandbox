@@ -1,0 +1,29 @@
+server:
+  port: 8080
+  servlet:
+    session:
+      cookie:
+        # IdP (IDP_SESSION) と名前を分ける。同じホスト名なら Cookie はポートを区別しないので、
+        # 同じ名前だと IdP とクライアントがお互いのセッションを上書きしてしまう
+        name: WEBCLIENT_SESSION
+
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          idp:
+            client-id: web-client
+            client-secret: web-client-secret   # 学習用の固定値。本番では環境変数やシークレット管理から渡す
+            client-authentication-method: client_secret_basic
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            scope: openid,profile,email,api.read
+            client-name: Study IdP
+        provider:
+          idp:
+            # 起動時に {issuer-uri}/.well-known/openid-configuration を取りに行く。IdP を先に起動しておくこと
+            issuer-uri: http://localhost:9000
+
+resource-server:
+  base-url: http://localhost:8090
