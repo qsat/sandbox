@@ -12,13 +12,18 @@ export interface TmuxPane {
   /** ペインのあるウィンドウの名前 */
   window: string;
   command: string;
-  /** 最後に操作したクライアント（client_activity が一番新しい）が表示しているペイン（current-pane.ts の markCurrentPanes） */
+  /** ws が操作するクライアントが表示しているペイン（current-pane.ts の markCurrentPanes） */
   current: boolean;
 }
 
 export interface TmuxClient {
+  /** 端末のクライアントでは tty のパス（/dev/ttys013） */
   name: string;
   activity: number;
+  /** tmux につながった時刻（client_created） */
+  created: number;
+  /** クライアントの端末の種類（client_termname。Ghostty なら xterm-ghostty） */
+  termname: string;
   /** クライアントが表示しているセッションの名前 */
   session: string;
 }
